@@ -57,7 +57,7 @@ async function handleSubmit() {
   if (!message || chat.isStreaming) return
 
   inputMessage.value = ''
-  await chat.sendMessage(message)
+  await chat.sendMessage(message, selectedAgent.value)
 }
 
 function newConversation() {
