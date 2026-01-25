@@ -20,8 +20,11 @@ from app.auth.deps import get_current_user_optional
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-# Native prompts directory
+# Native prompts directory (in Docker: /app/native_prompts, local: backend/native_prompts)
 NATIVE_PROMPTS_DIR = Path(__file__).parent.parent.parent.parent / "native_prompts"
+if not NATIVE_PROMPTS_DIR.exists():
+    # Try relative to /app (Docker container)
+    NATIVE_PROMPTS_DIR = Path("/app/native_prompts")
 
 # Native agent metadata
 NATIVE_AGENTS = {

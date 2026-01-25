@@ -29,8 +29,11 @@ router = APIRouter()
 # Initialize Claude service
 _claude_service = None
 
-# Native prompts directory
+# Native prompts directory (in Docker: /app/native_prompts, local: backend/native_prompts)
 NATIVE_PROMPTS_DIR = Path(__file__).parent.parent.parent.parent / "native_prompts"
+if not NATIVE_PROMPTS_DIR.exists():
+    # Try relative to /app (Docker container)
+    NATIVE_PROMPTS_DIR = Path("/app/native_prompts")
 
 # Native agent file mapping
 NATIVE_AGENT_FILES = {

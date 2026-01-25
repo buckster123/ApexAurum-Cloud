@@ -74,7 +74,7 @@ app.add_middleware(
 @app.get("/health", tags=["Health"])
 async def health_check():
     """Health check endpoint for load balancers."""
-    return {"status": "healthy", "version": "0.1.0", "build": "v16-settings"}
+    return {"status": "healthy", "version": "0.1.0", "build": "v17-prompts"}
 
 
 # Root redirect to docs

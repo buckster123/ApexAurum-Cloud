@@ -14,13 +14,14 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Force rebuild v9
-RUN echo "Build: v9-noauth-$(date +%s)" > /tmp/build-info.txt
+# Force rebuild v17
+RUN echo "Build: v17-prompts-$(date +%s)" > /tmp/build-info.txt
 
 # Copy application code (relative to backend/)
 COPY app ./app
 COPY alembic ./alembic
 COPY alembic.ini ./alembic.ini
+COPY native_prompts ./native_prompts
 
 # Create non-root user
 RUN useradd -m -u 1000 apex && chown -R apex:apex /app
