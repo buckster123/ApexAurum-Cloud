@@ -212,6 +212,49 @@ Or save logs locally for analysis.
 - **Backend:** https://backend-production-507c.up.railway.app
 - **Backend Health:** https://backend-production-507c.up.railway.app/health
 
+## Easter Eggs & Hidden Features
+
+### Two-Layer System
+- **Layer 1 (Dev Mode)**: Konami code (↑↑↓↓←→←→BA) or 7-tap on Au logo
+- **Layer 2 (PAC Mode)**: Type "AZOTH" while in Dev Mode
+
+### Key Files
+- `frontend/src/composables/useDevMode.js` - Easter egg detection logic
+- `frontend/src/components/AlchemicalParticles.vue` - Floating symbols
+- `frontend/src/assets/main.css` - PAC mode theme (190+ lines)
+
+### PAC Prompts
+- Located in `backend/native_prompts/`
+- PAC versions use `-PAC.txt` suffix (e.g., `∴AZOTH∴-PAC.txt`)
+- Loaded via `?prompt_type=pac` query parameter
+
+## Import/Export
+
+### Export
+```bash
+GET /api/v1/chat/conversations/{id}/export?format=json|markdown|txt
+```
+
+### Import (from local ApexAurum)
+```bash
+POST /api/v1/import/conversations  # Upload conversations.json
+POST /api/v1/import/memory         # Upload memory.json
+```
+
+Supports multiple formats with forgiving parsing:
+- Array format (Streamlit)
+- Dict keyed by ID
+- Structured content arrays `[{type: "text", text: "..."}]`
+
+## Mobile Responsiveness
+
+Key responsive features:
+- `Navbar.vue`: Hamburger menu (`md:hidden` / `hidden md:flex`)
+- `ChatView.vue`: Slide-in sidebar with backdrop
+- `SettingsView.vue`: Horizontally scrollable tabs
+
+Breakpoint: `md` = 768px (Tailwind default)
+
 ## Parent Project
 
 This is the cloud deployment of ApexAurum. The full local version lives at:
@@ -219,7 +262,9 @@ This is the cloud deployment of ApexAurum. The full local version lives at:
 
 That version has 106+ tools, Village Protocol, music generation, etc. This cloud version is a streamlined subset focused on the core chat functionality.
 
+**Import compatible**: Cloud can import `sandbox/conversations.json` and `sandbox/memory.json` from local app.
+
 ---
 
 **Last Updated:** 2026-01-25
-**Status:** 90% complete - verifying auth bypass deployment
+**Status:** PRODUCTION READY - v19-ux-mobile deployed
