@@ -4,6 +4,11 @@
 **Build:** v22-cortex
 **Status:** PRODUCTION READY - Agent Memory (The Cortex) Deployed
 
+## Known Issue - API Key Save
+**Bug:** "Failed to save API key" error when entering API key in Settings
+**Next Session:** User will have backend logs ready for debugging
+**Likely Cause:** Check backend logs for validation or encryption error
+
 ---
 
 ## Quick Start for Next Session
