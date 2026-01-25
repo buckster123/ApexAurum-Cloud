@@ -22,7 +22,7 @@ async def lifespan(app: FastAPI):
     """Application lifespan manager."""
     # Startup
     print("=" * 50)
-    print("ApexAurum Cloud v18 - PAC Mode")
+    print("ApexAurum Cloud v20 - PAC Complete")
     print("=" * 50)
     await init_db()
     print("Database initialized - FRESH BUILD")
@@ -74,7 +74,7 @@ app.add_middleware(
 @app.get("/health", tags=["Health"])
 async def health_check():
     """Health check endpoint for load balancers."""
-    return {"status": "healthy", "version": "0.1.0", "build": "v18-pac-mode"}
+    return {"status": "healthy", "version": "0.1.0", "build": "v20-pac-complete"}
 
 
 # Root redirect to docs
