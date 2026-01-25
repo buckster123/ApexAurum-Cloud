@@ -19,7 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.models.user import User
 from app.models.conversation import Conversation, Message
-from app.auth.deps import get_current_user
+from app.auth.deps import get_current_user, get_current_user_optional
 from app.services.claude import ClaudeService
 
 logger = logging.getLogger(__name__)
@@ -66,7 +66,7 @@ class ConversationListResponse(BaseModel):
 @router.post("/message")
 async def send_message(
     request: ChatRequest,
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_current_user_optional),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -84,42 +84,38 @@ async def send_message(
             detail="AI service not configured"
         )
 
-    # Get or create conversation
+    # Get or create conversation (only if user is authenticated)
     conversation = None
-    if request.conversation_id:
-        result = await db.execute(
-            select(Conversation)
-            .where(Conversation.id == request.conversation_id)
-            .where(Conversation.user_id == user.id)
-        )
-        conversation = result.scalar_one_or_none()
+    if user:
+        if request.conversation_id:
+            result = await db.execute(
+                select(Conversation)
+                .where(Conversation.id == request.conversation_id)
+                .where(Conversation.user_id == user.id)
+            )
+            conversation = result.scalar_one_or_none()
 
-    if not conversation:
-        # Create new conversation
-        conversation = Conversation(
+        if not conversation:
+            # Create new conversation
+            conversation = Conversation(
+                id=uuid4(),
+                user_id=user.id,
+                title=request.message[:50] + "..." if len(request.message) > 50 else request.message,
+            )
+            db.add(conversation)
+            await db.flush()
+
+        # Save user message to database
+        user_msg = Message(
             id=uuid4(),
-            user_id=user.id,
-            title=request.message[:50] + "..." if len(request.message) > 50 else request.message,
+            conversation_id=conversation.id,
+            role="user",
+            content=request.message,
         )
-        db.add(conversation)
-        await db.flush()
+        db.add(user_msg)
 
     # Build messages for Claude
-    # For now, just use the current message (skip history to avoid async lazy-load issue)
-    # TODO: Add selectinload for conversation history
-    existing_messages = []
-
-    # Add current user message
-    messages = existing_messages + [{"role": "user", "content": request.message}]
-
-    # Save user message to database
-    user_msg = Message(
-        id=uuid4(),
-        conversation_id=conversation.id,
-        role="user",
-        content=request.message,
-    )
-    db.add(user_msg)
+    messages = [{"role": "user", "content": request.message}]
 
     # System prompt
     system_prompt = """You are ApexAurum, a helpful AI assistant. Be concise, accurate, and friendly."""
@@ -173,18 +169,19 @@ async def send_message(
                 if block.get("text"):
                     assistant_content += block["text"]
 
-            # Save assistant message
-            assistant_msg = Message(
-                id=uuid4(),
-                conversation_id=conversation.id,
-                role="assistant",
-                content=assistant_content,
-            )
-            db.add(assistant_msg)
-            await db.commit()
+            # Save assistant message (only if user is authenticated)
+            if conversation:
+                assistant_msg = Message(
+                    id=uuid4(),
+                    conversation_id=conversation.id,
+                    role="assistant",
+                    content=assistant_content,
+                )
+                db.add(assistant_msg)
+                await db.commit()
 
             return {
-                "conversation_id": str(conversation.id),
+                "conversation_id": str(conversation.id) if conversation else None,
                 "message": assistant_content,
                 "model": response.get("model", request.model),
                 "usage": response.get("usage"),

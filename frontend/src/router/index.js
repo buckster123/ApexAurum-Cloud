@@ -24,13 +24,13 @@ const router = createRouter({
       path: '/chat',
       name: 'chat',
       component: () => import('@/views/ChatView.vue'),
-      meta: { requiresAuth: true }
+      meta: { requiresAuth: false }  // Allow unauthenticated for testing
     },
     {
       path: '/chat/:id',
       name: 'conversation',
       component: () => import('@/views/ChatView.vue'),
-      meta: { requiresAuth: true }
+      meta: { requiresAuth: true }  // Saved conversations still require auth
     },
     {
       path: '/agents',
