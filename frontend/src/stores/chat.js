@@ -60,37 +60,90 @@ export const useChatStore = defineStore('chat', () => {
     isStreaming.value = true
     streamingContent.value = ''
 
+    // Create placeholder for assistant message
+    const assistantMsgId = Date.now().toString() + '-assistant'
+    messages.value.push({
+      id: assistantMsgId,
+      role: 'assistant',
+      content: '',
+      created_at: new Date().toISOString()
+    })
+
     try {
-      // For now, use non-streaming API (SSE requires different handling)
-      const response = await api.post('/api/v1/chat/message', {
-        message: content,
-        conversation_id: currentConversation.value?.id,
-        model,
-        stream: false
+      const apiUrl = import.meta.env.VITE_API_URL || ''
+      const token = localStorage.getItem('accessToken')
+
+      const response = await fetch(`${apiUrl}/api/v1/chat/message`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token && { 'Authorization': `Bearer ${token}` })
+        },
+        body: JSON.stringify({
+          message: content,
+          conversation_id: currentConversation.value?.id,
+          model,
+          stream: true
+        })
       })
 
-      // Add assistant message
-      messages.value.push({
-        id: Date.now().toString() + '-assistant',
-        role: 'assistant',
-        content: response.data.message,
-        created_at: new Date().toISOString()
-      })
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+      }
 
-      // Update conversation ID if new
-      if (response.data.conversation_id && !currentConversation.value) {
-        currentConversation.value = { id: response.data.conversation_id }
+      // Read the SSE stream
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+
+        // Process complete SSE messages (ending with \n\n)
+        const lines = buffer.split('\n\n')
+        buffer = lines.pop() || '' // Keep incomplete message in buffer
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue
+
+          try {
+            const data = JSON.parse(line.slice(6))
+
+            if (data.type === 'token' && data.content) {
+              // Append token to streaming content and message
+              streamingContent.value += data.content
+              const msg = messages.value.find(m => m.id === assistantMsgId)
+              if (msg) msg.content += data.content
+            } else if (data.type === 'start' && data.conversation_id) {
+              // Update conversation ID if new
+              if (!currentConversation.value) {
+                currentConversation.value = { id: data.conversation_id }
+              }
+            } else if (data.type === 'error') {
+              throw new Error(data.message || 'Stream error')
+            }
+          } catch (parseError) {
+            console.warn('Failed to parse SSE:', line, parseError)
+          }
+        }
+      }
+
+      // Fetch conversations if we got a new one
+      if (currentConversation.value?.id) {
         await fetchConversations()
       }
 
     } catch (e) {
-      // Add error message
-      messages.value.push({
-        id: Date.now().toString() + '-error',
-        role: 'system',
-        content: `Error: ${e.response?.data?.detail || e.message}`,
-        created_at: new Date().toISOString()
-      })
+      console.error('Chat error:', e)
+      // Update assistant message to show error
+      const msg = messages.value.find(m => m.id === assistantMsgId)
+      if (msg) {
+        msg.role = 'system'
+        msg.content = `Error: ${e.message}`
+      }
     } finally {
       isStreaming.value = false
       streamingContent.value = ''

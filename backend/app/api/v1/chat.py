@@ -124,7 +124,9 @@ async def send_message(
         async def stream_response():
             full_response = ""
             try:
-                yield f"data: {json.dumps({'type': 'start', 'conversation_id': str(conversation.id)})}\n\n"
+                # conversation may be None if unauthenticated
+                conv_id = str(conversation.id) if conversation else None
+                yield f"data: {json.dumps({'type': 'start', 'conversation_id': conv_id})}\n\n"
 
                 async for event in claude.chat_stream(
                     messages=messages,
@@ -136,10 +138,6 @@ async def send_message(
                         full_response += event.get("content", "")
 
                 yield f"data: {json.dumps({'type': 'end'})}\n\n"
-
-                # Save assistant message after streaming completes
-                # Note: This runs in the generator context, db session may be closed
-                # For production, consider using background tasks
 
             except Exception as e:
                 logger.error(f"Streaming error: {e}")
