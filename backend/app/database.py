@@ -61,10 +61,52 @@ async def get_db() -> AsyncSession:
 
 
 async def init_db():
-    """Initialize database (create tables)."""
+    """Initialize database (create tables and run migrations)."""
     engine = get_engine()
     async with engine.begin() as conn:
+        # Create tables if they don't exist
         await conn.run_sync(Base.metadata.create_all)
+
+        # Run migrations for new columns (safe to run multiple times)
+        # v23-multiverse: Add branching columns to conversations table
+        migrations = [
+            """
+            DO $$
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'conversations' AND column_name = 'parent_id')
+                THEN
+                    ALTER TABLE conversations ADD COLUMN parent_id UUID REFERENCES conversations(id) ON DELETE SET NULL;
+                    CREATE INDEX IF NOT EXISTS ix_conversations_parent_id ON conversations(parent_id);
+                END IF;
+            END $$;
+            """,
+            """
+            DO $$
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'conversations' AND column_name = 'branch_point_message_id')
+                THEN
+                    ALTER TABLE conversations ADD COLUMN branch_point_message_id UUID;
+                END IF;
+            END $$;
+            """,
+            """
+            DO $$
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'conversations' AND column_name = 'branch_label')
+                THEN
+                    ALTER TABLE conversations ADD COLUMN branch_label VARCHAR(100);
+                END IF;
+            END $$;
+            """,
+        ]
+
+        from sqlalchemy import text
+        for migration in migrations:
+            await conn.execute(text(migration))
+        print("Database migrations complete")
 
 
 async def close_db():
