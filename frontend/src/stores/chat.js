@@ -14,8 +14,8 @@ export const useChatStore = defineStore('chat', () => {
   // MODEL SELECTION - Unleash the Stones
   // ═══════════════════════════════════════════════════════════════════════════════
   const availableModels = ref([])
-  const defaultModel = ref('claude-sonnet-4-20250514')
-  const selectedModel = ref(localStorage.getItem('apexaurum_selected_model') || 'claude-sonnet-4-20250514')
+  const defaultModel = ref('claude-sonnet-4-5-20250929')
+  const selectedModel = ref(localStorage.getItem('apexaurum_selected_model') || 'claude-sonnet-4-5-20250929')
 
   // Getters
   const sortedConversations = computed(() => {
@@ -34,7 +34,7 @@ export const useChatStore = defineStore('chat', () => {
     try {
       const response = await api.get('/api/v1/chat/models')
       availableModels.value = response.data.models || []
-      defaultModel.value = response.data.default || 'claude-sonnet-4-20250514'
+      defaultModel.value = response.data.default || 'claude-sonnet-4-5-20250929'
 
       // If selected model is not in available models, reset to default
       const modelIds = availableModels.value.map(m => m.id)

@@ -4,13 +4,11 @@ Claude API Service
 Wrapper for Anthropic Claude API with streaming support.
 Supports BYOK (Bring Your Own Key) for beta users.
 
-MODEL REGISTRY - Available Models for Tier 3 Accounts
+MODEL REGISTRY - Claude 4.5 Family (Tier 3)
 =====================================================
 - claude-opus-4-5-20251101     : Opus 4.5 - Most powerful, deep reasoning
-- claude-sonnet-4-20250514     : Sonnet 4 - Excellent balance of speed and capability
-- claude-3-5-sonnet-20241022   : Sonnet 3.5 v2 - Fast and capable
-- claude-3-5-haiku-20241022    : Haiku 3.5 - Fastest, lightweight
-- claude-3-haiku-20240307      : Haiku 3 - Legacy, budget option
+- claude-sonnet-4-5-20250929   : Sonnet 4.5 - Excellent balance (DEFAULT)
+- claude-haiku-4-5-20251001    : Haiku 4.5 - Fastest, efficient
 """
 
 import logging
@@ -25,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# MODEL REGISTRY - Unleash the Stones
+# MODEL REGISTRY - Unleash the Stones (Claude 4.5 Family)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 AVAILABLE_MODELS = {
@@ -36,38 +34,24 @@ AVAILABLE_MODELS = {
         "max_output_tokens": 16384,
         "context_window": 200000,
     },
-    "claude-sonnet-4-20250514": {
-        "name": "Claude Sonnet 4",
+    "claude-sonnet-4-5-20250929": {
+        "name": "Claude Sonnet 4.5",
         "description": "Excellent balance - fast and highly capable",
         "tier": "sonnet",
         "max_output_tokens": 16384,
         "context_window": 200000,
     },
-    "claude-3-5-sonnet-20241022": {
-        "name": "Claude Sonnet 3.5 v2",
-        "description": "Fast and capable - great for most tasks",
-        "tier": "sonnet",
-        "max_output_tokens": 8192,
-        "context_window": 200000,
-    },
-    "claude-3-5-haiku-20241022": {
-        "name": "Claude Haiku 3.5",
-        "description": "Fastest model - quick responses, lower cost",
+    "claude-haiku-4-5-20251001": {
+        "name": "Claude Haiku 4.5",
+        "description": "Fastest 4.5 model - quick responses, efficient",
         "tier": "haiku",
         "max_output_tokens": 8192,
-        "context_window": 200000,
-    },
-    "claude-3-haiku-20240307": {
-        "name": "Claude Haiku 3",
-        "description": "Legacy budget option - fastest, cheapest",
-        "tier": "haiku",
-        "max_output_tokens": 4096,
         "context_window": 200000,
     },
 }
 
-# Default model - Sonnet 4 for excellent balance
-DEFAULT_MODEL = "claude-sonnet-4-20250514"
+# Default model - Sonnet 4.5 for excellent balance
+DEFAULT_MODEL = "claude-sonnet-4-5-20250929"
 
 # Maximum output tokens for Tier 3 accounts
 DEFAULT_MAX_TOKENS = 8192

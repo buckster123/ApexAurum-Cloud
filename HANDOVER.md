@@ -9,12 +9,10 @@
 **Goal:** Enable full-power models and remove token anxiety for better agent performance.
 
 ### What Was Implemented
-1. **Model Registry** - 5 Claude models now available:
+1. **Model Registry** - Claude 4.5 family now available:
    - Claude Opus 4.5 (`claude-opus-4-5-20251101`) - Most powerful, deep reasoning
-   - Claude Sonnet 4 (`claude-sonnet-4-20250514`) - Excellent balance (DEFAULT)
-   - Claude Sonnet 3.5 v2 (`claude-3-5-sonnet-20241022`) - Fast and capable
-   - Claude Haiku 3.5 (`claude-3-5-haiku-20241022`) - Fastest model
-   - Claude Haiku 3 (`claude-3-haiku-20240307`) - Legacy budget option
+   - Claude Sonnet 4.5 (`claude-sonnet-4-5-20250929`) - Excellent balance (DEFAULT)
+   - Claude Haiku 4.5 (`claude-haiku-4-5-20251001`) - Fastest, efficient
 
 2. **Increased Limits** - max_tokens increased to 8192 (from 4096)
 
@@ -94,8 +92,8 @@ curl https://backend-production-507c.up.railway.app/health
 
 ### v24-unleashed (Current Session)
 - **Unleash the Stones** - Full-power model selection
-  - Model registry with 5 Claude models (Opus 4.5, Sonnet 4, Sonnet 3.5, Haiku 3.5, Haiku 3)
-  - Default changed from Haiku 3 to Sonnet 4
+  - Model registry with Claude 4.5 family (Opus 4.5, Sonnet 4.5, Haiku 4.5)
+  - Default changed from Haiku 3 to Sonnet 4.5
   - max_tokens increased from 4096 to 8192
   - New `/chat/models` API endpoint
   - Frontend model selector dropdown in sidebar
