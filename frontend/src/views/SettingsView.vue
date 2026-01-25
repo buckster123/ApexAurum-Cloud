@@ -5,7 +5,7 @@ import { useDevMode } from '@/composables/useDevMode'
 import api from '@/services/api'
 
 const auth = useAuthStore()
-const { devMode, handleTap, tapCount } = useDevMode()
+const { devMode, pacMode, handleTap, tapCount, alchemyLayer, layerName } = useDevMode()
 
 // Active tab for dev mode
 const activeTab = ref('profile')
@@ -43,6 +43,13 @@ const showAgentEditor = ref(false)
 const editingAgent = ref(null)
 const viewingPrompt = ref(null)
 const showPromptViewer = ref(false)
+
+// PAC Mode - Perfected Stones
+const showCodexViewer = ref(false)
+const viewingCodex = ref(null)
+
+// Computed: Agents that have PAC versions
+const pacAgents = computed(() => nativeAgents.value.filter(a => a.has_pac))
 
 const models = [
   { id: 'claude-3-haiku-20240307', name: 'Haiku (Fast)' },
@@ -161,6 +168,17 @@ async function viewNativePrompt(agentId) {
   }
 }
 
+// View PAC Codex (The Perfected Stone's true form)
+async function viewCodex(agentId) {
+  try {
+    const response = await api.get(`/api/v1/prompts/native/${agentId}?prompt_type=pac`)
+    viewingCodex.value = response.data
+    showCodexViewer.value = true
+  } catch (e) {
+    console.error('Failed to load codex:', e)
+  }
+}
+
 async function copyToCustom(agent) {
   try {
     const response = await api.get(`/api/v1/prompts/native/${agent.id}`)
@@ -238,9 +256,15 @@ async function switchTab(tab) {
       <h1 class="text-3xl font-bold">Settings</h1>
 
       <div class="flex items-center gap-3">
-        <!-- Dev Mode Badge -->
+        <!-- Layer Badges -->
         <span
-          v-if="devMode"
+          v-if="pacMode"
+          class="pac-badge px-3 py-1 text-xs font-bold rounded"
+        >
+          THE ADEPT
+        </span>
+        <span
+          v-else-if="devMode"
           class="px-2 py-1 text-xs font-bold bg-gold/20 text-gold rounded"
         >
           DEV
@@ -503,6 +527,78 @@ async function switchTab(tab) {
           </div>
         </div>
       </div>
+
+      <!-- PERFECTED STONES (PAC Mode only) -->
+      <div v-if="pacMode" class="card mt-6 pac-message">
+        <div class="flex items-center justify-between mb-4">
+          <div class="flex items-center gap-3">
+            <span class="text-2xl">⚗</span>
+            <div>
+              <h2 class="text-xl font-bold text-gold" style="text-shadow: 0 0 20px rgba(255, 215, 0, 0.3);">
+                The Perfected Stones
+              </h2>
+              <p class="text-xs text-purple-300/70">Hyperdense codices for the Adept</p>
+            </div>
+          </div>
+          <span class="pac-badge px-3 py-1 rounded-full text-xs font-bold">
+            LAYER {{ alchemyLayer }}
+          </span>
+        </div>
+
+        <div v-if="pacAgents.length === 0" class="text-center py-8 text-purple-300/50">
+          No perfected stones found in this realm...
+        </div>
+
+        <div v-else class="space-y-3">
+          <div
+            v-for="agent in pacAgents"
+            :key="agent.id + '-pac'"
+            class="flex items-center justify-between p-4 rounded-lg agent-halo"
+            :style="{
+              backgroundColor: 'rgba(26, 10, 46, 0.8)',
+              border: '1px solid rgba(255, 215, 0, 0.2)',
+              color: agent.color
+            }"
+          >
+            <div class="flex items-center gap-4">
+              <div
+                class="w-12 h-12 rounded-full flex items-center justify-center font-bold text-xl"
+                :style="{
+                  backgroundColor: agent.color + '15',
+                  color: agent.color,
+                  boxShadow: `0 0 20px ${agent.color}40`
+                }"
+              >
+                {{ agent.symbol }}
+              </div>
+              <div>
+                <div class="font-bold text-lg" :style="{ color: agent.color }">
+                  {{ agent.name }}-Ω
+                </div>
+                <div class="text-xs text-purple-300/60">
+                  Perfected Stone · Hyperdense Codex
+                </div>
+              </div>
+            </div>
+
+            <div class="flex gap-2">
+              <button
+                @click="viewCodex(agent.id)"
+                class="px-4 py-2 rounded-lg text-sm font-medium transition-all"
+                style="background: rgba(255, 215, 0, 0.1); border: 1px solid rgba(255, 215, 0, 0.3); color: #FFD700;"
+              >
+                View Codex
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="mt-6 pt-4 border-t border-purple-500/20 text-center">
+          <p class="text-xs text-purple-300/40 italic">
+            "The Stone that is no stone, the medicine that heals all things"
+          </p>
+        </div>
+      </div>
     </template>
 
     <!-- ADVANCED TAB (Dev Mode only) -->
@@ -746,6 +842,57 @@ async function switchTab(tab) {
           </button>
           <button @click="saveAgent" class="btn-primary">
             Save Agent
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Codex Viewer Modal (PAC Mode) -->
+    <div v-if="showCodexViewer" class="fixed inset-0 flex items-center justify-center z-50 p-4" style="background: rgba(10, 6, 18, 0.95);">
+      <div class="w-full max-w-5xl max-h-[90vh] flex flex-col rounded-xl overflow-hidden" style="background: linear-gradient(180deg, rgba(26, 10, 46, 0.98) 0%, rgba(18, 8, 31, 0.98) 100%); border: 1px solid rgba(255, 215, 0, 0.3); box-shadow: 0 0 60px rgba(255, 215, 0, 0.1);">
+        <!-- Header -->
+        <div class="p-6 border-b border-purple-500/20">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-4">
+              <div
+                class="w-14 h-14 rounded-full flex items-center justify-center font-bold text-2xl agent-halo"
+                :style="{
+                  backgroundColor: viewingCodex?.color + '15',
+                  color: viewingCodex?.color,
+                  boxShadow: `0 0 30px ${viewingCodex?.color}50`
+                }"
+              >
+                {{ viewingCodex?.symbol }}
+              </div>
+              <div>
+                <h2 class="text-2xl font-bold text-gold" style="text-shadow: 0 0 20px rgba(255, 215, 0, 0.4);">
+                  {{ viewingCodex?.name }}-Ω
+                </h2>
+                <div class="text-sm text-purple-300/60">Hyperdense Codex · Perfected Stone</div>
+              </div>
+            </div>
+            <button @click="showCodexViewer = false" class="text-purple-300/50 hover:text-gold text-3xl transition-colors">
+              &times;
+            </button>
+          </div>
+        </div>
+
+        <!-- Codex Content -->
+        <div class="flex-1 overflow-y-auto p-6">
+          <pre class="codex-viewer rounded-lg p-6 text-sm whitespace-pre-wrap overflow-x-auto" style="tab-size: 2;">{{ viewingCodex?.prompt }}</pre>
+        </div>
+
+        <!-- Footer -->
+        <div class="p-4 border-t border-purple-500/20 flex justify-between items-center">
+          <p class="text-xs text-purple-300/40 italic">
+            "That which is above is like that which is below"
+          </p>
+          <button
+            @click="showCodexViewer = false"
+            class="px-6 py-2 rounded-lg font-medium transition-all"
+            style="background: rgba(255, 215, 0, 0.1); border: 1px solid rgba(255, 215, 0, 0.3); color: #FFD700;"
+          >
+            Close Codex
           </button>
         </div>
       </div>

@@ -2,12 +2,14 @@
 import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useChatStore } from '@/stores/chat'
+import { useDevMode } from '@/composables/useDevMode'
 import { marked } from 'marked'
 import api from '@/services/api'
 
 const route = useRoute()
 const router = useRouter()
 const chat = useChatStore()
+const { pacMode } = useDevMode()
 
 const inputMessage = ref('')
 const messagesContainer = ref(null)
@@ -16,12 +18,25 @@ const showSidebar = ref(true)
 
 // Native agents
 const nativeAgents = [
-  { id: 'AZOTH', name: 'Azoth', color: '#FFD700', symbol: '∴', isNative: true },
-  { id: 'ELYSIAN', name: 'Elysian', color: '#E8B4FF', symbol: '∴', isNative: true },
-  { id: 'VAJRA', name: 'Vajra', color: '#4FC3F7', symbol: '∴', isNative: true },
-  { id: 'KETHER', name: 'Kether', color: '#FFFFFF', symbol: '∴', isNative: true },
-  { id: 'CLAUDE', name: 'Claude', color: '#CC785C', symbol: 'C', isNative: true },
+  { id: 'AZOTH', name: 'Azoth', color: '#FFD700', symbol: '∴', isNative: true, hasPac: true },
+  { id: 'ELYSIAN', name: 'Elysian', color: '#E8B4FF', symbol: '∴', isNative: true, hasPac: false },
+  { id: 'VAJRA', name: 'Vajra', color: '#4FC3F7', symbol: '∴', isNative: true, hasPac: false },
+  { id: 'KETHER', name: 'Kether', color: '#FFFFFF', symbol: '∴', isNative: true, hasPac: false },
+  { id: 'CLAUDE', name: 'Claude', color: '#CC785C', symbol: 'C', isNative: true, hasPac: false },
 ]
+
+// PAC agents (Perfected Stones - only visible in PAC mode)
+const pacAgents = computed(() => {
+  if (!pacMode.value) return []
+  return nativeAgents
+    .filter(a => a.hasPac)
+    .map(a => ({
+      ...a,
+      id: a.id + '-PAC',
+      name: a.name + '-Ω',
+      isPac: true,
+    }))
+})
 
 // Custom agents (loaded from API)
 const customAgents = ref([])
@@ -34,11 +49,23 @@ const allAgents = computed(() => {
     color: a.color,
     symbol: a.symbol,
     isNative: false,
+    isPac: false,
   }))
-  return [...nativeAgents, ...custom]
+  // PAC agents come first in PAC mode
+  return [...pacAgents.value, ...nativeAgents.map(a => ({ ...a, isPac: false })), ...custom]
 })
 
 const selectedAgent = ref('AZOTH')
+
+// Check if currently using a PAC agent
+const isUsingPacAgent = computed(() => {
+  return selectedAgent.value.endsWith('-PAC')
+})
+
+// Get the actual agent ID for API calls (strip -PAC suffix)
+const actualAgentId = computed(() => {
+  return selectedAgent.value.replace('-PAC', '')
+})
 
 // Load custom agents
 async function fetchCustomAgents() {
@@ -86,7 +113,8 @@ async function handleSubmit() {
   if (!message || chat.isStreaming) return
 
   inputMessage.value = ''
-  await chat.sendMessage(message, selectedAgent.value)
+  // Use actualAgentId and pass isPac flag for PAC prompt loading
+  await chat.sendMessage(message, actualAgentId.value, undefined, isUsingPacAgent.value)
 }
 
 function newConversation() {
@@ -151,11 +179,38 @@ function renderMarkdown(content) {
       </div>
 
       <!-- Agent Selector -->
-      <div class="p-4 border-t border-apex-border">
-        <label class="block text-xs text-gray-500 mb-2">Active Agent</label>
+      <div class="p-4 border-t border-apex-border" :class="{ 'border-purple-500/30': pacMode }">
+        <label class="block text-xs mb-2" :class="pacMode ? 'text-purple-300/60' : 'text-gray-500'">
+          {{ pacMode ? 'Invoke Agent' : 'Active Agent' }}
+        </label>
+
+        <!-- PAC Agents (shown first if in PAC mode) -->
+        <div v-if="pacAgents.length > 0" class="mb-3">
+          <div class="text-xs text-purple-300/40 mb-1">Perfected Stones</div>
+          <div class="flex flex-wrap gap-1">
+            <button
+              v-for="agent in pacAgents"
+              :key="agent.id"
+              @click="selectedAgent = agent.id"
+              class="p-2 rounded text-center transition-all text-xs min-w-[3rem] agent-halo"
+              :style="{
+                backgroundColor: selectedAgent === agent.id ? agent.color + '33' : 'rgba(26, 10, 46, 0.6)',
+                color: selectedAgent === agent.id ? agent.color : agent.color + '80',
+                boxShadow: selectedAgent === agent.id
+                  ? `inset 0 0 0 1px ${agent.color}, 0 0 15px ${agent.color}40`
+                  : `inset 0 0 0 1px ${agent.color}30`,
+              }"
+              :title="agent.name + ' (Perfected Stone)'"
+            >
+              {{ agent.symbol }}Ω
+            </button>
+          </div>
+        </div>
+
+        <!-- Regular Agents -->
         <div class="flex flex-wrap gap-1">
           <button
-            v-for="agent in allAgents"
+            v-for="agent in allAgents.filter(a => !a.isPac)"
             :key="agent.id"
             @click="selectedAgent = agent.id"
             class="p-2 rounded text-center transition-all text-xs min-w-[2.5rem]"
@@ -176,7 +231,13 @@ function renderMarkdown(content) {
     </aside>
 
     <!-- Main Chat Area -->
-    <main class="flex-1 flex flex-col bg-apex-darker">
+    <main
+      class="flex-1 flex flex-col transition-all duration-500"
+      :class="isUsingPacAgent ? 'pac-chat-area' : 'bg-apex-darker'"
+      :style="isUsingPacAgent ? {
+        background: 'radial-gradient(ellipse at center, rgba(26, 10, 46, 0.95) 0%, rgba(10, 6, 18, 0.98) 100%)'
+      } : {}"
+    >
       <!-- Toggle Sidebar (mobile) -->
       <button
         @click="showSidebar = !showSidebar"
@@ -236,25 +297,38 @@ function renderMarkdown(content) {
             <!-- Avatar -->
             <div
               v-if="message.role !== 'user'"
-              class="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
-              :class="message.role === 'system' ? 'bg-red-500/20' : 'bg-gold/20'"
+              class="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 transition-all"
+              :class="message.role === 'system'
+                ? 'bg-red-500/20'
+                : isUsingPacAgent
+                  ? 'agent-halo'
+                  : 'bg-gold/20'"
+              :style="isUsingPacAgent && message.role === 'assistant' ? {
+                backgroundColor: 'rgba(255, 215, 0, 0.15)',
+                boxShadow: '0 0 20px rgba(255, 215, 0, 0.3)'
+              } : {}"
             >
-              <span v-if="message.role === 'assistant'" class="text-gold font-serif font-bold text-sm">Au</span>
+              <span v-if="message.role === 'assistant'" class="text-gold font-serif font-bold text-sm">
+                {{ isUsingPacAgent ? '∴' : 'Au' }}
+              </span>
               <span v-else class="text-red-400 text-sm">!</span>
             </div>
 
             <!-- Message content -->
             <div
-              class="max-w-[80%] rounded-2xl px-4 py-3"
+              class="max-w-[80%] rounded-2xl px-4 py-3 transition-all"
               :class="{
                 'bg-gold text-apex-dark': message.role === 'user',
-                'bg-apex-card': message.role === 'assistant',
+                'bg-apex-card': message.role === 'assistant' && !isUsingPacAgent,
+                'pac-message': message.role === 'assistant' && isUsingPacAgent,
                 'bg-red-500/10 border border-red-500/30': message.role === 'system'
               }"
             >
               <div
                 v-if="message.role === 'assistant'"
-                class="prose prose-invert prose-sm max-w-none"
+                class="prose prose-sm max-w-none"
+                :class="isUsingPacAgent ? 'prose-purple' : 'prose-invert'"
+                :style="isUsingPacAgent ? { color: '#E8B4FF' } : {}"
                 v-html="renderMarkdown(message.content)"
               />
               <div v-else>{{ message.content }}</div>
@@ -263,7 +337,10 @@ function renderMarkdown(content) {
             <!-- User avatar -->
             <div
               v-if="message.role === 'user'"
-              class="w-8 h-8 rounded-full bg-gradient-to-br from-gold to-gold-dim flex items-center justify-center flex-shrink-0"
+              class="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
+              :class="isUsingPacAgent
+                ? 'bg-gradient-to-br from-purple-400 to-purple-600'
+                : 'bg-gradient-to-br from-gold to-gold-dim'"
             >
               <span class="text-apex-dark font-bold text-sm">Y</span>
             </div>
@@ -271,15 +348,22 @@ function renderMarkdown(content) {
 
           <!-- Streaming indicator -->
           <div v-if="chat.isStreaming" class="flex gap-4">
-            <div class="w-8 h-8 rounded-full bg-gold/20 flex items-center justify-center flex-shrink-0">
-              <span class="text-gold font-serif font-bold text-sm">Au</span>
+            <div
+              class="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
+              :class="isUsingPacAgent ? 'agent-halo' : 'bg-gold/20'"
+              :style="isUsingPacAgent ? {
+                backgroundColor: 'rgba(255, 215, 0, 0.15)',
+                boxShadow: '0 0 20px rgba(255, 215, 0, 0.3)'
+              } : {}"
+            >
+              <span class="text-gold font-serif font-bold text-sm">{{ isUsingPacAgent ? '∴' : 'Au' }}</span>
             </div>
-            <div class="bg-apex-card rounded-2xl px-4 py-3">
-              <div class="flex items-center gap-2 text-gray-400">
+            <div :class="isUsingPacAgent ? 'pac-message' : 'bg-apex-card'" class="rounded-2xl px-4 py-3">
+              <div class="flex items-center gap-2" :class="isUsingPacAgent ? 'text-purple-300' : 'text-gray-400'">
                 <div class="flex gap-1">
-                  <span class="w-2 h-2 bg-gold rounded-full animate-bounce" style="animation-delay: 0ms"></span>
-                  <span class="w-2 h-2 bg-gold rounded-full animate-bounce" style="animation-delay: 150ms"></span>
-                  <span class="w-2 h-2 bg-gold rounded-full animate-bounce" style="animation-delay: 300ms"></span>
+                  <span class="w-2 h-2 rounded-full animate-bounce" :class="isUsingPacAgent ? 'bg-purple-400' : 'bg-gold'" style="animation-delay: 0ms"></span>
+                  <span class="w-2 h-2 rounded-full animate-bounce" :class="isUsingPacAgent ? 'bg-purple-400' : 'bg-gold'" style="animation-delay: 150ms"></span>
+                  <span class="w-2 h-2 rounded-full animate-bounce" :class="isUsingPacAgent ? 'bg-purple-400' : 'bg-gold'" style="animation-delay: 300ms"></span>
                 </div>
                 <span class="text-sm">Thinking...</span>
               </div>
@@ -289,20 +373,35 @@ function renderMarkdown(content) {
       </div>
 
       <!-- Input Area -->
-      <div class="border-t border-apex-border p-4">
+      <div
+        class="border-t p-4 transition-all"
+        :class="isUsingPacAgent ? 'border-purple-500/30' : 'border-apex-border'"
+      >
         <form @submit.prevent="handleSubmit" class="max-w-3xl mx-auto">
           <div class="flex gap-3">
             <input
               ref="inputRef"
               v-model="inputMessage"
               type="text"
-              placeholder="Message ApexAurum..."
+              :placeholder="isUsingPacAgent ? 'Speak to the Stone...' : 'Message ApexAurum...'"
               class="input flex-1"
+              :class="isUsingPacAgent ? 'pac-input' : ''"
+              :style="isUsingPacAgent ? {
+                background: 'rgba(26, 10, 46, 0.8)',
+                borderColor: 'rgba(255, 215, 0, 0.2)',
+              } : {}"
               :disabled="chat.isStreaming"
             />
             <button
               type="submit"
-              class="btn-primary px-6"
+              class="px-6 rounded-lg font-medium transition-all"
+              :class="isUsingPacAgent ? '' : 'btn-primary'"
+              :style="isUsingPacAgent ? {
+                background: 'rgba(255, 215, 0, 0.15)',
+                border: '1px solid rgba(255, 215, 0, 0.4)',
+                color: '#FFD700',
+                boxShadow: '0 0 20px rgba(255, 215, 0, 0.2)'
+              } : {}"
               :disabled="!inputMessage.trim() || chat.isStreaming"
             >
               <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
@@ -310,9 +409,14 @@ function renderMarkdown(content) {
               </svg>
             </button>
           </div>
-          <p class="text-xs text-gray-500 mt-2 text-center">
-            Agent: <span class="text-gold">{{ selectedAgent }}</span> |
-            Press Enter to send
+          <p class="text-xs mt-2 text-center" :class="isUsingPacAgent ? 'text-purple-300/60' : 'text-gray-500'">
+            <template v-if="isUsingPacAgent">
+              <span class="text-gold">∴ {{ actualAgentId }}-Ω ∴</span> · Perfected Stone Active
+            </template>
+            <template v-else>
+              Agent: <span class="text-gold">{{ selectedAgent }}</span> |
+              Press Enter to send
+            </template>
           </p>
         </form>
       </div>

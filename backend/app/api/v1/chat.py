@@ -82,22 +82,43 @@ def get_claude_service() -> ClaudeService:
     return _claude_service
 
 
-def load_native_prompt(agent_id: str) -> Optional[str]:
-    """Load native prompt from file with caching."""
+def load_native_prompt(agent_id: str, use_pac: bool = False) -> Optional[str]:
+    """Load native prompt from file with caching.
+
+    If use_pac=True, tries to load the PAC (Perfected Alchemical Codex) version first.
+    PAC files are named with -PAC suffix, e.g., ∴AZOTH∴-PAC.txt
+    """
     global _native_prompt_cache
 
+    # Build cache key
+    cache_key = f"{agent_id}{'_pac' if use_pac else ''}"
+
     # Return from cache if available
-    if agent_id in _native_prompt_cache:
-        return _native_prompt_cache[agent_id]
+    if cache_key in _native_prompt_cache:
+        return _native_prompt_cache[cache_key]
 
     # Try to load from file
     filename = NATIVE_AGENT_FILES.get(agent_id)
     if filename:
+        # If PAC requested, try PAC version first
+        if use_pac:
+            pac_filename = filename.replace(".txt", "-PAC.txt")
+            pac_filepath = NATIVE_PROMPTS_DIR / pac_filename
+            if pac_filepath.exists():
+                try:
+                    prompt = pac_filepath.read_text(encoding="utf-8")
+                    _native_prompt_cache[cache_key] = prompt
+                    logger.info(f"Loaded PAC prompt for {agent_id} from {pac_filepath}")
+                    return prompt
+                except Exception as e:
+                    logger.warning(f"Failed to load PAC prompt for {agent_id}: {e}")
+
+        # Load regular prompt
         filepath = NATIVE_PROMPTS_DIR / filename
         if filepath.exists():
             try:
                 prompt = filepath.read_text(encoding="utf-8")
-                _native_prompt_cache[agent_id] = prompt
+                _native_prompt_cache[cache_key] = prompt
                 logger.info(f"Loaded native prompt for {agent_id} from {filepath}")
                 return prompt
             except Exception as e:
@@ -106,29 +127,32 @@ def load_native_prompt(agent_id: str) -> Optional[str]:
     return None
 
 
-def get_agent_prompt(agent_id: str, user: Optional[User] = None) -> str:
+def get_agent_prompt(agent_id: str, user: Optional[User] = None, use_pac: bool = False) -> str:
     """
     Get system prompt for an agent.
 
     Priority:
     1. User's custom agent (if authenticated and agent matches custom ID)
-    2. Native prompt from file
+    2. Native prompt from file (PAC version if use_pac=True)
     3. Fallback hardcoded prompt
+
+    If use_pac=True, the PAC (Perfected Alchemical Codex) version is loaded.
+    PAC prompts are hyperdense symbolic formats - they are sent raw as system messages.
     """
-    # Check user's custom agents first
-    if user and user.settings:
+    # Check user's custom agents first (custom agents don't have PAC versions)
+    if user and user.settings and not use_pac:
         custom_agents = user.settings.get("custom_agents", [])
         for custom in custom_agents:
             if custom.get("id") == agent_id:
                 logger.debug(f"Using custom prompt for agent {agent_id}")
                 return custom.get("prompt", FALLBACK_PROMPTS["CLAUDE"])
 
-    # Try native prompt from file
-    native_prompt = load_native_prompt(agent_id)
+    # Try native prompt from file (with PAC support)
+    native_prompt = load_native_prompt(agent_id, use_pac=use_pac)
     if native_prompt:
         return native_prompt
 
-    # Fallback to hardcoded
+    # Fallback to hardcoded (no PAC versions for fallback)
     return FALLBACK_PROMPTS.get(agent_id, FALLBACK_PROMPTS["CLAUDE"])
 
 # Schemas
@@ -138,6 +162,7 @@ class ChatRequest(BaseModel):
     model: str = "claude-3-haiku-20240307"
     agent: str = "CLAUDE"
     stream: bool = True
+    use_pac: bool = False  # Load PAC (Perfected Alchemical Codex) version of prompt
 
 
 class ConversationResponse(BaseModel):
@@ -214,7 +239,8 @@ async def send_message(
     messages = [{"role": "user", "content": request.message}]
 
     # Get system prompt for selected agent (checks custom, native files, then fallback)
-    system_prompt = get_agent_prompt(request.agent, user)
+    # If use_pac=True, loads the PAC (Perfected Alchemical Codex) version
+    system_prompt = get_agent_prompt(request.agent, user, use_pac=request.use_pac)
 
     if request.stream:
         async def stream_response():

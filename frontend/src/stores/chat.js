@@ -47,7 +47,7 @@ export const useChatStore = defineStore('chat', () => {
     messages.value = []
   }
 
-  async function sendMessage(content, agent = 'CLAUDE', model = 'claude-3-haiku-20240307') {
+  async function sendMessage(content, agent = 'CLAUDE', model = 'claude-3-haiku-20240307', usePac = false) {
     // Add user message immediately
     messages.value.push({
       id: Date.now().toString(),
@@ -84,7 +84,8 @@ export const useChatStore = defineStore('chat', () => {
           conversation_id: currentConversation.value?.id,
           model,
           agent,
-          stream: true
+          stream: true,
+          use_pac: usePac
         })
       })
 
