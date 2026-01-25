@@ -1,10 +1,6 @@
 [build]
-builder = "DOCKERFILE"
-dockerfilePath = "Dockerfile"
+# Let Railway auto-detect Dockerfile in this directory
 
 [deploy]
-# Temporarily disabled healthcheck for debugging
-# healthcheckPath = "/"
-# healthcheckTimeout = 30
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 3
