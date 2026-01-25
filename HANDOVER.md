@@ -1,8 +1,8 @@
 # ApexAurum-Cloud Handover Document
 
 **Date:** 2026-01-25
-**Build:** v20-pac-complete + BYOK
-**Status:** PRODUCTION READY - BYOK Beta Live
+**Build:** v21-mobile-qol
+**Status:** PRODUCTION READY - Mobile QoL Deployed
 
 ---
 
@@ -59,7 +59,16 @@ curl https://backend-production-507c.up.railway.app/health
 
 ## Version History
 
-### v20-pac-complete + BYOK (Current Session)
+### v21-mobile-qol (Current Session)
+- **Phase 5: Mobile QoL** - Touch-friendly mobile experience
+  - Swipe gestures (edge swipe to open sidebar, swipe left to close)
+  - Haptic feedback (vibration patterns for all interactions)
+  - Pull-to-refresh on conversation list
+  - Bottom sheet context menu on mobile (replaces fixed popover)
+  - New composables: useSwipe.js, useHaptic.js, usePullToRefresh.js
+  - Settings toggle for haptic feedback (auto-hidden on non-mobile)
+
+### v20-pac-complete + BYOK
 - **Phase 4: Polish & Cleanup** - HANDOVER updated, health endpoint enhanced
 - **Phase 1: Sound Effects** - Web Audio API tones for easter eggs
   - Konami chimes, AZOTH resonance, PAC ethereal swell
@@ -211,7 +220,7 @@ Frontend: 6cf1f965-94df-4ea0-96ca-d82959e2d3c5
 | 2 | Conversation Branching | 📋 Planned | Medium |
 | 3 | API Key Management | ✅ Done | Low |
 | 4 | Polish & Cleanup | ✅ Done | Low |
-| 5 | Mobile QoL | 📋 Planned | Medium |
+| 5 | Mobile QoL | ✅ Done | Medium |
 | 6 | Agent Memory | 📋 Planned | High |
 
 ---

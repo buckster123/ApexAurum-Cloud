@@ -1,9 +1,12 @@
 <script setup>
-import { ref, computed, onMounted, nextTick, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useChatStore } from '@/stores/chat'
 import { useDevMode } from '@/composables/useDevMode'
 import { useSound } from '@/composables/useSound'
+import { useHaptic } from '@/composables/useHaptic'
+import { useSwipe } from '@/composables/useSwipe'
+import { usePullToRefresh } from '@/composables/usePullToRefresh'
 import { marked } from 'marked'
 import api from '@/services/api'
 
@@ -12,11 +15,17 @@ const router = useRouter()
 const chat = useChatStore()
 const { pacMode } = useDevMode()
 const { sounds } = useSound()
+const { haptics } = useHaptic()
+const swipe = useSwipe()
+const pullRefresh = usePullToRefresh()
 
 const inputMessage = ref('')
 const messagesContainer = ref(null)
 const inputRef = ref(null)
 const showSidebar = ref(true)
+const mainArea = ref(null)
+const conversationsList = ref(null)
+const isMobile = ref(window.innerWidth < 768)
 
 // Conversation management state
 const searchQuery = ref('')
@@ -84,12 +93,13 @@ async function checkApiKeyStatus() {
   }
 }
 
-// Select an agent (with sound for PAC agents)
+// Select an agent (with sound for PAC agents, haptic for all)
 function selectAgent(agentId) {
   const isPac = agentId.endsWith('-PAC')
   if (isPac) {
     sounds.stoneSelect()
   }
+  haptics.light()
   selectedAgent.value = agentId
 }
 
@@ -114,6 +124,14 @@ async function fetchCustomAgents() {
   }
 }
 
+// Swipe cleanup
+let swipeCleanup = null
+
+// Resize listener
+function handleResize() {
+  isMobile.value = window.innerWidth < 768
+}
+
 // Load conversation if ID in route
 onMounted(async () => {
   await checkApiKeyStatus()
@@ -125,6 +143,44 @@ onMounted(async () => {
   }
 
   inputRef.value?.focus()
+
+  // Setup swipe gestures for mobile sidebar
+  window.addEventListener('resize', handleResize)
+
+  // Swipe from left edge to open sidebar
+  swipe.registerCallbacks({
+    onEdgeSwipeRight: () => {
+      if (!showSidebar.value) {
+        showSidebar.value = true
+        haptics.sidebarToggle()
+      }
+    },
+    onSwipeLeft: () => {
+      if (showSidebar.value && isMobile.value) {
+        showSidebar.value = false
+        haptics.sidebarToggle()
+      }
+    },
+  })
+
+  // Attach swipe to main area
+  nextTick(() => {
+    if (mainArea.value) {
+      swipeCleanup = swipe.attachToElement(mainArea.value)
+    }
+
+    // Setup pull-to-refresh on conversations list
+    if (conversationsList.value) {
+      pullRefresh.attach(conversationsList.value, async () => {
+        await chat.fetchConversations()
+      })
+    }
+  })
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', handleResize)
+  if (swipeCleanup) swipeCleanup()
 })
 
 // Watch for route changes
@@ -150,6 +206,8 @@ async function handleSubmit() {
   if (!message || chat.isStreaming) return
 
   inputMessage.value = ''
+  // Haptic feedback on send
+  haptics.medium()
   // Use actualAgentId and pass isPac flag for PAC prompt loading
   await chat.sendMessage(message, actualAgentId.value, undefined, isUsingPacAgent.value)
 }
@@ -303,8 +361,22 @@ function renderMarkdown(content) {
         />
       </div>
 
-      <!-- Conversations List -->
-      <div class="flex-1 overflow-y-auto px-2">
+      <!-- Conversations List (with pull-to-refresh) -->
+      <div ref="conversationsList" class="flex-1 overflow-y-auto px-2 relative">
+        <!-- Pull to refresh indicator -->
+        <div
+          v-if="pullRefresh.isPulling.value || pullRefresh.isRefreshing.value"
+          class="absolute top-0 left-0 right-0 flex justify-center py-2 z-10"
+          :style="{ transform: `translateY(${Math.min(pullRefresh.pullDistance.value, 40)}px)` }"
+        >
+          <div
+            class="w-6 h-6 rounded-full border-2 border-gold flex items-center justify-center transition-all"
+            :class="{ 'animate-spin': pullRefresh.isRefreshing.value, 'opacity-50': !pullRefresh.passedThreshold.value }"
+          >
+            <span v-if="pullRefresh.isRefreshing.value" class="text-gold text-xs">⟳</span>
+            <span v-else class="text-gold text-xs">↓</span>
+          </div>
+        </div>
         <div
           v-for="conv in filteredConversations"
           :key="conv.id"
@@ -417,6 +489,7 @@ function renderMarkdown(content) {
 
     <!-- Main Chat Area -->
     <main
+      ref="mainArea"
       class="flex-1 flex flex-col transition-all duration-500"
       :class="isUsingPacAgent ? 'pac-chat-area' : 'bg-apex-darker'"
       :style="isUsingPacAgent ? {
@@ -636,52 +709,129 @@ function renderMarkdown(content) {
       </div>
     </main>
 
-    <!-- Context Menu -->
+    <!-- Context Menu (Desktop: fixed position, Mobile: bottom sheet) -->
     <Teleport to="body">
-      <div
-        v-if="contextMenu.visible"
-        class="fixed bg-apex-card border border-apex-border rounded-lg shadow-xl py-1 z-50 min-w-[160px]"
-        :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }"
-      >
-        <button
-          @click="handleContextAction('rename')"
-          class="w-full px-4 py-2 text-left text-sm hover:bg-white/5 flex items-center gap-2"
+      <!-- Backdrop -->
+      <Transition name="fade">
+        <div
+          v-if="contextMenu.visible"
+          @click="hideContextMenu"
+          class="fixed inset-0 z-40"
+          :class="isMobile ? 'bg-black/50' : ''"
+        ></div>
+      </Transition>
+
+      <!-- Desktop Context Menu -->
+      <Transition name="fade">
+        <div
+          v-if="contextMenu.visible && !isMobile"
+          class="fixed bg-apex-card border border-apex-border rounded-lg shadow-xl py-1 z-50 min-w-[160px]"
+          :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }"
         >
-          <span class="text-gray-400">✏️</span> Rename
-        </button>
-        <button
-          @click="handleContextAction('favorite')"
-          class="w-full px-4 py-2 text-left text-sm hover:bg-white/5 flex items-center gap-2"
+          <button
+            @click="handleContextAction('rename')"
+            class="w-full px-4 py-2 text-left text-sm hover:bg-white/5 flex items-center gap-2"
+          >
+            <span class="text-gray-400">✏️</span> Rename
+          </button>
+          <button
+            @click="handleContextAction('favorite')"
+            class="w-full px-4 py-2 text-left text-sm hover:bg-white/5 flex items-center gap-2"
+          >
+            <span class="text-gray-400">{{ contextMenu.conv?.favorite ? '☆' : '★' }}</span>
+            {{ contextMenu.conv?.favorite ? 'Unfavorite' : 'Favorite' }}
+          </button>
+          <button
+            @click="handleContextAction('export')"
+            class="w-full px-4 py-2 text-left text-sm hover:bg-white/5 flex items-center gap-2"
+          >
+            <span class="text-gray-400">📤</span> Export
+          </button>
+          <button
+            @click="handleContextAction('archive')"
+            class="w-full px-4 py-2 text-left text-sm hover:bg-white/5 flex items-center gap-2"
+          >
+            <span class="text-gray-400">📦</span> Archive
+          </button>
+          <hr class="border-apex-border my-1" />
+          <button
+            @click="handleContextAction('delete')"
+            class="w-full px-4 py-2 text-left text-sm hover:bg-red-500/10 text-red-400 flex items-center gap-2"
+          >
+            <span>🗑️</span> Delete
+          </button>
+        </div>
+      </Transition>
+
+      <!-- Mobile Bottom Sheet -->
+      <Transition name="slide-up">
+        <div
+          v-if="contextMenu.visible && isMobile"
+          class="fixed bottom-0 left-0 right-0 bg-apex-card border-t border-apex-border rounded-t-2xl shadow-2xl z-50 pb-safe"
         >
-          <span class="text-gray-400">{{ contextMenu.conv?.favorite ? '☆' : '★' }}</span>
-          {{ contextMenu.conv?.favorite ? 'Unfavorite' : 'Favorite' }}
-        </button>
-        <button
-          @click="handleContextAction('export')"
-          class="w-full px-4 py-2 text-left text-sm hover:bg-white/5 flex items-center gap-2"
-        >
-          <span class="text-gray-400">📤</span> Export
-        </button>
-        <button
-          @click="handleContextAction('archive')"
-          class="w-full px-4 py-2 text-left text-sm hover:bg-white/5 flex items-center gap-2"
-        >
-          <span class="text-gray-400">📦</span> Archive
-        </button>
-        <hr class="border-apex-border my-1" />
-        <button
-          @click="handleContextAction('delete')"
-          class="w-full px-4 py-2 text-left text-sm hover:bg-red-500/10 text-red-400 flex items-center gap-2"
-        >
-          <span>🗑️</span> Delete
-        </button>
-      </div>
-      <!-- Click outside to close -->
-      <div
-        v-if="contextMenu.visible"
-        @click="hideContextMenu"
-        class="fixed inset-0 z-40"
-      ></div>
+          <!-- Handle bar -->
+          <div class="flex justify-center py-3">
+            <div class="w-10 h-1 bg-gray-600 rounded-full"></div>
+          </div>
+
+          <!-- Title -->
+          <div class="px-4 pb-3 border-b border-apex-border">
+            <h3 class="font-medium text-sm text-gray-300 truncate">
+              {{ contextMenu.conv?.title || 'Conversation' }}
+            </h3>
+          </div>
+
+          <!-- Actions -->
+          <div class="py-2">
+            <button
+              @click="handleContextAction('rename')"
+              class="w-full px-6 py-4 text-left flex items-center gap-4 active:bg-white/5"
+            >
+              <span class="text-xl">✏️</span>
+              <span>Rename</span>
+            </button>
+            <button
+              @click="handleContextAction('favorite')"
+              class="w-full px-6 py-4 text-left flex items-center gap-4 active:bg-white/5"
+            >
+              <span class="text-xl">{{ contextMenu.conv?.favorite ? '☆' : '★' }}</span>
+              <span>{{ contextMenu.conv?.favorite ? 'Unfavorite' : 'Favorite' }}</span>
+            </button>
+            <button
+              @click="handleContextAction('export')"
+              class="w-full px-6 py-4 text-left flex items-center gap-4 active:bg-white/5"
+            >
+              <span class="text-xl">📤</span>
+              <span>Export</span>
+            </button>
+            <button
+              @click="handleContextAction('archive')"
+              class="w-full px-6 py-4 text-left flex items-center gap-4 active:bg-white/5"
+            >
+              <span class="text-xl">📦</span>
+              <span>Archive</span>
+            </button>
+            <hr class="border-apex-border my-2" />
+            <button
+              @click="handleContextAction('delete')"
+              class="w-full px-6 py-4 text-left flex items-center gap-4 active:bg-red-500/10 text-red-400"
+            >
+              <span class="text-xl">🗑️</span>
+              <span>Delete</span>
+            </button>
+          </div>
+
+          <!-- Cancel button -->
+          <div class="px-4 pb-4">
+            <button
+              @click="hideContextMenu"
+              class="btn-ghost w-full py-3"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      </Transition>
     </Teleport>
 
     <!-- Export Modal -->
@@ -742,5 +892,30 @@ function renderMarkdown(content) {
 @keyframes bounce {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-4px); }
+}
+
+/* Fade transition */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+
+/* Slide up transition for bottom sheet */
+.slide-up-enter-active,
+.slide-up-leave-active {
+  transition: transform 0.3s ease;
+}
+.slide-up-enter-from,
+.slide-up-leave-to {
+  transform: translateY(100%);
+}
+
+/* Safe area padding for bottom sheet */
+.pb-safe {
+  padding-bottom: max(1rem, env(safe-area-inset-bottom));
 }
 </style>

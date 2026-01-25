@@ -3,11 +3,13 @@ import { ref, onMounted, computed } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useDevMode } from '@/composables/useDevMode'
 import { useSound } from '@/composables/useSound'
+import { useHaptic } from '@/composables/useHaptic'
 import api from '@/services/api'
 
 const auth = useAuthStore()
 const { devMode, pacMode, handleTap, tapCount, alchemyLayer, layerName } = useDevMode()
 const { soundEnabled, toggleSound, sounds } = useSound()
+const { hapticEnabled, setEnabled: setHapticEnabled, haptics, isSupported: hapticSupported } = useHaptic()
 
 // Active tab for dev mode
 const activeTab = ref('profile')
@@ -1015,6 +1017,26 @@ async function handleMemoryImport(event) {
             </button>
           </div>
 
+          <!-- Haptic Feedback (mobile only) -->
+          <div v-if="hapticSupported" class="flex items-center justify-between">
+            <div>
+              <div class="font-medium">Haptic Feedback</div>
+              <div class="text-sm text-gray-400">
+                Vibration feedback on mobile devices
+              </div>
+            </div>
+            <button
+              @click="setHapticEnabled(!hapticEnabled)"
+              class="relative w-14 h-7 rounded-full transition-colors"
+              :class="hapticEnabled ? 'bg-gold' : 'bg-apex-border'"
+            >
+              <span
+                class="absolute top-1 left-1 w-5 h-5 rounded-full bg-white transition-transform"
+                :class="hapticEnabled ? 'translate-x-7' : ''"
+              ></span>
+            </button>
+          </div>
+
           <div v-if="soundEnabled" class="pt-2 border-t border-apex-border">
             <div class="text-sm text-gray-400 mb-3">Test Sounds</div>
             <div class="flex flex-wrap gap-2">
@@ -1048,6 +1070,44 @@ async function handleMemoryImport(event) {
                 :class="pacMode ? 'pac-badge' : ''"
               >
                 Ethereal
+              </button>
+            </div>
+          </div>
+
+          <!-- Haptic test buttons -->
+          <div v-if="hapticSupported && hapticEnabled" class="pt-2 border-t border-apex-border">
+            <div class="text-sm text-gray-400 mb-3">Test Haptics</div>
+            <div class="flex flex-wrap gap-2">
+              <button
+                @click="haptics.light()"
+                class="btn-secondary text-xs px-3 py-1"
+              >
+                Light
+              </button>
+              <button
+                @click="haptics.medium()"
+                class="btn-secondary text-xs px-3 py-1"
+              >
+                Medium
+              </button>
+              <button
+                @click="haptics.strong()"
+                class="btn-secondary text-xs px-3 py-1"
+              >
+                Strong
+              </button>
+              <button
+                @click="haptics.success()"
+                class="btn-secondary text-xs px-3 py-1"
+              >
+                Success
+              </button>
+              <button
+                @click="haptics.pac()"
+                class="btn-secondary text-xs px-3 py-1"
+                :class="pacMode ? 'pac-badge' : ''"
+              >
+                PAC
               </button>
             </div>
           </div>

@@ -1,5 +1,6 @@
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useSound } from './useSound'
+import { useHaptic } from './useHaptic'
 
 // Singleton state - shared across all components
 const devMode = ref(localStorage.getItem('devMode') === 'true')
@@ -7,6 +8,9 @@ const pacMode = ref(localStorage.getItem('pacMode') === 'true')
 
 // Sound system
 const { sounds } = useSound()
+
+// Haptic feedback
+const { haptics } = useHaptic()
 
 // Konami code sequence: ↑↑↓↓←→←→BA
 const KONAMI_CODE = [
@@ -54,8 +58,9 @@ export function useDevMode() {
     devMode.value = true
     localStorage.setItem('devMode', 'true')
 
-    // Play activation sound
+    // Play activation sound + haptic
     sounds.devModeActivate()
+    haptics.devMode()
 
     console.log('%c🔧 Dev Mode activated!', 'color: #FFD700; font-size: 14px;')
     console.log('%cYou are now: The Apprentice', 'color: #888; font-style: italic;')
@@ -87,8 +92,9 @@ export function useDevMode() {
     localStorage.setItem('pacMode', 'true')
     justActivatedPac.value = true
 
-    // Play ethereal activation sound
+    // Play ethereal activation sound + mystical haptic
     sounds.pacActivate()
+    haptics.pac()
 
     // Epic console activation
     console.clear()
@@ -121,8 +127,9 @@ export function useDevMode() {
     if (!devMode.value) {
       const expectedKonami = KONAMI_CODE[konamiIndex.value]
       if (event.code === expectedKonami) {
-        // Play ascending chime for each correct key
+        // Play ascending chime + haptic for each correct key
         sounds.konamiKey(konamiIndex.value)
+        haptics.konamiKey()
         konamiIndex.value++
         if (konamiIndex.value === KONAMI_CODE.length) {
           enableDevMode()
@@ -138,8 +145,9 @@ export function useDevMode() {
       const expectedAzoth = AZOTH_SEQUENCE[azothIndex.value]
 
       if (event.code === expectedAzoth) {
-        // Play deep resonance for each letter
+        // Play deep resonance + haptic for each letter
         sounds.azothLetter(azothIndex.value)
+        haptics.azothLetter()
         azothIndex.value++
 
         // Visual feedback - whisper the letters

@@ -22,7 +22,7 @@ async def lifespan(app: FastAPI):
     """Application lifespan manager."""
     # Startup
     print("=" * 50)
-    print("ApexAurum Cloud v20 - PAC Complete")
+    print("ApexAurum Cloud v21 - Mobile QoL")
     print("=" * 50)
     await init_db()
     print("Database initialized - FRESH BUILD")
@@ -77,7 +77,7 @@ async def health_check():
     return {
         "status": "healthy",
         "version": "0.1.0",
-        "build": "v20-pac-complete",
+        "build": "v21-mobile-qol",
         "agents": {
             "native": 5,
             "pac": 4,
