@@ -200,10 +200,14 @@ async def list_conversations(
     limit: int = 50,
     offset: int = 0,
     archived: bool = False,
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_current_user_optional),
     db: AsyncSession = Depends(get_db)
 ):
-    """List user's conversations."""
+    """List user's conversations. Returns empty list if not authenticated."""
+    # Return empty list if not authenticated (allows unauthenticated chat)
+    if not user:
+        return ConversationListResponse(conversations=[], total=0)
+
     from sqlalchemy import func
     from sqlalchemy.orm import selectinload
 
