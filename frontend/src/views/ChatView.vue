@@ -519,15 +519,20 @@ function renderMarkdown(content) {
 
       <!-- Model Selector (Unleash the Stones) -->
       <div class="p-4 border-t border-apex-border" :class="{ 'border-purple-500/30': pacMode }">
-        <label class="block text-xs mb-2" :class="pacMode ? 'text-purple-300/60' : 'text-gray-500'">
-          Model
+        <label class="block text-xs mb-2 flex items-center gap-2" :class="pacMode ? 'text-purple-300/60' : 'text-gray-500'">
+          <span>Model</span>
+          <span v-if="chat.availableModels.length === 0" class="text-xs text-gray-600">(loading...)</span>
         </label>
         <select
           :value="chat.selectedModel"
           @change="chat.setSelectedModel($event.target.value)"
           class="w-full bg-apex-darker border border-apex-border rounded-lg px-3 py-2 text-sm focus:ring-1 focus:ring-gold focus:border-gold transition-all cursor-pointer"
           :class="pacMode ? 'border-purple-500/30' : ''"
+          :style="{ color: chat.availableModels.length ? 'inherit' : '#666' }"
         >
+          <!-- Show loading state if models not loaded -->
+          <option v-if="chat.availableModels.length === 0" value="" disabled>Loading models...</option>
+          <!-- Model options -->
           <option
             v-for="model in chat.availableModels"
             :key="model.id"
@@ -538,7 +543,7 @@ function renderMarkdown(content) {
           </option>
         </select>
         <p class="text-xs text-gray-500 mt-1">
-          {{ chat.availableModels.find(m => m.id === chat.selectedModel)?.description || 'Select a model' }}
+          {{ chat.availableModels.find(m => m.id === chat.selectedModel)?.description || 'Loading...' }}
         </p>
       </div>
 
