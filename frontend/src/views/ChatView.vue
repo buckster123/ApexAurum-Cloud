@@ -3,6 +3,7 @@ import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useChatStore } from '@/stores/chat'
 import { useDevMode } from '@/composables/useDevMode'
+import { useSound } from '@/composables/useSound'
 import { marked } from 'marked'
 import api from '@/services/api'
 
@@ -10,6 +11,7 @@ const route = useRoute()
 const router = useRouter()
 const chat = useChatStore()
 const { pacMode } = useDevMode()
+const { sounds } = useSound()
 
 const inputMessage = ref('')
 const messagesContainer = ref(null)
@@ -63,6 +65,15 @@ const allAgents = computed(() => {
 })
 
 const selectedAgent = ref('AZOTH')
+
+// Select an agent (with sound for PAC agents)
+function selectAgent(agentId) {
+  const isPac = agentId.endsWith('-PAC')
+  if (isPac) {
+    sounds.stoneSelect()
+  }
+  selectedAgent.value = agentId
+}
 
 // Check if currently using a PAC agent
 const isUsingPacAgent = computed(() => {
@@ -346,7 +357,7 @@ function renderMarkdown(content) {
             <button
               v-for="agent in pacAgents"
               :key="agent.id"
-              @click="selectedAgent = agent.id"
+              @click="selectAgent(agent.id)"
               class="p-2 rounded text-center transition-all text-xs min-w-[3rem] agent-halo"
               :style="{
                 backgroundColor: selectedAgent === agent.id ? agent.color + '33' : 'rgba(26, 10, 46, 0.6)',
@@ -367,7 +378,7 @@ function renderMarkdown(content) {
           <button
             v-for="agent in allAgents.filter(a => !a.isPac)"
             :key="agent.id"
-            @click="selectedAgent = agent.id"
+            @click="selectAgent(agent.id)"
             class="p-2 rounded text-center transition-all text-xs min-w-[2.5rem]"
             :style="{
               backgroundColor: selectedAgent === agent.id ? agent.color + '33' : 'transparent',

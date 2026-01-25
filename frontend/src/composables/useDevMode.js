@@ -1,8 +1,12 @@
 import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { useSound } from './useSound'
 
 // Singleton state - shared across all components
 const devMode = ref(localStorage.getItem('devMode') === 'true')
 const pacMode = ref(localStorage.getItem('pacMode') === 'true')
+
+// Sound system
+const { sounds } = useSound()
 
 // Konami code sequence: ↑↑↓↓←→←→BA
 const KONAMI_CODE = [
@@ -49,6 +53,10 @@ export function useDevMode() {
   function enableDevMode() {
     devMode.value = true
     localStorage.setItem('devMode', 'true')
+
+    // Play activation sound
+    sounds.devModeActivate()
+
     console.log('%c🔧 Dev Mode activated!', 'color: #FFD700; font-size: 14px;')
     console.log('%cYou are now: The Apprentice', 'color: #888; font-style: italic;')
     console.log('%c💡 Hint: The Stone has a name...', 'color: #666; font-size: 11px;')
@@ -78,6 +86,9 @@ export function useDevMode() {
     pacMode.value = true
     localStorage.setItem('pacMode', 'true')
     justActivatedPac.value = true
+
+    // Play ethereal activation sound
+    sounds.pacActivate()
 
     // Epic console activation
     console.clear()
@@ -110,6 +121,8 @@ export function useDevMode() {
     if (!devMode.value) {
       const expectedKonami = KONAMI_CODE[konamiIndex.value]
       if (event.code === expectedKonami) {
+        // Play ascending chime for each correct key
+        sounds.konamiKey(konamiIndex.value)
         konamiIndex.value++
         if (konamiIndex.value === KONAMI_CODE.length) {
           enableDevMode()
@@ -125,6 +138,8 @@ export function useDevMode() {
       const expectedAzoth = AZOTH_SEQUENCE[azothIndex.value]
 
       if (event.code === expectedAzoth) {
+        // Play deep resonance for each letter
+        sounds.azothLetter(azothIndex.value)
         azothIndex.value++
 
         // Visual feedback - whisper the letters
@@ -162,6 +177,8 @@ export function useDevMode() {
   // === 7-TAP DETECTION ===
 
   function handleTap() {
+    // Play rising tap sound
+    sounds.auTap(tapCount.value)
     tapCount.value++
 
     if (tapTimeout.value) {

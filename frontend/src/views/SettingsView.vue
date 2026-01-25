@@ -2,10 +2,12 @@
 import { ref, onMounted, computed } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useDevMode } from '@/composables/useDevMode'
+import { useSound } from '@/composables/useSound'
 import api from '@/services/api'
 
 const auth = useAuthStore()
 const { devMode, pacMode, handleTap, tapCount, alchemyLayer, layerName } = useDevMode()
+const { soundEnabled, toggleSound, sounds } = useSound()
 
 // Active tab for dev mode
 const activeTab = ref('profile')
@@ -830,6 +832,69 @@ async function handleMemoryImport(event) {
           >
             {{ loading ? 'Saving...' : 'Save Settings' }}
           </button>
+        </div>
+      </div>
+
+      <!-- Sound & UX Settings -->
+      <div class="card mb-6">
+        <h2 class="text-xl font-bold mb-4">Sound & UX</h2>
+
+        <div class="space-y-4">
+          <div class="flex items-center justify-between">
+            <div>
+              <div class="font-medium">Sound Effects</div>
+              <div class="text-sm text-gray-400">
+                Audio feedback for easter eggs and interactions
+              </div>
+            </div>
+            <button
+              @click="toggleSound"
+              class="relative w-14 h-7 rounded-full transition-colors"
+              :class="soundEnabled ? 'bg-gold' : 'bg-apex-border'"
+            >
+              <span
+                class="absolute top-1 left-1 w-5 h-5 rounded-full bg-white transition-transform"
+                :class="soundEnabled ? 'translate-x-7' : ''"
+              ></span>
+            </button>
+          </div>
+
+          <div v-if="soundEnabled" class="pt-2 border-t border-apex-border">
+            <div class="text-sm text-gray-400 mb-3">Test Sounds</div>
+            <div class="flex flex-wrap gap-2">
+              <button
+                @click="sounds.konamiKey(5)"
+                class="btn-secondary text-xs px-3 py-1"
+              >
+                Chime
+              </button>
+              <button
+                @click="sounds.devModeActivate()"
+                class="btn-secondary text-xs px-3 py-1"
+              >
+                Unlock
+              </button>
+              <button
+                @click="sounds.azothLetter(2)"
+                class="btn-secondary text-xs px-3 py-1"
+              >
+                Resonance
+              </button>
+              <button
+                @click="sounds.stoneSelect()"
+                class="btn-secondary text-xs px-3 py-1"
+              >
+                Crystal
+              </button>
+              <button
+                @click="sounds.pacActivate()"
+                class="btn-secondary text-xs px-3 py-1"
+                :class="pacMode ? 'pac-badge' : ''"
+              >
+                Ethereal
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
