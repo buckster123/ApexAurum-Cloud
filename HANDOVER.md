@@ -1,8 +1,8 @@
 # ApexAurum-Cloud Handover Document
 
 **Date:** 2026-01-25
-**Build:** v20-pac-complete
-**Status:** PRODUCTION READY - All Perfected Stones Awakened
+**Build:** v20-pac-complete + BYOK
+**Status:** PRODUCTION READY - BYOK Beta Live
 
 ---
 
@@ -59,11 +59,18 @@ curl https://backend-production-507c.up.railway.app/health
 
 ## Version History
 
-### v20-pac-complete (Current)
-- All four alchemical PAC prompts deployed (Claude-tuned versions)
-- PAC agents visible in Chat selector for all: AZOTH-Ω, ELYSIAN-Ω, VAJRA-Ω, KETHER-Ω
-- Created MASTERPLAN.md with six upcoming features
-- Updated build tags and health endpoint
+### v20-pac-complete + BYOK (Current Session)
+- **Phase 4: Polish & Cleanup** - HANDOVER updated, health endpoint enhanced
+- **Phase 1: Sound Effects** - Web Audio API tones for easter eggs
+  - Konami chimes, AZOTH resonance, PAC ethereal swell
+  - Settings toggle in Advanced tab
+- **Phase 3: API Key Management** - BYOK beta model
+  - Fernet encryption for API keys
+  - Settings UI for key management
+  - Chat requires API key (402 if missing)
+  - Future-ready for Stripe subscriptions
+- All four alchemical PAC prompts deployed (Claude-tuned)
+- Created MASTERPLAN.md with six features (3 complete, 3 remaining)
 
 ### v19-ux-mobile
 - **Bug fixes**: Missing db.commit() in update/delete endpoints
