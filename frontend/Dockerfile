@@ -8,9 +8,14 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm install
 
-# Build the app
+# VITE_API_URL must be set at build time (Vite bakes env vars into bundle)
+# Railway passes this via build args from environment variables
+ARG VITE_API_URL=https://backend-production-507c.up.railway.app
+ENV VITE_API_URL=$VITE_API_URL
+
+# Build the app (VITE_API_URL is now available to Vite)
 COPY . .
-RUN npm run build
+RUN echo "Building with VITE_API_URL=$VITE_API_URL" && npm run build
 
 # Production stage - serve static files
 FROM node:20-alpine
