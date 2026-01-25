@@ -1,8 +1,8 @@
 # ApexAurum-Cloud Handover Document
 
 **Date:** 2026-01-25
-**Build:** v16-settings
-**Status:** Settings/Admin page with Easter Egg Dev Mode IMPLEMENTED
+**Build:** v17-prompts
+**Status:** Settings/Admin page LIVE with native prompts loading from files
 
 ---
 
@@ -10,7 +10,7 @@
 
 | Feature | Status | URL |
 |---------|--------|-----|
-| Backend | v16-settings | https://backend-production-507c.up.railway.app |
+| Backend | v17-prompts | https://backend-production-507c.up.railway.app |
 | Frontend | LIVE | https://frontend-production-5402.up.railway.app |
 | PostgreSQL | Connected | Internal Railway network |
 
@@ -82,14 +82,15 @@ GET  /api/v1/prompts/agent/{id}/prompt - Get any agent's prompt (for chat.py)
 
 ## Native Prompts
 
-Located in `/native_prompts/`:
+Located in `backend/native_prompts/` (moved for Docker build):
 - `∴AZOTH∴.txt` - Full prose prompt (116 lines, philosophical alchemist)
 - `∴ELYSIAN∴.txt` - Full prose prompt
 - `∴VAJRA∴.txt` - Full prose prompt
 - `∴KETHER∴.txt` - Full prose prompt
 - `∴AZOTH∴-PAC.txt` - Hyperdense symbolic format (needs parser)
 
-These are now loaded dynamically by `chat.py` when sending messages.
+These are loaded dynamically by `chat.py` when sending messages.
+Verified working in production via `/api/v1/prompts/native/AZOTH`.
 
 ---
 
