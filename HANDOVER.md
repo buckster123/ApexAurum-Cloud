@@ -28,7 +28,9 @@ curl https://backend-production-507c.up.railway.app/health
 ### Core Features
 | Feature | Status | Notes |
 |---------|--------|-------|
+| BYOK API Keys | ✅ LIVE | Bring Your Own Key (beta) |
 | Chat with streaming | ✅ LIVE | Real-time token-by-token |
+| Sound Effects | ✅ LIVE | Easter egg & UI feedback tones |
 | 5 Native Agents | ✅ LIVE | AZOTH, ELYSIAN, VAJRA, KETHER, CLAUDE |
 | 4 PAC Agents | ✅ LIVE | All alchemical agents have Perfected versions |
 | Custom Agents | ✅ LIVE | Create/edit in Dev Mode |
@@ -198,10 +200,10 @@ Frontend: 6cf1f965-94df-4ea0-96ca-d82959e2d3c5
 
 | # | Feature | Status | Complexity |
 |---|---------|--------|------------|
-| 1 | Sound Effects | 📋 Planned | Low |
+| 1 | Sound Effects | ✅ Done | Low |
 | 2 | Conversation Branching | 📋 Planned | Medium |
-| 3 | API Key Management | 📋 Planned | Low |
-| 4 | Polish & Cleanup | 🔄 In Progress | Low |
+| 3 | API Key Management | ✅ Done | Low |
+| 4 | Polish & Cleanup | ✅ Done | Low |
 | 5 | Mobile QoL | 📋 Planned | Medium |
 | 6 | Agent Memory | 📋 Planned | High |
 
