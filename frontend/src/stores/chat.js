@@ -47,7 +47,7 @@ export const useChatStore = defineStore('chat', () => {
     messages.value = []
   }
 
-  async function sendMessage(content, model = 'claude-sonnet-4-5-20250514') {
+  async function sendMessage(content, model = 'claude-3-haiku-20240307') {
     // Add user message immediately
     messages.value.push({
       id: Date.now().toString(),

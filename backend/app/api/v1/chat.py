@@ -207,8 +207,13 @@ async def list_conversations(
     db: AsyncSession = Depends(get_db)
 ):
     """List user's conversations."""
+    from sqlalchemy import func
+    from sqlalchemy.orm import selectinload
+
+    # Use selectinload to eagerly load messages to avoid async lazy-load issue
     result = await db.execute(
         select(Conversation)
+        .options(selectinload(Conversation.messages))
         .where(Conversation.user_id == user.id)
         .where(Conversation.archived == archived)
         .order_by(Conversation.updated_at.desc())
@@ -218,7 +223,6 @@ async def list_conversations(
     conversations = result.scalars().all()
 
     # Get total count
-    from sqlalchemy import func
     count_result = await db.execute(
         select(func.count(Conversation.id))
         .where(Conversation.user_id == user.id)
@@ -250,8 +254,11 @@ async def get_conversation(
     db: AsyncSession = Depends(get_db)
 ):
     """Get a conversation with all messages."""
+    from sqlalchemy.orm import selectinload
+
     result = await db.execute(
         select(Conversation)
+        .options(selectinload(Conversation.messages))
         .where(Conversation.id == conversation_id)
         .where(Conversation.user_id == user.id)
     )
