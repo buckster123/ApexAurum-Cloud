@@ -7,7 +7,19 @@ const searchResults = ref([])
 const threads = ref([])
 const convergence = ref(null)
 const loading = ref(false)
-const activeTab = ref('search')
+const activeTab = ref('browse')
+const showAddModal = ref(false)
+const allKnowledge = ref([])
+
+// Add knowledge form
+const newKnowledge = ref({
+  content: '',
+  category: 'general',
+  visibility: 'village',
+  agent_id: 'AZOTH',
+  tags: ''
+})
+const adding = ref(false)
 
 const categories = ['all', 'preferences', 'technical', 'project', 'general']
 const selectedCategory = ref('all')
@@ -20,9 +32,56 @@ const agents = ['all', 'AZOTH', 'ELYSIAN', 'VAJRA', 'KETHER', 'CLAUDE']
 const selectedAgent = ref('all')
 
 onMounted(async () => {
+  await fetchAllKnowledge()
   await fetchThreads()
   await checkConvergence()
 })
+
+async function fetchAllKnowledge() {
+  try {
+    const response = await api.get('/api/v1/village/all')
+    allKnowledge.value = response.data?.results || []
+  } catch (e) {
+    console.error('Failed to fetch knowledge:', e)
+    allKnowledge.value = []
+  }
+}
+
+async function addKnowledge() {
+  if (!newKnowledge.value.content.trim()) return
+
+  adding.value = true
+  try {
+    const tags = newKnowledge.value.tags
+      .split(',')
+      .map(t => t.trim())
+      .filter(t => t)
+
+    await api.post('/api/v1/village/knowledge', {
+      content: newKnowledge.value.content,
+      category: newKnowledge.value.category,
+      visibility: newKnowledge.value.visibility,
+      agent_id: newKnowledge.value.agent_id,
+      tags
+    })
+
+    // Reset form and refresh
+    newKnowledge.value = {
+      content: '',
+      category: 'general',
+      visibility: 'village',
+      agent_id: 'AZOTH',
+      tags: ''
+    }
+    showAddModal.value = false
+    await fetchAllKnowledge()
+    await checkConvergence()
+  } catch (e) {
+    console.error('Failed to add knowledge:', e)
+  } finally {
+    adding.value = false
+  }
+}
 
 async function search() {
   if (!searchQuery.value.trim()) return
@@ -102,6 +161,9 @@ function getVisibilityIcon(visibility) {
         <h1 class="text-3xl font-bold">Village Memory</h1>
         <p class="text-gray-400 mt-1">Multi-agent shared knowledge with convergence detection</p>
       </div>
+      <button @click="showAddModal = true" class="btn-primary">
+        + Add Knowledge
+      </button>
     </div>
 
     <!-- Convergence Alert -->
@@ -131,6 +193,13 @@ function getVisibilityIcon(visibility) {
     <!-- Tabs -->
     <div class="flex gap-4 mb-6 border-b border-apex-border">
       <button
+        @click="activeTab = 'browse'"
+        class="pb-3 px-2 transition-colors"
+        :class="activeTab === 'browse' ? 'text-gold border-b-2 border-gold' : 'text-gray-400 hover:text-white'"
+      >
+        📚 Browse
+      </button>
+      <button
         @click="activeTab = 'search'"
         class="pb-3 px-2 transition-colors"
         :class="activeTab === 'search' ? 'text-gold border-b-2 border-gold' : 'text-gray-400 hover:text-white'"
@@ -144,6 +213,53 @@ function getVisibilityIcon(visibility) {
       >
         💬 Threads
       </button>
+    </div>
+
+    <!-- Browse Tab -->
+    <div v-if="activeTab === 'browse'">
+      <div v-if="allKnowledge.length > 0" class="space-y-4">
+        <div
+          v-for="item in allKnowledge"
+          :key="item.id"
+          class="card hover:border-gold/30 transition-colors"
+        >
+          <div class="flex items-start justify-between mb-2">
+            <div class="flex items-center gap-2">
+              <span>{{ getVisibilityIcon(item.visibility) }}</span>
+              <span :class="getAgentColor(item.agent_id)" class="font-medium">
+                {{ item.agent_id || 'Unknown' }}
+              </span>
+              <span v-if="item.category" class="text-xs bg-apex-darker px-2 py-0.5 rounded">
+                {{ item.category }}
+              </span>
+            </div>
+            <div class="text-xs text-gray-500">
+              {{ item.access_count }} accesses
+            </div>
+          </div>
+
+          <p class="text-gray-300">{{ item.content }}</p>
+
+          <div v-if="item.tags?.length" class="flex gap-2 mt-3">
+            <span
+              v-for="tag in item.tags"
+              :key="tag"
+              class="text-xs bg-gold/10 text-gold px-2 py-0.5 rounded"
+            >
+              {{ tag }}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div v-else class="text-center py-12">
+        <div class="text-6xl mb-4">🏘️</div>
+        <h2 class="text-xl font-bold mb-2">The village is empty</h2>
+        <p class="text-gray-400 mb-6">Add knowledge to start building shared memory</p>
+        <button @click="showAddModal = true" class="btn-primary">
+          + Add Knowledge
+        </button>
+      </div>
     </div>
 
     <!-- Search Tab -->
@@ -257,6 +373,80 @@ function getVisibilityIcon(visibility) {
 
       <div v-else class="text-center py-12 text-gray-400">
         No conversation threads yet
+      </div>
+    </div>
+
+    <!-- Add Knowledge Modal -->
+    <div v-if="showAddModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div class="card w-full max-w-lg">
+        <h2 class="text-xl font-bold mb-4">Add to Village Memory</h2>
+
+        <div class="space-y-4">
+          <div>
+            <label class="block text-sm text-gray-400 mb-2">Knowledge Content</label>
+            <textarea
+              v-model="newKnowledge.content"
+              class="input h-32 resize-none"
+              placeholder="What knowledge should the village remember?"
+            ></textarea>
+          </div>
+
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm text-gray-400 mb-2">Source Agent</label>
+              <select v-model="newKnowledge.agent_id" class="input">
+                <option value="AZOTH">∴ Azoth</option>
+                <option value="ELYSIAN">∴ Elysian</option>
+                <option value="VAJRA">∴ Vajra</option>
+                <option value="KETHER">∴ Kether</option>
+                <option value="CLAUDE">Claude</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="block text-sm text-gray-400 mb-2">Visibility</label>
+              <select v-model="newKnowledge.visibility" class="input">
+                <option value="private">🔒 Private</option>
+                <option value="village">🏘️ Village</option>
+                <option value="bridge">🌉 Bridge</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm text-gray-400 mb-2">Category</label>
+              <select v-model="newKnowledge.category" class="input">
+                <option value="general">General</option>
+                <option value="preferences">Preferences</option>
+                <option value="technical">Technical</option>
+                <option value="project">Project</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="block text-sm text-gray-400 mb-2">Tags (comma-separated)</label>
+              <input
+                v-model="newKnowledge.tags"
+                class="input"
+                placeholder="tag1, tag2"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div class="flex justify-end gap-3 mt-6">
+          <button @click="showAddModal = false" class="btn-secondary">
+            Cancel
+          </button>
+          <button
+            @click="addKnowledge"
+            class="btn-primary"
+            :disabled="!newKnowledge.content.trim() || adding"
+          >
+            {{ adding ? 'Adding...' : 'Add Knowledge' }}
+          </button>
+        </div>
       </div>
     </div>
   </div>
