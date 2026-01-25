@@ -239,7 +239,7 @@ async def set_api_key(
         )
 
     # Encrypt and store
-    encrypted_key = encrypt_value(api_key, settings.jwt_secret)
+    encrypted_key = encrypt_value(api_key, settings.secret_key)
     key_hint = mask_api_key(api_key)
 
     # Initialize settings structure if needed
@@ -340,4 +340,4 @@ def get_user_api_key(user: User) -> Optional[str]:
     if not encrypted_key:
         return None
 
-    return decrypt_value(encrypted_key, settings.jwt_secret)
+    return decrypt_value(encrypted_key, settings.secret_key)
