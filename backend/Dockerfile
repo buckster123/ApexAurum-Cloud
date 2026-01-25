@@ -15,7 +15,7 @@ COPY backend/requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Force rebuild - Railway cache invalidation
-ARG BUILD_DATE=2026-01-25-v6
+ARG BUILD_DATE=2026-01-25-v7
 RUN echo "Build: $BUILD_DATE" > /tmp/build-info.txt
 
 # Copy application code from backend directory
