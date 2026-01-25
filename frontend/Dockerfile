@@ -3,12 +3,12 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Install dependencies
-COPY package*.json ./
+# Install dependencies (using frontend/ prefix since Railway builds from repo root)
+COPY frontend/package*.json ./
 RUN npm install
 
 # Build the app
-COPY . .
+COPY frontend/ .
 RUN npm run build
 
 # Production stage - serve static files

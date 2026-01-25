@@ -10,15 +10,18 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies
-COPY requirements.txt .
+# Use backend/ prefix since Railway may build from repo root
+COPY backend/requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Force rebuild - Railway cache invalidation
-ARG BUILD_DATE=2026-01-25-v5
+ARG BUILD_DATE=2026-01-25-v6
 RUN echo "Build: $BUILD_DATE" > /tmp/build-info.txt
 
-# Copy application code
-COPY . .
+# Copy application code from backend directory
+COPY backend/app ./app
+COPY backend/alembic ./alembic
+COPY backend/alembic.ini ./alembic.ini
 
 # Create non-root user
 RUN useradd -m -u 1000 apex && chown -R apex:apex /app
