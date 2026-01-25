@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     app_name: str = "ApexAurum Cloud"
     debug: bool = False
     secret_key: str = "change-me-in-production"
-    allowed_origins: str = "http://localhost:3000"
+    allowed_origins: str = "http://localhost:3000,https://frontend-production-5402.up.railway.app"
 
     # Database (Railway provides postgresql://, we convert to asyncpg)
     database_url: str = "postgresql://apex:apex@localhost:5432/apex"
