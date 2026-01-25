@@ -21,7 +21,13 @@ from app.database import get_db
 from app.models.user import User
 from app.models.conversation import Conversation, Message
 from app.auth.deps import get_current_user, get_current_user_optional
-from app.services.claude import ClaudeService, create_claude_service
+from app.services.claude import (
+    ClaudeService,
+    create_claude_service,
+    AVAILABLE_MODELS,
+    DEFAULT_MODEL,
+    DEFAULT_MAX_TOKENS,
+)
 from app.services.memory import MemoryService
 from app.api.v1.user import get_user_api_key
 
@@ -274,6 +280,46 @@ class BranchesResponse(BaseModel):
     parent: Optional[BranchInfo] = None
     branches: list[BranchInfo]
     branch_count: int
+
+
+class ModelInfo(BaseModel):
+    """Information about an available model."""
+    id: str
+    name: str
+    description: str
+    tier: str
+    max_output_tokens: int
+    context_window: int
+
+
+class ModelsResponse(BaseModel):
+    """Response with available models."""
+    models: list[ModelInfo]
+    default: str
+    default_max_tokens: int
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# MODELS ENDPOINT - Expose available models to frontend
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@router.get("/models", response_model=ModelsResponse)
+async def get_available_models():
+    """
+    Get list of available Claude models.
+
+    Returns model IDs, names, descriptions, and capabilities.
+    Use these model IDs when sending messages.
+    """
+    models = [
+        ModelInfo(id=model_id, **model_info)
+        for model_id, model_info in AVAILABLE_MODELS.items()
+    ]
+    return ModelsResponse(
+        models=models,
+        default=DEFAULT_MODEL,
+        default_max_tokens=DEFAULT_MAX_TOKENS,
+    )
 
 
 # Endpoints

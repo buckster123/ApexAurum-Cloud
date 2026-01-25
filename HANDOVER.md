@@ -1,30 +1,39 @@
 # ApexAurum-Cloud Handover Document
 
 **Date:** 2026-01-26
-**Build:** v23-multiverse
-**Status:** PRODUCTION READY - All 6 MASTERPLAN Features Complete!
+**Build:** v24-unleashed
+**Status:** PRODUCTION READY - All 6 MASTERPLAN Features Complete + Model Selection!
 
-## Next Session: Unleash the Stones
+## Current Session: Unleash the Stones ✅ COMPLETE
 
 **Goal:** Enable full-power models and remove token anxiety for better agent performance.
 
-### Tasks
-1. **Enable Claude 4.5 Models** - Add Opus 4.5 and Sonnet 4 as model options
-2. **Max Out Limits** - User has Tier 3 Anthropic account, remove conservative limits
-3. **Increase Context Freedom** - Higher max_tokens, longer context windows
-4. **Test Heavy Workloads** - Stress test with powerful models
+### What Was Implemented
+1. **Model Registry** - 5 Claude models now available:
+   - Claude Opus 4.5 (`claude-opus-4-5-20251101`) - Most powerful, deep reasoning
+   - Claude Sonnet 4 (`claude-sonnet-4-20250514`) - Excellent balance (DEFAULT)
+   - Claude Sonnet 3.5 v2 (`claude-3-5-sonnet-20241022`) - Fast and capable
+   - Claude Haiku 3.5 (`claude-3-5-haiku-20241022`) - Fastest model
+   - Claude Haiku 3 (`claude-3-haiku-20240307`) - Legacy budget option
 
-### Key Files to Modify
-- `backend/app/services/claude.py` - Model options, max_tokens
-- `frontend/src/views/ChatView.vue` - Model selector if adding UI
-- `frontend/src/stores/chat.js` - Default model
+2. **Increased Limits** - max_tokens increased to 8192 (from 4096)
+
+3. **Model Selector UI** - Dropdown in sidebar with tier icons and descriptions
+
+4. **Persisted Selection** - Model choice saved to localStorage
+
+### Key Changes
+- `backend/app/services/claude.py` - Added AVAILABLE_MODELS registry, DEFAULT_MODEL, DEFAULT_MAX_TOKENS
+- `backend/app/api/v1/chat.py` - Added `/chat/models` endpoint
+- `frontend/src/stores/chat.js` - Added model state, fetchModels(), setSelectedModel()
+- `frontend/src/views/ChatView.vue` - Added model selector dropdown
 
 ### Philosophy
 *"The more context-freedom and the less token-anxiety the natives have, the better they perform"*
 
 ---
 
-## Recent Fixes (This Session)
+## Recent Fixes
 - **API Key Save Bug (FIXED):** Changed `settings.jwt_secret` to `settings.secret_key`
 - **Database Migration (FIXED):** Added inline migrations for branching columns
 
@@ -83,7 +92,17 @@ curl https://backend-production-507c.up.railway.app/health
 
 ## Version History
 
-### v23-multiverse (Current Session)
+### v24-unleashed (Current Session)
+- **Unleash the Stones** - Full-power model selection
+  - Model registry with 5 Claude models (Opus 4.5, Sonnet 4, Sonnet 3.5, Haiku 3.5, Haiku 3)
+  - Default changed from Haiku 3 to Sonnet 4
+  - max_tokens increased from 4096 to 8192
+  - New `/chat/models` API endpoint
+  - Frontend model selector dropdown in sidebar
+  - Model selection persisted to localStorage
+  - Tier icons: ⚜️ Opus, ✦ Sonnet, ◇ Haiku
+
+### v23-multiverse
 - **Phase 2: Conversation Branching (The Multiverse)** - Fork any conversation
   - New Conversation columns: parent_id, branch_point_message_id, branch_label
   - Self-referential relationships for parent/branches

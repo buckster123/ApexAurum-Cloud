@@ -10,6 +10,13 @@ export const useChatStore = defineStore('chat', () => {
   const isStreaming = ref(false)
   const streamingContent = ref('')
 
+  // ═══════════════════════════════════════════════════════════════════════════════
+  // MODEL SELECTION - Unleash the Stones
+  // ═══════════════════════════════════════════════════════════════════════════════
+  const availableModels = ref([])
+  const defaultModel = ref('claude-sonnet-4-20250514')
+  const selectedModel = ref(localStorage.getItem('apexaurum_selected_model') || 'claude-sonnet-4-20250514')
+
   // Getters
   const sortedConversations = computed(() => {
     const convs = conversations.value || []
@@ -18,6 +25,33 @@ export const useChatStore = defineStore('chat', () => {
       new Date(b.updated_at) - new Date(a.updated_at)
     )
   })
+
+  // ═══════════════════════════════════════════════════════════════════════════════
+  // MODEL ACTIONS
+  // ═══════════════════════════════════════════════════════════════════════════════
+
+  async function fetchModels() {
+    try {
+      const response = await api.get('/api/v1/chat/models')
+      availableModels.value = response.data.models || []
+      defaultModel.value = response.data.default || 'claude-sonnet-4-20250514'
+
+      // If selected model is not in available models, reset to default
+      const modelIds = availableModels.value.map(m => m.id)
+      if (!modelIds.includes(selectedModel.value)) {
+        selectedModel.value = defaultModel.value
+        localStorage.setItem('apexaurum_selected_model', defaultModel.value)
+      }
+    } catch (e) {
+      console.error('Failed to fetch models:', e)
+      // Keep defaults
+    }
+  }
+
+  function setSelectedModel(modelId) {
+    selectedModel.value = modelId
+    localStorage.setItem('apexaurum_selected_model', modelId)
+  }
 
   // Actions
   async function fetchConversations() {
@@ -47,7 +81,9 @@ export const useChatStore = defineStore('chat', () => {
     messages.value = []
   }
 
-  async function sendMessage(content, agent = 'CLAUDE', model = 'claude-3-haiku-20240307', usePac = false) {
+  async function sendMessage(content, agent = 'CLAUDE', model = null, usePac = false) {
+    // Use selected model if not specified
+    const useModel = model || selectedModel.value || defaultModel.value
     // Add user message immediately
     messages.value.push({
       id: Date.now().toString(),
@@ -82,7 +118,7 @@ export const useChatStore = defineStore('chat', () => {
         body: JSON.stringify({
           message: content,
           conversation_id: currentConversation.value?.id,
-          model,
+          model: useModel,
           agent,
           stream: true,
           use_pac: usePac
@@ -255,6 +291,13 @@ export const useChatStore = defineStore('chat', () => {
     isStreaming,
     streamingContent,
     sortedConversations,
+    // Model selection (Unleash the Stones)
+    availableModels,
+    defaultModel,
+    selectedModel,
+    fetchModels,
+    setSelectedModel,
+    // Core actions
     fetchConversations,
     loadConversation,
     createConversation,

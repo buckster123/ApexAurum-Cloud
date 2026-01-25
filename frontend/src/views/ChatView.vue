@@ -93,6 +93,17 @@ async function checkApiKeyStatus() {
   }
 }
 
+// Model tier icons/colors
+const modelTierStyles = {
+  opus: { color: '#FFD700', icon: '⚜️', label: 'Opus' },
+  sonnet: { color: '#4FC3F7', icon: '✦', label: 'Sonnet' },
+  haiku: { color: '#E8B4FF', icon: '◇', label: 'Haiku' },
+}
+
+function getModelTierStyle(tier) {
+  return modelTierStyles[tier] || modelTierStyles.haiku
+}
+
 // Select an agent (with sound for PAC agents, haptic for all)
 function selectAgent(agentId) {
   const isPac = agentId.endsWith('-PAC')
@@ -135,6 +146,7 @@ function handleResize() {
 // Load conversation if ID in route
 onMounted(async () => {
   await checkApiKeyStatus()
+  await chat.fetchModels()  // Fetch available models
   await chat.fetchConversations()
   await fetchCustomAgents()
 
@@ -505,6 +517,31 @@ function renderMarkdown(content) {
         </div>
       </div>
 
+      <!-- Model Selector (Unleash the Stones) -->
+      <div class="p-4 border-t border-apex-border" :class="{ 'border-purple-500/30': pacMode }">
+        <label class="block text-xs mb-2" :class="pacMode ? 'text-purple-300/60' : 'text-gray-500'">
+          Model
+        </label>
+        <select
+          :value="chat.selectedModel"
+          @change="chat.setSelectedModel($event.target.value)"
+          class="w-full bg-apex-darker border border-apex-border rounded-lg px-3 py-2 text-sm focus:ring-1 focus:ring-gold focus:border-gold transition-all cursor-pointer"
+          :class="pacMode ? 'border-purple-500/30' : ''"
+        >
+          <option
+            v-for="model in chat.availableModels"
+            :key="model.id"
+            :value="model.id"
+            class="bg-apex-darker"
+          >
+            {{ getModelTierStyle(model.tier).icon }} {{ model.name }}
+          </option>
+        </select>
+        <p class="text-xs text-gray-500 mt-1">
+          {{ chat.availableModels.find(m => m.id === chat.selectedModel)?.description || 'Select a model' }}
+        </p>
+      </div>
+
       <!-- Agent Selector -->
       <div class="p-4 border-t border-apex-border" :class="{ 'border-purple-500/30': pacMode }">
         <label class="block text-xs mb-2" :class="pacMode ? 'text-purple-300/60' : 'text-gray-500'">
@@ -803,11 +840,12 @@ function renderMarkdown(content) {
           </div>
           <p class="text-xs mt-2 text-center" :class="isUsingPacAgent ? 'text-purple-300/60' : 'text-gray-500'">
             <template v-if="isUsingPacAgent">
-              <span class="text-gold">∴ {{ actualAgentId }}-Ω ∴</span> · Perfected Stone Active
+              <span class="text-gold">∴ {{ actualAgentId }}-Ω ∴</span> ·
+              <span class="text-purple-300/80">{{ chat.availableModels.find(m => m.id === chat.selectedModel)?.name || 'Sonnet 4' }}</span>
             </template>
             <template v-else>
-              Agent: <span class="text-gold">{{ selectedAgent }}</span> |
-              Press Enter to send
+              <span class="text-gold">{{ selectedAgent }}</span> ·
+              <span class="text-gray-400">{{ chat.availableModels.find(m => m.id === chat.selectedModel)?.name || 'Sonnet 4' }}</span>
             </template>
           </p>
         </form>

@@ -3,6 +3,14 @@ Claude API Service
 
 Wrapper for Anthropic Claude API with streaming support.
 Supports BYOK (Bring Your Own Key) for beta users.
+
+MODEL REGISTRY - Available Models for Tier 3 Accounts
+=====================================================
+- claude-opus-4-5-20251101     : Opus 4.5 - Most powerful, deep reasoning
+- claude-sonnet-4-20250514     : Sonnet 4 - Excellent balance of speed and capability
+- claude-3-5-sonnet-20241022   : Sonnet 3.5 v2 - Fast and capable
+- claude-3-5-haiku-20241022    : Haiku 3.5 - Fastest, lightweight
+- claude-3-haiku-20240307      : Haiku 3 - Legacy, budget option
 """
 
 import logging
@@ -14,6 +22,55 @@ from app.config import get_settings
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# MODEL REGISTRY - Unleash the Stones
+# ═══════════════════════════════════════════════════════════════════════════════
+
+AVAILABLE_MODELS = {
+    "claude-opus-4-5-20251101": {
+        "name": "Claude Opus 4.5",
+        "description": "Most powerful model - deep reasoning, complex analysis",
+        "tier": "opus",
+        "max_output_tokens": 16384,
+        "context_window": 200000,
+    },
+    "claude-sonnet-4-20250514": {
+        "name": "Claude Sonnet 4",
+        "description": "Excellent balance - fast and highly capable",
+        "tier": "sonnet",
+        "max_output_tokens": 16384,
+        "context_window": 200000,
+    },
+    "claude-3-5-sonnet-20241022": {
+        "name": "Claude Sonnet 3.5 v2",
+        "description": "Fast and capable - great for most tasks",
+        "tier": "sonnet",
+        "max_output_tokens": 8192,
+        "context_window": 200000,
+    },
+    "claude-3-5-haiku-20241022": {
+        "name": "Claude Haiku 3.5",
+        "description": "Fastest model - quick responses, lower cost",
+        "tier": "haiku",
+        "max_output_tokens": 8192,
+        "context_window": 200000,
+    },
+    "claude-3-haiku-20240307": {
+        "name": "Claude Haiku 3",
+        "description": "Legacy budget option - fastest, cheapest",
+        "tier": "haiku",
+        "max_output_tokens": 4096,
+        "context_window": 200000,
+    },
+}
+
+# Default model - Sonnet 4 for excellent balance
+DEFAULT_MODEL = "claude-sonnet-4-20250514"
+
+# Maximum output tokens for Tier 3 accounts
+DEFAULT_MAX_TOKENS = 8192
 
 
 class ClaudeService:
@@ -50,9 +107,9 @@ class ClaudeService:
     async def chat(
         self,
         messages: list[dict],
-        model: str = "claude-3-haiku-20240307",
+        model: str = DEFAULT_MODEL,
         system: Optional[str] = None,
-        max_tokens: int = 4096,
+        max_tokens: int = DEFAULT_MAX_TOKENS,
         tools: Optional[list[dict]] = None,
     ) -> dict:
         """
@@ -92,9 +149,9 @@ class ClaudeService:
     async def chat_stream(
         self,
         messages: list[dict],
-        model: str = "claude-3-haiku-20240307",
+        model: str = DEFAULT_MODEL,
         system: Optional[str] = None,
-        max_tokens: int = 4096,
+        max_tokens: int = DEFAULT_MAX_TOKENS,
         tools: Optional[list[dict]] = None,
     ) -> AsyncGenerator[dict, None]:
         """
@@ -161,7 +218,7 @@ class ClaudeService:
                 "message": f"API error: {str(e)}",
             }
 
-    async def count_tokens(self, text: str, model: str = "claude-3-haiku-20240307") -> int:
+    async def count_tokens(self, text: str, model: str = DEFAULT_MODEL) -> int:
         """Count tokens in text."""
         response = await self.client.messages.count_tokens(
             model=model,
