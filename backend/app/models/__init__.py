@@ -8,6 +8,7 @@ from app.models.agent import Agent
 from app.models.village import VillageKnowledge
 from app.models.memory import Memory
 from app.models.music import MusicTask
+from app.models.agent_memory import AgentMemory
 
 __all__ = [
     "User",
@@ -17,4 +18,5 @@ __all__ = [
     "VillageKnowledge",
     "Memory",
     "MusicTask",
+    "AgentMemory",
 ]

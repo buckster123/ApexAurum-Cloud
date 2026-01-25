@@ -22,6 +22,7 @@ from app.models.user import User
 from app.models.conversation import Conversation, Message
 from app.auth.deps import get_current_user, get_current_user_optional
 from app.services.claude import ClaudeService, create_claude_service
+from app.services.memory import MemoryService
 from app.api.v1.user import get_user_api_key
 
 logger = logging.getLogger(__name__)
@@ -145,6 +146,64 @@ def get_agent_prompt(agent_id: str, user: Optional[User] = None, use_pac: bool =
     # Fallback to hardcoded (no PAC versions for fallback)
     return FALLBACK_PROMPTS.get(agent_id, FALLBACK_PROMPTS["CLAUDE"])
 
+
+async def get_agent_prompt_with_memory(
+    agent_id: str,
+    user: Optional[User] = None,
+    use_pac: bool = False,
+    db: Optional[AsyncSession] = None,
+) -> str:
+    """
+    Get system prompt for an agent WITH memory injection (The Cortex).
+
+    This wraps get_agent_prompt() and appends relevant memories from
+    the AgentMemory table if the user has memory enabled.
+
+    Memory injection adds a "What You Remember About This User" section
+    containing facts, preferences, context, and relationship notes.
+    """
+    # Get base prompt (existing logic)
+    base_prompt = get_agent_prompt(agent_id, user, use_pac=use_pac)
+
+    # If no user or no db session, return base prompt
+    if not user or not db:
+        return base_prompt
+
+    # Check if memory is enabled for this user (default: True)
+    user_settings = user.settings or {}
+    if not user_settings.get('memory_enabled', True):
+        return base_prompt
+
+    # Check if memory is enabled for this specific agent
+    agent_memory_settings = user_settings.get('agent_memory_settings', {})
+    agent_settings = agent_memory_settings.get(agent_id, {})
+    if not agent_settings.get('enabled', True):
+        return base_prompt
+
+    try:
+        # Fetch relevant memories
+        memory_service = MemoryService(db)
+        memories = await memory_service.get_memories_for_agent(
+            user_id=user.id,
+            agent_id=agent_id,
+            limit=10,
+            min_confidence=0.5,
+        )
+
+        if not memories:
+            return base_prompt
+
+        # Format and append memories
+        memory_block = memory_service.format_memories_for_prompt(memories)
+        logger.debug(f"Injecting {len(memories)} memories for agent {agent_id}")
+
+        return f"{base_prompt}\n{memory_block}"
+
+    except Exception as e:
+        logger.warning(f"Failed to load memories for agent {agent_id}: {e}")
+        return base_prompt
+
+
 # Schemas
 class ChatRequest(BaseModel):
     message: str
@@ -257,9 +316,12 @@ async def send_message(
     # Build messages for Claude
     messages = [{"role": "user", "content": request.message}]
 
-    # Get system prompt for selected agent (checks custom, native files, then fallback)
+    # Get system prompt for selected agent WITH memory injection (The Cortex)
     # If use_pac=True, loads the PAC (Perfected Alchemical Codex) version
-    system_prompt = get_agent_prompt(request.agent, user, use_pac=request.use_pac)
+    # Memory injection adds relevant facts/preferences/context about the user
+    system_prompt = await get_agent_prompt_with_memory(
+        request.agent, user, use_pac=request.use_pac, db=db
+    )
 
     if request.stream:
         async def stream_response():

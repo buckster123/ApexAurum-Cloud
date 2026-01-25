@@ -1,8 +1,8 @@
 # ApexAurum-Cloud Handover Document
 
 **Date:** 2026-01-25
-**Build:** v21-mobile-qol
-**Status:** PRODUCTION READY - Mobile QoL Deployed
+**Build:** v22-cortex
+**Status:** PRODUCTION READY - Agent Memory (The Cortex) Deployed
 
 ---
 
@@ -59,7 +59,19 @@ curl https://backend-production-507c.up.railway.app/health
 
 ## Version History
 
-### v21-mobile-qol (Current Session)
+### v22-cortex (Current Session)
+- **Phase 6: Agent Memory (The Cortex)** - Persistent memory across conversations
+  - New AgentMemory database model with confidence scoring
+  - Memory types: fact, preference, context, relationship
+  - Memory service for CRUD, extraction, and prompt injection
+  - Full API: /api/v1/memory/* for CRUD, export, amnesia
+  - Claude-powered memory extraction from conversations
+  - Memory injection into agent system prompts
+  - Settings Memory tab with per-agent viewer
+  - Privacy controls: export, per-agent clear, full amnesia
+  - Configurable extraction modes (manual, prompt, auto)
+
+### v21-mobile-qol
 - **Phase 5: Mobile QoL** - Touch-friendly mobile experience
   - Swipe gestures (edge swipe to open sidebar, swipe left to close)
   - Haptic feedback (vibration patterns for all interactions)
@@ -221,7 +233,7 @@ Frontend: 6cf1f965-94df-4ea0-96ca-d82959e2d3c5
 | 3 | API Key Management | ✅ Done | Low |
 | 4 | Polish & Cleanup | ✅ Done | Low |
 | 5 | Mobile QoL | ✅ Done | Medium |
-| 6 | Agent Memory | 📋 Planned | High |
+| 6 | Agent Memory | ✅ Done | High |
 
 ---
 

@@ -13,7 +13,7 @@ const { hapticEnabled, setEnabled: setHapticEnabled, haptics, isSupported: hapti
 
 // Active tab for dev mode
 const activeTab = ref('profile')
-const devTabs = ['profile', 'agents', 'import', 'advanced', 'api']
+const devTabs = ['profile', 'agents', 'memory', 'import', 'advanced', 'api']
 
 // Import state
 const importing = ref(false)
@@ -67,6 +67,14 @@ const newApiKey = ref('')
 const savingApiKey = ref(false)
 const apiKeyError = ref('')
 const apiKeySuccess = ref('')
+
+// Memory (The Cortex)
+const memoryStats = ref({ by_agent: {}, total: 0 })
+const agentMemories = ref([])
+const loadingMemory = ref(false)
+const selectedMemoryAgent = ref(null)
+const memoryEnabled = ref(true)
+const memoryExtractionMode = ref('manual')
 
 // Computed: Agents that have PAC versions
 const pacAgents = computed(() => nativeAgents.value.filter(a => a.has_pac))
@@ -382,6 +390,104 @@ async function handleMemoryImport(event) {
     importing.value = false
     event.target.value = '' // Reset file input
   }
+}
+
+// Memory (The Cortex) functions
+async function fetchMemoryStats() {
+  loadingMemory.value = true
+  try {
+    const response = await api.get('/api/v1/memory/stats')
+    memoryStats.value = response.data
+  } catch (e) {
+    console.error('Failed to fetch memory stats:', e)
+  } finally {
+    loadingMemory.value = false
+  }
+}
+
+async function fetchAgentMemories(agentId) {
+  loadingMemory.value = true
+  try {
+    const response = await api.get(`/api/v1/memory/${agentId}`)
+    agentMemories.value = response.data.memories
+    selectedMemoryAgent.value = agentId
+  } catch (e) {
+    console.error('Failed to fetch agent memories:', e)
+    agentMemories.value = []
+  } finally {
+    loadingMemory.value = false
+  }
+}
+
+async function deleteMemory(agentId, memoryId) {
+  if (!confirm('Delete this memory?')) return
+  try {
+    await api.delete(`/api/v1/memory/${agentId}/${memoryId}`)
+    agentMemories.value = agentMemories.value.filter(m => m.id !== memoryId)
+    if (memoryStats.value.by_agent[agentId]) {
+      memoryStats.value.by_agent[agentId]--
+      memoryStats.value.total--
+    }
+  } catch (e) {
+    console.error('Failed to delete memory:', e)
+  }
+}
+
+async function clearAgentMemories(agentId) {
+  if (!confirm(`Clear ALL memories for ${agentId}? This cannot be undone.`)) return
+  try {
+    await api.delete(`/api/v1/memory/${agentId}`)
+    agentMemories.value = []
+    delete memoryStats.value.by_agent[agentId]
+    selectedMemoryAgent.value = null
+    await fetchMemoryStats()
+  } catch (e) {
+    console.error('Failed to clear agent memories:', e)
+  }
+}
+
+async function exportAllMemories() {
+  try {
+    const response = await api.get('/api/v1/memory/export/all', { responseType: 'blob' })
+    const url = window.URL.createObjectURL(new Blob([response.data]))
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', `apexaurum-memories-${new Date().toISOString().split('T')[0]}.json`)
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    window.URL.revokeObjectURL(url)
+  } catch (e) {
+    console.error('Failed to export memories:', e)
+  }
+}
+
+async function clearAllMemories() {
+  if (!confirm('Clear ALL memories for ALL agents? This cannot be undone.')) return
+  if (!confirm('Are you REALLY sure? This is permanent amnesia.')) return
+
+  try {
+    await api.delete('/api/v1/memory/?confirm=true')
+    memoryStats.value = { by_agent: {}, total: 0 }
+    agentMemories.value = []
+    selectedMemoryAgent.value = null
+  } catch (e) {
+    console.error('Failed to clear all memories:', e)
+  }
+}
+
+async function toggleMemoryEnabled() {
+  memoryEnabled.value = !memoryEnabled.value
+  preferences.value.memory_enabled = memoryEnabled.value
+  await savePreferences()
+}
+
+function getAgentSymbol(agentId) {
+  if (agentId.includes('AZOTH')) return '∴'
+  if (agentId.includes('ELYSIAN')) return '☽'
+  if (agentId.includes('VAJRA')) return '⚡'
+  if (agentId.includes('KETHER')) return '☀'
+  return '🤖'
 }
 </script>
 
@@ -817,6 +923,161 @@ async function handleMemoryImport(event) {
             "The Stone that is no stone, the medicine that heals all things"
           </p>
         </div>
+      </div>
+    </template>
+
+    <!-- MEMORY TAB (Dev Mode only) - The Cortex -->
+    <template v-if="devMode && activeTab === 'memory'">
+      <div class="card mb-6">
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <h2 class="text-xl font-bold">Agent Memory</h2>
+            <p class="text-sm text-gray-400">
+              The Cortex: What each agent remembers about you
+            </p>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="text-sm text-gray-400">Total:</span>
+            <span class="text-gold font-bold">{{ memoryStats.total }} memories</span>
+          </div>
+        </div>
+
+        <!-- Global Memory Toggle -->
+        <div class="flex items-center justify-between p-4 bg-apex-darker rounded-lg mb-6">
+          <div>
+            <div class="font-medium">Enable Agent Memory</div>
+            <div class="text-sm text-gray-400">
+              Allow agents to remember facts and preferences about you
+            </div>
+          </div>
+          <button
+            @click="toggleMemoryEnabled"
+            class="relative w-14 h-7 rounded-full transition-colors"
+            :class="memoryEnabled ? 'bg-gold' : 'bg-apex-border'"
+          >
+            <span
+              class="absolute top-1 left-1 w-5 h-5 rounded-full bg-white transition-transform"
+              :class="memoryEnabled ? 'translate-x-7' : ''"
+            ></span>
+          </button>
+        </div>
+
+        <!-- Load memories button -->
+        <div v-if="Object.keys(memoryStats.by_agent).length === 0 && !loadingMemory" class="text-center py-4 mb-4">
+          <button @click="fetchMemoryStats" class="btn-primary">
+            Load Memory Stats
+          </button>
+        </div>
+
+        <!-- Agents with Memories -->
+        <div v-if="loadingMemory" class="text-center py-8 text-gray-400">
+          Loading memories...
+        </div>
+
+        <div v-else-if="Object.keys(memoryStats.by_agent).length === 0 && memoryStats.total === 0" class="text-center py-12 text-gray-400">
+          <div class="text-4xl mb-4">🧠</div>
+          <p>No memories yet. Start chatting to build the Cortex!</p>
+        </div>
+
+        <div v-else class="space-y-3">
+          <div
+            v-for="(count, agentId) in memoryStats.by_agent"
+            :key="agentId"
+            class="p-4 bg-apex-darker rounded-lg"
+            :class="{ 'ring-1 ring-gold/50': selectedMemoryAgent === agentId }"
+          >
+            <div class="flex items-center justify-between mb-2">
+              <div class="flex items-center gap-3">
+                <div class="text-2xl">{{ getAgentSymbol(agentId) }}</div>
+                <div>
+                  <div class="font-medium">{{ agentId }}</div>
+                  <div class="text-sm text-gray-500">{{ count }} memories</div>
+                </div>
+              </div>
+              <div class="flex gap-2">
+                <button
+                  @click="fetchAgentMemories(agentId)"
+                  class="btn-secondary text-xs px-3 py-1"
+                >
+                  {{ selectedMemoryAgent === agentId ? 'Refresh' : 'View' }}
+                </button>
+                <button
+                  @click="clearAgentMemories(agentId)"
+                  class="text-red-400 hover:text-red-300 text-xs px-3 py-1"
+                >
+                  Clear
+                </button>
+              </div>
+            </div>
+
+            <!-- Expanded Memory List -->
+            <div v-if="selectedMemoryAgent === agentId && agentMemories.length > 0" class="mt-4 pt-4 border-t border-apex-border">
+              <div class="space-y-2">
+                <div
+                  v-for="memory in agentMemories"
+                  :key="memory.id"
+                  class="flex items-start justify-between p-3 bg-apex-dark rounded-lg text-sm"
+                >
+                  <div class="flex-1">
+                    <div class="flex items-center gap-2 mb-1">
+                      <span class="text-xs px-2 py-0.5 rounded-full"
+                        :class="{
+                          'bg-blue-500/20 text-blue-400': memory.memory_type === 'fact',
+                          'bg-purple-500/20 text-purple-400': memory.memory_type === 'preference',
+                          'bg-green-500/20 text-green-400': memory.memory_type === 'context',
+                          'bg-yellow-500/20 text-yellow-400': memory.memory_type === 'relationship',
+                        }"
+                      >
+                        {{ memory.memory_type }}
+                      </span>
+                      <span class="text-gray-500 font-mono">{{ memory.key }}</span>
+                    </div>
+                    <div class="text-gray-300">{{ memory.value }}</div>
+                    <div class="text-xs text-gray-500 mt-1">
+                      Confidence: {{ (memory.confidence * 100).toFixed(0) }}%
+                      · Used {{ memory.access_count }} times
+                    </div>
+                  </div>
+                  <button
+                    @click="deleteMemory(agentId, memory.id)"
+                    class="text-gray-500 hover:text-red-400 ml-2 text-lg"
+                  >
+                    &times;
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div v-else-if="selectedMemoryAgent === agentId && agentMemories.length === 0" class="mt-4 pt-4 border-t border-apex-border text-center text-gray-500 text-sm py-4">
+              No memories stored for this agent yet.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Privacy Controls -->
+      <div class="card">
+        <h3 class="text-lg font-bold mb-4">Privacy Controls</h3>
+
+        <div class="space-y-4">
+          <button
+            @click="exportAllMemories"
+            class="btn-secondary w-full"
+          >
+            Export All Memories (JSON)
+          </button>
+
+          <button
+            @click="clearAllMemories"
+            class="btn w-full bg-red-500/20 text-red-400 border border-red-500/50 hover:bg-red-500/30"
+          >
+            Clear All Memories (Full Amnesia)
+          </button>
+        </div>
+
+        <p class="text-xs text-gray-500 mt-4">
+          Your memories are stored securely and never shared. You can export or delete them at any time.
+        </p>
       </div>
     </template>
 
