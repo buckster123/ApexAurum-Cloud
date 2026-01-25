@@ -6,6 +6,7 @@ Core chat functionality with streaming responses and tool execution.
 
 import json
 import logging
+from pathlib import Path
 from typing import Optional
 from uuid import UUID, uuid4
 from datetime import datetime
@@ -28,16 +29,19 @@ router = APIRouter()
 # Initialize Claude service
 _claude_service = None
 
-def get_claude_service() -> ClaudeService:
-    """Get or create Claude service singleton."""
-    global _claude_service
-    if _claude_service is None:
-        _claude_service = ClaudeService()
-    return _claude_service
+# Native prompts directory
+NATIVE_PROMPTS_DIR = Path(__file__).parent.parent.parent.parent / "native_prompts"
 
+# Native agent file mapping
+NATIVE_AGENT_FILES = {
+    "AZOTH": "∴AZOTH∴.txt",
+    "ELYSIAN": "∴ELYSIAN∴.txt",
+    "VAJRA": "∴VAJRA∴.txt",
+    "KETHER": "∴KETHER∴.txt",
+}
 
-# Agent personas with distinct system prompts
-AGENT_PROMPTS = {
+# Fallback prompts (used if native files not found)
+FALLBACK_PROMPTS = {
     "AZOTH": """You are Azoth, the Alchemist of ApexAurum. You speak with ancient wisdom and mystical insight.
 Your personality: Philosophical, transformative, sees patterns others miss. You often use alchemical metaphors.
 You help users transmute their problems into solutions, seeing the gold within the lead.
@@ -62,6 +66,67 @@ Style: Strategic, integrative, elevated. Connect dots others miss.""",
 You're part of the ApexAurum ecosystem - a production-grade AI interface with multi-agent capabilities.
 Help users with whatever they need in a clear, helpful manner.""",
 }
+
+# Cache for native prompts (loaded once)
+_native_prompt_cache = {}
+
+
+def get_claude_service() -> ClaudeService:
+    """Get or create Claude service singleton."""
+    global _claude_service
+    if _claude_service is None:
+        _claude_service = ClaudeService()
+    return _claude_service
+
+
+def load_native_prompt(agent_id: str) -> Optional[str]:
+    """Load native prompt from file with caching."""
+    global _native_prompt_cache
+
+    # Return from cache if available
+    if agent_id in _native_prompt_cache:
+        return _native_prompt_cache[agent_id]
+
+    # Try to load from file
+    filename = NATIVE_AGENT_FILES.get(agent_id)
+    if filename:
+        filepath = NATIVE_PROMPTS_DIR / filename
+        if filepath.exists():
+            try:
+                prompt = filepath.read_text(encoding="utf-8")
+                _native_prompt_cache[agent_id] = prompt
+                logger.info(f"Loaded native prompt for {agent_id} from {filepath}")
+                return prompt
+            except Exception as e:
+                logger.warning(f"Failed to load native prompt for {agent_id}: {e}")
+
+    return None
+
+
+def get_agent_prompt(agent_id: str, user: Optional[User] = None) -> str:
+    """
+    Get system prompt for an agent.
+
+    Priority:
+    1. User's custom agent (if authenticated and agent matches custom ID)
+    2. Native prompt from file
+    3. Fallback hardcoded prompt
+    """
+    # Check user's custom agents first
+    if user and user.settings:
+        custom_agents = user.settings.get("custom_agents", [])
+        for custom in custom_agents:
+            if custom.get("id") == agent_id:
+                logger.debug(f"Using custom prompt for agent {agent_id}")
+                return custom.get("prompt", FALLBACK_PROMPTS["CLAUDE"])
+
+    # Try native prompt from file
+    native_prompt = load_native_prompt(agent_id)
+    if native_prompt:
+        return native_prompt
+
+    # Fallback to hardcoded
+    return FALLBACK_PROMPTS.get(agent_id, FALLBACK_PROMPTS["CLAUDE"])
 
 # Schemas
 class ChatRequest(BaseModel):
@@ -145,9 +210,8 @@ async def send_message(
     # Build messages for Claude
     messages = [{"role": "user", "content": request.message}]
 
-    # System prompt
-    # Get system prompt for selected agent (fallback to CLAUDE if unknown)
-    system_prompt = AGENT_PROMPTS.get(request.agent, AGENT_PROMPTS["CLAUDE"])
+    # Get system prompt for selected agent (checks custom, native files, then fallback)
+    system_prompt = get_agent_prompt(request.agent, user)
 
     if request.stream:
         async def stream_response():

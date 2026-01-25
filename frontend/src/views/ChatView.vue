@@ -1,8 +1,9 @@
 <script setup>
-import { ref, onMounted, nextTick, watch } from 'vue'
+import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useChatStore } from '@/stores/chat'
 import { marked } from 'marked'
+import api from '@/services/api'
 
 const route = useRoute()
 const router = useRouter()
@@ -13,19 +14,47 @@ const messagesContainer = ref(null)
 const inputRef = ref(null)
 const showSidebar = ref(true)
 
-// Agent selector
-const agents = [
-  { id: 'AZOTH', name: 'Azoth', color: 'azoth', symbol: '∴' },
-  { id: 'ELYSIAN', name: 'Elysian', color: 'elysian', symbol: '∴' },
-  { id: 'VAJRA', name: 'Vajra', color: 'vajra', symbol: '∴' },
-  { id: 'KETHER', name: 'Kether', color: 'kether', symbol: '∴' },
-  { id: 'CLAUDE', name: 'Claude', color: 'claude', symbol: '' },
+// Native agents
+const nativeAgents = [
+  { id: 'AZOTH', name: 'Azoth', color: '#FFD700', symbol: '∴', isNative: true },
+  { id: 'ELYSIAN', name: 'Elysian', color: '#E8B4FF', symbol: '∴', isNative: true },
+  { id: 'VAJRA', name: 'Vajra', color: '#4FC3F7', symbol: '∴', isNative: true },
+  { id: 'KETHER', name: 'Kether', color: '#FFFFFF', symbol: '∴', isNative: true },
+  { id: 'CLAUDE', name: 'Claude', color: '#CC785C', symbol: 'C', isNative: true },
 ]
+
+// Custom agents (loaded from API)
+const customAgents = ref([])
+
+// Combined agents list
+const allAgents = computed(() => {
+  const custom = customAgents.value.map(a => ({
+    id: a.id,
+    name: a.name,
+    color: a.color,
+    symbol: a.symbol,
+    isNative: false,
+  }))
+  return [...nativeAgents, ...custom]
+})
+
 const selectedAgent = ref('AZOTH')
+
+// Load custom agents
+async function fetchCustomAgents() {
+  try {
+    const response = await api.get('/api/v1/prompts/custom')
+    customAgents.value = response.data?.agents || []
+  } catch (e) {
+    // Ignore errors (user might not be logged in)
+    customAgents.value = []
+  }
+}
 
 // Load conversation if ID in route
 onMounted(async () => {
   await chat.fetchConversations()
+  await fetchCustomAgents()
 
   if (route.params.id) {
     await chat.loadConversation(route.params.id)
@@ -124,19 +153,24 @@ function renderMarkdown(content) {
       <!-- Agent Selector -->
       <div class="p-4 border-t border-apex-border">
         <label class="block text-xs text-gray-500 mb-2">Active Agent</label>
-        <div class="grid grid-cols-5 gap-1">
+        <div class="flex flex-wrap gap-1">
           <button
-            v-for="agent in agents"
+            v-for="agent in allAgents"
             :key="agent.id"
             @click="selectedAgent = agent.id"
-            class="p-2 rounded text-center transition-all text-xs"
-            :class="selectedAgent === agent.id
-              ? `bg-${agent.color}/20 text-${agent.color} ring-1 ring-${agent.color}`
-              : 'hover:bg-white/5 text-gray-400'"
-            :title="agent.name"
+            class="p-2 rounded text-center transition-all text-xs min-w-[2.5rem]"
+            :style="{
+              backgroundColor: selectedAgent === agent.id ? agent.color + '33' : 'transparent',
+              color: selectedAgent === agent.id ? agent.color : '#9ca3af',
+              boxShadow: selectedAgent === agent.id ? `inset 0 0 0 1px ${agent.color}` : 'none',
+            }"
+            :title="agent.name + (agent.isNative ? '' : ' (Custom)')"
           >
-            {{ agent.symbol }}{{ agent.name.charAt(0) }}
+            {{ agent.symbol || '+' }}{{ agent.name.charAt(0) }}
           </button>
+        </div>
+        <div v-if="customAgents.length > 0" class="mt-2 text-xs text-gray-500">
+          + {{ customAgents.length }} custom
         </div>
       </div>
     </aside>
