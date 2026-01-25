@@ -1,14 +1,15 @@
 # ApexAurum Cloud - Frontend Production Dockerfile
+# Note: Railway uses rootDirectory=frontend, so paths are relative to frontend/
 FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Install dependencies (using frontend/ prefix since Railway builds from repo root)
-COPY frontend/package*.json ./
+# Install dependencies (relative to frontend/)
+COPY package*.json ./
 RUN npm install
 
 # Build the app
-COPY frontend/ .
+COPY . .
 RUN npm run build
 
 # Production stage - serve static files
