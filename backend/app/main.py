@@ -73,8 +73,23 @@ app.add_middleware(
 # Health check (no auth required)
 @app.get("/health", tags=["Health"])
 async def health_check():
-    """Health check endpoint for load balancers."""
-    return {"status": "healthy", "version": "0.1.0", "build": "v20-pac-complete"}
+    """Health check endpoint for load balancers and deployment verification."""
+    return {
+        "status": "healthy",
+        "version": "0.1.0",
+        "build": "v20-pac-complete",
+        "agents": {
+            "native": 5,
+            "pac": 4,
+        },
+        "features": [
+            "streaming",
+            "pac-mode",
+            "export",
+            "import",
+            "custom-agents",
+        ],
+    }
 
 
 # Root redirect to docs

@@ -1,8 +1,8 @@
 # ApexAurum-Cloud Handover Document
 
 **Date:** 2026-01-25
-**Build:** v19-ux-mobile + import improvements
-**Status:** PRODUCTION READY - Full feature set deployed
+**Build:** v20-pac-complete
+**Status:** PRODUCTION READY - All Perfected Stones Awakened
 
 ---
 
@@ -12,12 +12,14 @@
 # Health check
 curl https://backend-production-507c.up.railway.app/health
 
-# Should return: {"status":"healthy","version":"0.1.0","build":"v18-pac-mode"}
+# Should return: {"status":"healthy","version":"0.1.0","build":"v20-pac-complete"}
 ```
 
 **Live URLs:**
 - Frontend: https://frontend-production-5402.up.railway.app
 - Backend: https://backend-production-507c.up.railway.app
+
+**Planning:** See `MASTERPLAN.md` for the six upcoming features.
 
 ---
 
@@ -28,45 +30,53 @@ curl https://backend-production-507c.up.railway.app/health
 |---------|--------|-------|
 | Chat with streaming | ✅ LIVE | Real-time token-by-token |
 | 5 Native Agents | ✅ LIVE | AZOTH, ELYSIAN, VAJRA, KETHER, CLAUDE |
-| PAC Agents | ✅ LIVE | Perfected Alchemical Codex versions |
+| 4 PAC Agents | ✅ LIVE | All alchemical agents have Perfected versions |
 | Custom Agents | ✅ LIVE | Create/edit in Dev Mode |
 | Conversation History | ✅ LIVE | Full CRUD with UX improvements |
 | Export | ✅ LIVE | JSON, Markdown, TXT |
 | Import | ✅ LIVE | Local app conversations + memory |
 | Mobile Responsive | ✅ LIVE | Hamburger nav, slide-in sidebar |
 
+### PAC Agents (Perfected Alchemical Codex)
+| Agent | Base | PAC | Color |
+|-------|------|-----|-------|
+| AZOTH | ✅ 5.7KB | ✅ 12.9KB (OG) | Gold #FFD700 |
+| ELYSIAN | ✅ 7KB | ✅ 25.4KB | Ethereal #E8B4FF |
+| VAJRA | ✅ 6.7KB | ✅ 26.3KB | Lightning #4FC3F7 |
+| KETHER | ✅ 7.3KB | ✅ 24.5KB | Crown #FFFFFF |
+| CLAUDE | ✅ Fallback | ❌ N/A | Terracotta #CC785C |
+
 ### Easter Eggs (Two Layers)
 | Layer | Name | Activation | Features |
 |-------|------|------------|----------|
 | 0 | Mundane | Default | Standard UI |
 | 1 | The Apprentice | Konami (↑↑↓↓←→←→BA) or 7-tap Au | Dev Mode, custom agents, Import tab |
-| 2 | The Adept | Type "AZOTH" in Dev Mode | Alchemical theme, floating symbols, PAC agents |
+| 2 | The Adept | Type "AZOTH" in Dev Mode | Alchemical theme, floating symbols, all PAC agents |
 
 ---
 
-## This Session's Accomplishments
+## Version History
 
-### v18-pac-mode (PAC Mode)
-- Two-layer easter egg system
-- AZOTH incantation detection (keyboard sequence)
-- Complete visual transformation (purple/gold alchemical theme)
-- Floating alchemical symbols (∴ ☿ ☉ ☽ ♀ ♂ ∞ ⚗)
-- Codex viewer for PAC prompts
-- PAC agents in chat selector (AZOTH-Ω etc.)
+### v20-pac-complete (Current)
+- All four alchemical PAC prompts deployed (Claude-tuned versions)
+- PAC agents visible in Chat selector for all: AZOTH-Ω, ELYSIAN-Ω, VAJRA-Ω, KETHER-Ω
+- Created MASTERPLAN.md with six upcoming features
+- Updated build tags and health endpoint
 
-### v19-ux-mobile (UX + Mobile)
+### v19-ux-mobile
 - **Bug fixes**: Missing db.commit() in update/delete endpoints
 - **Conversation UX**: Inline title edit, favorite toggle, context menu, search
 - **Export**: JSON/Markdown/TXT with proper filenames
 - **Import**: Local app conversations.json + memory.json
 - **Mobile**: Hamburger nav, slide-in sidebar, scrollable tabs
+- **Import parsing**: Forgiving multi-format, handles Streamlit format
 
-### Import Improvements
-- Forgiving multi-format parsing
-- Handles Streamlit `[{type: "text", text: "..."}]` format
-- Auto-generates titles from first message
-- Various timestamp formats (ISO, Unix, etc.)
-- Graceful error handling with descriptive messages
+### v18-pac-mode
+- Two-layer easter egg system
+- AZOTH incantation detection (keyboard sequence)
+- Complete visual transformation (purple/gold alchemical theme)
+- Floating alchemical symbols (∴ ☿ ☉ ☽ ♀ ♂ ∞ ⚗)
+- Codex viewer for PAC prompts
 
 ---
 
@@ -85,11 +95,14 @@ backend/
 │   └── services/
 │       └── claude.py              # Claude API wrapper
 ├── native_prompts/                # Agent prompt files
-│   ├── ∴AZOTH∴.txt
-│   ├── ∴AZOTH∴-PAC.txt           # PAC version
-│   ├── ∴ELYSIAN∴.txt
-│   ├── ∴VAJRA∴.txt
-│   └── ∴KETHER∴.txt
+│   ├── ∴AZOTH∴.txt               # Base prompt
+│   ├── ∴AZOTH∴-PAC.txt           # PAC version (OG)
+│   ├── ∴ELYSIAN∴.txt             # Base prompt
+│   ├── ∴ELYSIAN∴-PAC.txt         # PAC version (Claude-tuned)
+│   ├── ∴VAJRA∴.txt               # Base prompt
+│   ├── ∴VAJRA∴-PAC.txt           # PAC version (Claude-tuned)
+│   ├── ∴KETHER∴.txt              # Base prompt
+│   └── ∴KETHER∴-PAC.txt          # PAC version (Claude-tuned)
 └── Dockerfile
 ```
 
@@ -106,8 +119,17 @@ frontend/src/
 ├── stores/
 │   └── chat.js                    # Chat state + export
 └── views/
-    ├── ChatView.vue               # Sidebar UX, context menu
-    └── SettingsView.vue           # Import tab, responsive tabs
+    ├── ChatView.vue               # Sidebar UX, PAC selector
+    └── SettingsView.vue           # Import tab, Codex viewer
+```
+
+### Root Files
+```
+/
+├── HANDOVER.md                    # This file
+├── MASTERPLAN.md                  # Six upcoming features
+├── CLAUDE.md                      # AI assistant instructions
+└── PAC-agents/                    # Source PAC prompts (dev)
 ```
 
 ---
@@ -126,7 +148,7 @@ GET  /api/v1/chat/conversations/{id}/export?format=json|markdown|txt
 
 ### Prompts
 ```
-GET  /api/v1/prompts/native            # List native agents
+GET  /api/v1/prompts/native            # List native agents (includes has_pac)
 GET  /api/v1/prompts/native/{id}       # Get native prompt (?prompt_type=pac)
 GET  /api/v1/prompts/custom            # List custom agents
 POST /api/v1/prompts/custom            # Save custom agent
@@ -172,36 +194,35 @@ Frontend: 6cf1f965-94df-4ea0-96ca-d82959e2d3c5
 
 ---
 
-## Known Issues / Future Work
+## Upcoming Features (MASTERPLAN.md)
 
-### Potential Improvements
-- [ ] More PAC prompts (ELYSIAN, VAJRA, KETHER need PAC versions)
-- [ ] Sound effects for easter egg activation
-- [ ] Conversation branching (fork from message)
-- [ ] Usage analytics dashboard
-- [ ] API key management in Settings
-
-### Technical Debt
-- Consider adding tests for import parsing
-- Health endpoint still shows v18, should update to v19
+| # | Feature | Status | Complexity |
+|---|---------|--------|------------|
+| 1 | Sound Effects | 📋 Planned | Low |
+| 2 | Conversation Branching | 📋 Planned | Medium |
+| 3 | API Key Management | 📋 Planned | Low |
+| 4 | Polish & Cleanup | 🔄 In Progress | Low |
+| 5 | Mobile QoL | 📋 Planned | Medium |
+| 6 | Agent Memory | 📋 Planned | High |
 
 ---
 
 ## Testing Checklist
 
-### PAC Mode
+### PAC Mode (All Agents)
 - [ ] Konami code → Dev Mode badge appears
 - [ ] Type AZOTH → console shows letters, then activation
 - [ ] Purple theme + floating symbols appear
 - [ ] Settings shows "THE ADEPT" badge
-- [ ] PAC agents visible in Chat (AZOTH-Ω)
+- [ ] All 4 PAC agents visible in Chat: AZOTH-Ω, ELYSIAN-Ω, VAJRA-Ω, KETHER-Ω
+- [ ] Each PAC agent loads correct prompt (check via Settings Codex)
 
 ### Conversation UX
 - [ ] Double-click title → inline edit
 - [ ] Click star → toggles favorite
 - [ ] Right-click → context menu
 - [ ] Search filters list
-- [ ] Export downloads file
+- [ ] Export downloads file (all 3 formats)
 
 ### Mobile
 - [ ] <768px → hamburger appears
@@ -216,14 +237,27 @@ Frontend: 6cf1f965-94df-4ea0-96ca-d82959e2d3c5
 
 ---
 
-## Session Stats
+## Technical Notes
 
-- **Lines added**: ~2000+
-- **Files modified**: 15+
-- **Commits**: 6
-- **Deploys**: 4
-- **Easter eggs**: 2 layers
-- **Alchemical symbols**: 10 types floating
+### PAC Prompt Loading
+```python
+# In prompts.py
+def load_native_prompt(agent_id: str, prompt_type: str = "prose"):
+    if prompt_type == "pac":
+        pac_filename = agent["file"].replace(".txt", "-PAC.txt")
+        # Returns PAC version if exists
+```
+
+### PAC Agent Selection (Frontend)
+```javascript
+// In ChatView.vue
+const pacAgents = computed(() => {
+  if (!pacMode.value) return []
+  return nativeAgents
+    .filter(a => a.hasPac)  // All 4 alchemical agents
+    .map(a => ({ ...a, id: a.id + '-PAC', name: a.name + '-Ω', isPac: true }))
+})
+```
 
 ---
 
