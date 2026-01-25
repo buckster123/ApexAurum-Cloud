@@ -44,9 +44,35 @@ class Conversation(Base):
     favorite: Mapped[bool] = mapped_column(Boolean, default=False)
     tags: Mapped[list] = mapped_column(ARRAY(String), default=list)
 
+    # Branching (The Multiverse)
+    parent_id: Mapped[Optional[UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("conversations.id", ondelete="SET NULL"),
+        index=True,
+        nullable=True
+    )
+    branch_point_message_id: Mapped[Optional[UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        nullable=True
+    )
+    branch_label: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+
     # Relationships
     user = relationship("User", back_populates="conversations")
     messages = relationship("Message", back_populates="conversation", cascade="all, delete-orphan", order_by="Message.created_at")
+
+    # Self-referential relationships for branching
+    parent = relationship(
+        "Conversation",
+        remote_side="Conversation.id",
+        back_populates="branches",
+        foreign_keys="[Conversation.parent_id]"
+    )
+    branches = relationship(
+        "Conversation",
+        back_populates="parent",
+        foreign_keys="[Conversation.parent_id]"
+    )
 
     def __repr__(self):
         return f"<Conversation {self.id} - {self.title}>"

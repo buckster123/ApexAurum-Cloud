@@ -217,6 +217,37 @@ export const useChatStore = defineStore('chat', () => {
     window.URL.revokeObjectURL(url)
   }
 
+  // ═══════════════════════════════════════════════════════════════════════════════
+  // BRANCHING (THE MULTIVERSE) - Fork conversations at any message point
+  // ═══════════════════════════════════════════════════════════════════════════════
+
+  async function forkConversation(conversationId, messageId, label = null) {
+    try {
+      const response = await api.post(
+        `/api/v1/chat/conversations/${conversationId}/fork`,
+        { message_id: messageId, label }
+      )
+      // Refresh conversations list to show new branch
+      await fetchConversations()
+      return response.data
+    } catch (e) {
+      console.error('Failed to fork conversation:', e)
+      throw e
+    }
+  }
+
+  async function getBranches(conversationId) {
+    try {
+      const response = await api.get(
+        `/api/v1/chat/conversations/${conversationId}/branches`
+      )
+      return response.data
+    } catch (e) {
+      console.error('Failed to get branches:', e)
+      return { parent: null, branches: [], branch_count: 0 }
+    }
+  }
+
   return {
     conversations,
     currentConversation,
@@ -233,5 +264,8 @@ export const useChatStore = defineStore('chat', () => {
     toggleFavorite,
     archiveConversation,
     exportConversation,
+    // Branching (The Multiverse)
+    forkConversation,
+    getBranches,
   }
 })

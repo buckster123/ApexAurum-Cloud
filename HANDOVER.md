@@ -1,13 +1,11 @@
 # ApexAurum-Cloud Handover Document
 
-**Date:** 2026-01-25
-**Build:** v22-cortex
-**Status:** PRODUCTION READY - Agent Memory (The Cortex) Deployed
+**Date:** 2026-01-26
+**Build:** v23-multiverse
+**Status:** PRODUCTION READY - Conversation Branching Deployed
 
-## Known Issue - API Key Save
-**Bug:** "Failed to save API key" error when entering API key in Settings
-**Next Session:** User will have backend logs ready for debugging
-**Likely Cause:** Check backend logs for validation or encryption error
+## Recent Fixes
+- **API Key Save Bug (FIXED):** Changed `settings.jwt_secret` to `settings.secret_key` in encryption calls
 
 ---
 
@@ -64,7 +62,17 @@ curl https://backend-production-507c.up.railway.app/health
 
 ## Version History
 
-### v22-cortex (Current Session)
+### v23-multiverse (Current Session)
+- **Phase 2: Conversation Branching (The Multiverse)** - Fork any conversation
+  - New Conversation columns: parent_id, branch_point_message_id, branch_label
+  - Self-referential relationships for parent/branches
+  - POST /conversations/{id}/fork - Create branch at any message
+  - GET /conversations/{id}/branches - View parent and child branches
+  - Frontend: Fork button on message hover, fork modal, sidebar branch indicators
+  - Branch info bar showing parent link and branch count
+  - Fixed API key save bug (jwt_secret → secret_key)
+
+### v22-cortex
 - **Phase 6: Agent Memory (The Cortex)** - Persistent memory across conversations
   - New AgentMemory database model with confidence scoring
   - Memory types: fact, preference, context, relationship

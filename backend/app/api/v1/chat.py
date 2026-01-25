@@ -230,6 +230,10 @@ class ConversationResponse(BaseModel):
     message_count: int
     favorite: bool
     archived: bool
+    # Branching (The Multiverse)
+    parent_id: Optional[UUID] = None
+    branch_label: Optional[str] = None
+    branch_count: int = 0
 
     class Config:
         from_attributes = True
@@ -238,6 +242,38 @@ class ConversationResponse(BaseModel):
 class ConversationListResponse(BaseModel):
     conversations: list[ConversationResponse]
     total: int
+
+
+# Branching schemas (The Multiverse)
+class ForkRequest(BaseModel):
+    """Request to fork a conversation at a specific message."""
+    message_id: UUID
+    label: Optional[str] = None  # e.g., "What if..." or "Alternative approach"
+
+
+class ForkResponse(BaseModel):
+    """Response after forking a conversation."""
+    id: UUID
+    title: Optional[str]
+    branch_label: Optional[str]
+    message_count: int
+    created_at: str
+
+
+class BranchInfo(BaseModel):
+    """Information about a branch."""
+    id: UUID
+    title: Optional[str]
+    branch_label: Optional[str]
+    created_at: str
+    message_count: int
+
+
+class BranchesResponse(BaseModel):
+    """Response with branch information."""
+    parent: Optional[BranchInfo] = None
+    branches: list[BranchInfo]
+    branch_count: int
 
 
 # Endpoints
@@ -411,10 +447,13 @@ async def list_conversations(
     from sqlalchemy import func
     from sqlalchemy.orm import selectinload
 
-    # Use selectinload to eagerly load messages to avoid async lazy-load issue
+    # Use selectinload to eagerly load messages and branches to avoid async lazy-load issue
     result = await db.execute(
         select(Conversation)
-        .options(selectinload(Conversation.messages))
+        .options(
+            selectinload(Conversation.messages),
+            selectinload(Conversation.branches),
+        )
         .where(Conversation.user_id == user.id)
         .where(Conversation.archived == archived)
         .order_by(Conversation.updated_at.desc())
@@ -441,6 +480,9 @@ async def list_conversations(
                 message_count=len(c.messages),
                 favorite=c.favorite,
                 archived=c.archived,
+                parent_id=c.parent_id,
+                branch_label=c.branch_label,
+                branch_count=len(c.branches) if c.branches else 0,
             )
             for c in conversations
         ],
@@ -638,3 +680,167 @@ async def export_conversation(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid format. Use: json, markdown, txt"
         )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# BRANCHING (THE MULTIVERSE) - Fork conversations at any message point
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@router.post("/conversations/{conversation_id}/fork", response_model=ForkResponse)
+async def fork_conversation(
+    conversation_id: UUID,
+    request: ForkRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Fork a conversation from a specific message point.
+
+    Creates a new conversation that:
+    1. Copies all messages up to and including the specified message
+    2. Sets parent_id to the original conversation
+    3. Records the branch point message
+
+    The fork is fully independent for future messages.
+    """
+    from sqlalchemy.orm import selectinload
+
+    # Verify source conversation exists and belongs to user
+    result = await db.execute(
+        select(Conversation)
+        .options(selectinload(Conversation.messages))
+        .where(Conversation.id == conversation_id)
+        .where(Conversation.user_id == user.id)
+    )
+    source_conv = result.scalar_one_or_none()
+
+    if not source_conv:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Conversation not found"
+        )
+
+    # Find the branch point message
+    branch_message = next(
+        (m for m in source_conv.messages if m.id == request.message_id),
+        None
+    )
+
+    if not branch_message:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Message not found in this conversation"
+        )
+
+    # Create new conversation as a branch
+    branch_title = request.label or f"Branch: {source_conv.title or 'Untitled'}"
+    new_conv = Conversation(
+        id=uuid4(),
+        user_id=user.id,
+        title=branch_title[:500],
+        parent_id=conversation_id,
+        branch_point_message_id=request.message_id,
+        branch_label=request.label[:100] if request.label else None,
+    )
+    db.add(new_conv)
+    await db.flush()  # Get ID for message FK
+
+    # Copy messages up to and including the branch point
+    # Sort by created_at to ensure correct order
+    sorted_messages = sorted(source_conv.messages, key=lambda m: m.created_at)
+    copied_count = 0
+
+    for msg in sorted_messages:
+        # Copy message
+        new_msg = Message(
+            id=uuid4(),
+            conversation_id=new_conv.id,
+            role=msg.role,
+            content=msg.content,
+            tool_calls=msg.tool_calls,
+            tool_results=msg.tool_results,
+            tokens_used=msg.tokens_used,
+            cost_usd=msg.cost_usd,
+            created_at=msg.created_at,  # Preserve original timestamp
+        )
+        db.add(new_msg)
+        copied_count += 1
+
+        # Stop after copying the branch point message
+        if msg.id == request.message_id:
+            break
+
+    await db.commit()
+
+    logger.info(f"Forked conversation {conversation_id} at message {request.message_id}, copied {copied_count} messages")
+
+    return ForkResponse(
+        id=new_conv.id,
+        title=new_conv.title,
+        branch_label=new_conv.branch_label,
+        message_count=copied_count,
+        created_at=new_conv.created_at.isoformat(),
+    )
+
+
+@router.get("/conversations/{conversation_id}/branches", response_model=BranchesResponse)
+async def get_branches(
+    conversation_id: UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get all branches of a conversation and its parent (if any).
+
+    Returns the conversation's parent (if it's a branch) and all its child branches.
+    """
+    from sqlalchemy.orm import selectinload
+
+    # Get the conversation with its branches and parent
+    result = await db.execute(
+        select(Conversation)
+        .options(
+            selectinload(Conversation.messages),
+            selectinload(Conversation.branches).selectinload(Conversation.messages),
+            selectinload(Conversation.parent).selectinload(Conversation.messages),
+        )
+        .where(Conversation.id == conversation_id)
+        .where(Conversation.user_id == user.id)
+    )
+    conversation = result.scalar_one_or_none()
+
+    if not conversation:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Conversation not found"
+        )
+
+    # Format parent info
+    parent_info = None
+    if conversation.parent:
+        parent_info = BranchInfo(
+            id=conversation.parent.id,
+            title=conversation.parent.title,
+            branch_label=conversation.parent.branch_label,
+            created_at=conversation.parent.created_at.isoformat(),
+            message_count=len(conversation.parent.messages),
+        )
+
+    # Format branches info (only branches belonging to this user)
+    branches_info = [
+        BranchInfo(
+            id=b.id,
+            title=b.title,
+            branch_label=b.branch_label,
+            created_at=b.created_at.isoformat(),
+            message_count=len(b.messages),
+        )
+        for b in (conversation.branches or [])
+        if b.user_id == user.id
+    ]
+
+    return BranchesResponse(
+        parent=parent_info,
+        branches=branches_info,
+        branch_count=len(branches_info),
+    )

@@ -201,6 +201,11 @@ watch(() => chat.messages.length, () => {
   })
 })
 
+// Load branch info when conversation changes
+watch(() => chat.currentConversation?.id, () => {
+  loadBranchInfo()
+}, { immediate: true })
+
 async function handleSubmit() {
   const message = inputMessage.value.trim()
   if (!message || chat.isStreaming) return
@@ -301,12 +306,61 @@ async function handleContextAction(action) {
 const showExportModal = ref(false)
 const exportConvId = ref(null)
 
+// Fork modal (The Multiverse)
+const showForkModal = ref(false)
+const forkMessageId = ref(null)
+const forkLabel = ref('')
+const forking = ref(false)
+
+// Branch info for current conversation
+const branchInfo = ref({ parent: null, branches: [], branch_count: 0 })
+
 async function handleExport(format) {
   if (exportConvId.value) {
     await chat.exportConversation(exportConvId.value, format)
   }
   showExportModal.value = false
   exportConvId.value = null
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// BRANCHING (THE MULTIVERSE) - Fork conversations at any message point
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function openForkModal(messageId) {
+  forkMessageId.value = messageId
+  forkLabel.value = ''
+  showForkModal.value = true
+}
+
+async function handleFork() {
+  if (!chat.currentConversation?.id || !forkMessageId.value) return
+
+  forking.value = true
+  try {
+    const result = await chat.forkConversation(
+      chat.currentConversation.id,
+      forkMessageId.value,
+      forkLabel.value || null
+    )
+    showForkModal.value = false
+    // Navigate to the new branch
+    router.push(`/chat/${result.id}`)
+    haptics.success()
+  } catch (e) {
+    console.error('Fork failed:', e)
+    alert('Failed to create branch')
+  } finally {
+    forking.value = false
+  }
+}
+
+async function loadBranchInfo() {
+  if (chat.currentConversation?.id) {
+    branchInfo.value = await chat.getBranches(chat.currentConversation.id)
+  } else {
+    branchInfo.value = { parent: null, branches: [], branch_count: 0 }
+  }
 }
 
 function renderMarkdown(content) {
@@ -383,11 +437,17 @@ function renderMarkdown(content) {
           @click="selectConversation(conv)"
           @contextmenu="showContextMenu($event, conv)"
           class="group px-3 py-2 rounded-lg cursor-pointer transition-colors mb-1"
-          :class="chat.currentConversation?.id === conv.id
-            ? 'bg-gold/20 text-gold'
-            : 'hover:bg-white/5 text-gray-300'"
+          :class="[
+            chat.currentConversation?.id === conv.id
+              ? 'bg-gold/20 text-gold'
+              : 'hover:bg-white/5 text-gray-300',
+            conv.parent_id ? 'ml-4' : ''
+          ]"
         >
           <div class="flex items-center justify-between gap-2">
+            <!-- Branch indicator -->
+            <span v-if="conv.parent_id" class="text-gray-500 text-xs shrink-0" title="Branch">├─</span>
+
             <!-- Inline Title Edit -->
             <template v-if="editingConvId === conv.id">
               <input
@@ -406,9 +466,18 @@ function renderMarkdown(content) {
                 class="truncate text-sm flex-1"
                 title="Double-click to rename"
               >
-                {{ conv.title || 'New Conversation' }}
+                {{ conv.branch_label || conv.title || 'New Conversation' }}
               </span>
             </template>
+
+            <!-- Branch count badge -->
+            <span
+              v-if="conv.branch_count > 0"
+              class="text-xs bg-purple-500/20 text-purple-300 px-1.5 py-0.5 rounded shrink-0"
+              :title="`${conv.branch_count} branch${conv.branch_count > 1 ? 'es' : ''}`"
+            >
+              {{ conv.branch_count }}
+            </span>
 
             <!-- Favorite Star (clickable) -->
             <button
@@ -422,8 +491,9 @@ function renderMarkdown(content) {
               {{ conv.favorite ? '★' : '☆' }}
             </button>
           </div>
-          <div class="text-xs text-gray-500 mt-1">
-            {{ new Date(conv.updated_at).toLocaleDateString() }}
+          <div class="text-xs text-gray-500 mt-1 flex items-center gap-2">
+            <span>{{ new Date(conv.updated_at).toLocaleDateString() }}</span>
+            <span v-if="conv.parent_id" class="text-purple-400">branch</span>
           </div>
         </div>
 
@@ -574,13 +644,48 @@ function renderMarkdown(content) {
             </div>
           </div>
 
+          <!-- Branch Info Bar -->
+          <div
+            v-if="branchInfo.parent || branchInfo.branch_count > 0"
+            class="bg-purple-500/10 border border-purple-500/30 rounded-lg px-4 py-2 mb-4"
+          >
+            <div class="flex items-center gap-4 text-sm">
+              <!-- Parent link -->
+              <button
+                v-if="branchInfo.parent"
+                @click="router.push(`/chat/${branchInfo.parent.id}`)"
+                class="flex items-center gap-1 text-purple-300 hover:text-purple-200"
+              >
+                <span>←</span>
+                <span>Parent: {{ branchInfo.parent.title || 'Untitled' }}</span>
+              </button>
+
+              <!-- Branch count -->
+              <span v-if="branchInfo.branch_count > 0" class="text-gray-400">
+                {{ branchInfo.branch_count }} branch{{ branchInfo.branch_count > 1 ? 'es' : '' }}
+              </span>
+            </div>
+          </div>
+
           <!-- Message list -->
           <div
             v-for="message in chat.messages"
             :key="message.id"
-            class="flex gap-4"
+            class="flex gap-4 group relative"
             :class="message.role === 'user' ? 'justify-end' : ''"
           >
+            <!-- Fork button (appears on hover, left side) -->
+            <button
+              v-if="message.role !== 'system' && chat.currentConversation?.id"
+              @click.stop="openForkModal(message.id)"
+              class="absolute -left-8 top-2 opacity-0 group-hover:opacity-100 transition-opacity p-1 text-gray-500 hover:text-purple-400"
+              title="Fork from here"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M7.707 3.293a1 1 0 010 1.414L5.414 7H11a7 7 0 017 7v2a1 1 0 11-2 0v-2a5 5 0 00-5-5H5.414l2.293 2.293a1 1 0 11-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd" />
+              </svg>
+            </button>
+
             <!-- Avatar -->
             <div
               v-if="message.role !== 'user'"
@@ -881,6 +986,57 @@ function renderMarkdown(content) {
           >
             Cancel
           </button>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- Fork Modal (The Multiverse) -->
+    <Teleport to="body">
+      <div
+        v-if="showForkModal"
+        class="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+        @click.self="showForkModal = false"
+      >
+        <div class="card w-96 max-w-[90vw]">
+          <h3 class="text-lg font-bold mb-2 flex items-center gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-purple-400" viewBox="0 0 20 20" fill="currentColor">
+              <path fill-rule="evenodd" d="M7.707 3.293a1 1 0 010 1.414L5.414 7H11a7 7 0 017 7v2a1 1 0 11-2 0v-2a5 5 0 00-5-5H5.414l2.293 2.293a1 1 0 11-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd" />
+            </svg>
+            Create Branch
+          </h3>
+          <p class="text-gray-400 text-sm mb-4">
+            Fork this conversation from the selected message. The new branch will contain all messages up to this point.
+          </p>
+
+          <div class="mb-4">
+            <label class="block text-sm text-gray-400 mb-1">Branch Label (optional)</label>
+            <input
+              v-model="forkLabel"
+              type="text"
+              placeholder="e.g., What if we tried..."
+              class="input w-full"
+              maxlength="100"
+              @keyup.enter="handleFork"
+            />
+          </div>
+
+          <div class="flex gap-3">
+            <button
+              @click="showForkModal = false"
+              class="btn-ghost flex-1"
+              :disabled="forking"
+            >
+              Cancel
+            </button>
+            <button
+              @click="handleFork"
+              class="btn-primary flex-1 bg-purple-600 hover:bg-purple-500"
+              :disabled="forking"
+            >
+              <span v-if="forking">Creating...</span>
+              <span v-else>Create Branch</span>
+            </button>
+          </div>
         </div>
       </div>
     </Teleport>
