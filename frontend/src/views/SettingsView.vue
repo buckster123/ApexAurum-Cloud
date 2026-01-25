@@ -9,7 +9,11 @@ const { devMode, pacMode, handleTap, tapCount, alchemyLayer, layerName } = useDe
 
 // Active tab for dev mode
 const activeTab = ref('profile')
-const devTabs = ['profile', 'agents', 'advanced', 'api']
+const devTabs = ['profile', 'agents', 'import', 'advanced', 'api']
+
+// Import state
+const importing = ref(false)
+const importResult = ref({ conversations: null, memory: null })
 
 // Profile
 const displayName = ref('')
@@ -247,6 +251,61 @@ async function switchTab(tab) {
     await fetchCustomAgents()
   }
 }
+
+// Import handlers
+async function handleConversationsImport(event) {
+  const file = event.target.files[0]
+  if (!file) return
+
+  importing.value = true
+  importResult.value.conversations = null
+
+  try {
+    const formData = new FormData()
+    formData.append('file', file)
+
+    const response = await api.post('/api/v1/import/conversations', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+
+    importResult.value.conversations = `Imported ${response.data.imported} conversations`
+    if (response.data.skipped > 0) {
+      importResult.value.conversations += ` (${response.data.skipped} skipped)`
+    }
+  } catch (e) {
+    importResult.value.conversations = `Error: ${e.response?.data?.detail || e.message}`
+  } finally {
+    importing.value = false
+    event.target.value = '' // Reset file input
+  }
+}
+
+async function handleMemoryImport(event) {
+  const file = event.target.files[0]
+  if (!file) return
+
+  importing.value = true
+  importResult.value.memory = null
+
+  try {
+    const formData = new FormData()
+    formData.append('file', file)
+
+    const response = await api.post('/api/v1/import/memory', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+
+    importResult.value.memory = `Imported ${response.data.imported} memory entries`
+    if (response.data.skipped > 0) {
+      importResult.value.memory += ` (${response.data.skipped} skipped)`
+    }
+  } catch (e) {
+    importResult.value.memory = `Error: ${e.response?.data?.detail || e.message}`
+  } finally {
+    importing.value = false
+    event.target.value = '' // Reset file input
+  }
+}
 </script>
 
 <template>
@@ -304,13 +363,13 @@ async function switchTab(tab) {
       Settings saved successfully!
     </div>
 
-    <!-- Dev Mode: Tab Navigation -->
-    <div v-if="devMode" class="flex gap-2 mb-6 border-b border-apex-border">
+    <!-- Dev Mode: Tab Navigation (scrollable on mobile) -->
+    <div v-if="devMode" class="flex gap-2 mb-6 border-b border-apex-border overflow-x-auto scrollbar-hide pb-px -mb-px">
       <button
         v-for="tab in devTabs"
         :key="tab"
         @click="switchTab(tab)"
-        class="px-4 py-3 text-sm font-medium transition-colors capitalize"
+        class="px-4 py-3 text-sm font-medium transition-colors capitalize whitespace-nowrap flex-shrink-0"
         :class="activeTab === tab
           ? 'text-gold border-b-2 border-gold'
           : 'text-gray-400 hover:text-white'"
@@ -597,6 +656,96 @@ async function switchTab(tab) {
           <p class="text-xs text-purple-300/40 italic">
             "The Stone that is no stone, the medicine that heals all things"
           </p>
+        </div>
+      </div>
+    </template>
+
+    <!-- IMPORT TAB (Dev Mode only) -->
+    <template v-if="devMode && activeTab === 'import'">
+      <div class="card mb-6">
+        <h2 class="text-xl font-bold mb-4">Import from Local ApexAurum</h2>
+        <p class="text-gray-400 text-sm mb-6">
+          Import your conversations and memory from the local ApexAurum app.
+          Files are typically located in the <code class="bg-apex-darker px-2 py-1 rounded">sandbox/</code> folder.
+        </p>
+
+        <div class="space-y-6">
+          <!-- Conversations Import -->
+          <div class="bg-apex-darker rounded-lg p-4">
+            <div class="flex items-start gap-4">
+              <div class="text-3xl">💬</div>
+              <div class="flex-1">
+                <h3 class="font-medium mb-1">Conversations</h3>
+                <p class="text-xs text-gray-500 mb-3">
+                  Upload your <code>sandbox/conversations.json</code> file to import chat history.
+                </p>
+                <input
+                  type="file"
+                  accept=".json"
+                  @change="handleConversationsImport"
+                  class="hidden"
+                  id="conversations-input"
+                />
+                <label
+                  for="conversations-input"
+                  class="btn-secondary text-sm cursor-pointer inline-block"
+                  :class="{ 'opacity-50 cursor-not-allowed': importing }"
+                >
+                  {{ importing ? 'Importing...' : 'Select File' }}
+                </label>
+                <span
+                  v-if="importResult.conversations"
+                  class="ml-3 text-sm"
+                  :class="importResult.conversations.startsWith('Error') ? 'text-red-400' : 'text-green-400'"
+                >
+                  {{ importResult.conversations }}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Memory Import -->
+          <div class="bg-apex-darker rounded-lg p-4">
+            <div class="flex items-start gap-4">
+              <div class="text-3xl">🧠</div>
+              <div class="flex-1">
+                <h3 class="font-medium mb-1">Memory</h3>
+                <p class="text-xs text-gray-500 mb-3">
+                  Upload your <code>sandbox/memory.json</code> file to import key-value memory.
+                </p>
+                <input
+                  type="file"
+                  accept=".json"
+                  @change="handleMemoryImport"
+                  class="hidden"
+                  id="memory-input"
+                />
+                <label
+                  for="memory-input"
+                  class="btn-secondary text-sm cursor-pointer inline-block"
+                  :class="{ 'opacity-50 cursor-not-allowed': importing }"
+                >
+                  Select File
+                </label>
+                <span
+                  v-if="importResult.memory"
+                  class="ml-3 text-sm"
+                  :class="importResult.memory.startsWith('Error') ? 'text-red-400' : 'text-green-400'"
+                >
+                  {{ importResult.memory }}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="mt-6 p-4 bg-gold/5 border border-gold/20 rounded-lg">
+          <h4 class="font-medium text-gold mb-2">Supported Formats</h4>
+          <ul class="text-xs text-gray-400 space-y-1">
+            <li>• <strong>conversations.json</strong> - Chat history with messages</li>
+            <li>• <strong>memory.json</strong> - Key-value pairs with metadata</li>
+            <li>• Exported JSON files from the cloud app</li>
+          </ul>
         </div>
       </div>
     </template>

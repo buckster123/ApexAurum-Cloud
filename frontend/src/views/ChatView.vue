@@ -16,6 +16,13 @@ const messagesContainer = ref(null)
 const inputRef = ref(null)
 const showSidebar = ref(true)
 
+// Conversation management state
+const searchQuery = ref('')
+const editingConvId = ref(null)
+const editingTitle = ref('')
+const titleInputRef = ref(null)
+const contextMenu = ref({ visible: false, x: 0, y: 0, conv: null })
+
 // Native agents
 const nativeAgents = [
   { id: 'AZOTH', name: 'Azoth', color: '#FFD700', symbol: '∴', isNative: true, hasPac: true },
@@ -124,6 +131,94 @@ function newConversation() {
 
 function selectConversation(conv) {
   router.push(`/chat/${conv.id}`)
+  // Auto-close sidebar on mobile
+  if (window.innerWidth < 768) {
+    showSidebar.value = false
+  }
+}
+
+// Filtered conversations (search)
+const filteredConversations = computed(() => {
+  if (!searchQuery.value.trim()) return chat.sortedConversations
+  const q = searchQuery.value.toLowerCase()
+  return chat.sortedConversations.filter(c =>
+    c.title?.toLowerCase().includes(q)
+  )
+})
+
+// Inline title editing
+function startEdit(conv) {
+  editingConvId.value = conv.id
+  editingTitle.value = conv.title || ''
+  nextTick(() => titleInputRef.value?.focus())
+}
+
+async function saveTitle() {
+  if (editingConvId.value && editingTitle.value.trim()) {
+    await chat.updateConversation(editingConvId.value, { title: editingTitle.value.trim() })
+  }
+  editingConvId.value = null
+}
+
+function cancelEdit() {
+  editingConvId.value = null
+}
+
+// Context menu
+function showContextMenu(event, conv) {
+  event.preventDefault()
+  contextMenu.value = {
+    visible: true,
+    x: event.clientX,
+    y: event.clientY,
+    conv
+  }
+}
+
+function hideContextMenu() {
+  contextMenu.value.visible = false
+}
+
+async function handleContextAction(action) {
+  const conv = contextMenu.value.conv
+  if (!conv) return
+
+  switch (action) {
+    case 'rename':
+      startEdit(conv)
+      break
+    case 'favorite':
+      await chat.toggleFavorite(conv.id)
+      break
+    case 'archive':
+      await chat.archiveConversation(conv.id)
+      break
+    case 'export':
+      showExportModal.value = true
+      exportConvId.value = conv.id
+      break
+    case 'delete':
+      if (confirm('Delete this conversation?')) {
+        await chat.deleteConversation(conv.id)
+        if (chat.currentConversation?.id === conv.id) {
+          router.push('/chat')
+        }
+      }
+      break
+  }
+  hideContextMenu()
+}
+
+// Export modal
+const showExportModal = ref(false)
+const exportConvId = ref(null)
+
+async function handleExport(format) {
+  if (exportConvId.value) {
+    await chat.exportConversation(exportConvId.value, format)
+  }
+  showExportModal.value = false
+  exportConvId.value = null
 }
 
 function renderMarkdown(content) {
@@ -132,14 +227,31 @@ function renderMarkdown(content) {
 </script>
 
 <template>
-  <div class="flex h-[calc(100vh-4rem)]">
+  <div class="flex h-[calc(100vh-4rem)] relative">
+    <!-- Mobile Sidebar Backdrop -->
+    <div
+      v-if="showSidebar"
+      @click="showSidebar = false"
+      class="md:hidden fixed inset-0 bg-black/50 z-20"
+    ></div>
+
     <!-- Sidebar -->
     <aside
-      v-show="showSidebar"
-      class="w-72 bg-apex-dark border-r border-apex-border flex flex-col"
+      class="fixed md:relative inset-y-0 left-0 z-30 w-72 bg-apex-dark border-r border-apex-border flex flex-col transform transition-transform duration-300 md:translate-x-0"
+      :class="showSidebar ? 'translate-x-0' : '-translate-x-full md:translate-x-0'"
+      :style="{ top: '4rem', height: 'calc(100vh - 4rem)' }"
     >
+      <!-- Mobile Close Button -->
+      <button
+        @click="showSidebar = false"
+        class="md:hidden absolute top-4 right-4 p-1 text-gray-400 hover:text-white z-10"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+          <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
+        </svg>
+      </button>
       <!-- New Chat Button -->
-      <div class="p-4">
+      <div class="p-4 pb-2">
         <button
           @click="newConversation"
           class="btn-primary w-full flex items-center justify-center gap-2"
@@ -151,29 +263,72 @@ function renderMarkdown(content) {
         </button>
       </div>
 
+      <!-- Search -->
+      <div class="px-4 pb-2">
+        <input
+          v-model="searchQuery"
+          type="text"
+          placeholder="Search conversations..."
+          class="input text-sm py-2"
+        />
+      </div>
+
       <!-- Conversations List -->
       <div class="flex-1 overflow-y-auto px-2">
         <div
-          v-for="conv in chat.sortedConversations"
+          v-for="conv in filteredConversations"
           :key="conv.id"
           @click="selectConversation(conv)"
+          @contextmenu="showContextMenu($event, conv)"
           class="group px-3 py-2 rounded-lg cursor-pointer transition-colors mb-1"
           :class="chat.currentConversation?.id === conv.id
             ? 'bg-gold/20 text-gold'
             : 'hover:bg-white/5 text-gray-300'"
         >
-          <div class="flex items-center justify-between">
-            <span class="truncate text-sm">
-              {{ conv.title || 'New Conversation' }}
-            </span>
-            <span v-if="conv.favorite" class="text-gold text-xs">★</span>
+          <div class="flex items-center justify-between gap-2">
+            <!-- Inline Title Edit -->
+            <template v-if="editingConvId === conv.id">
+              <input
+                ref="titleInputRef"
+                v-model="editingTitle"
+                @keyup.enter="saveTitle"
+                @keyup.escape="cancelEdit"
+                @blur="saveTitle"
+                @click.stop
+                class="input text-sm py-1 flex-1"
+              />
+            </template>
+            <template v-else>
+              <span
+                @dblclick.stop="startEdit(conv)"
+                class="truncate text-sm flex-1"
+                title="Double-click to rename"
+              >
+                {{ conv.title || 'New Conversation' }}
+              </span>
+            </template>
+
+            <!-- Favorite Star (clickable) -->
+            <button
+              @click.stop="chat.toggleFavorite(conv.id)"
+              class="text-xs transition-colors shrink-0"
+              :class="conv.favorite
+                ? 'text-gold'
+                : 'text-gray-600 hover:text-gold/50 opacity-0 group-hover:opacity-100'"
+              title="Toggle favorite"
+            >
+              {{ conv.favorite ? '★' : '☆' }}
+            </button>
           </div>
           <div class="text-xs text-gray-500 mt-1">
             {{ new Date(conv.updated_at).toLocaleDateString() }}
           </div>
         </div>
 
-        <div v-if="chat.conversations.length === 0" class="text-center text-gray-500 text-sm py-8">
+        <div v-if="filteredConversations.length === 0 && searchQuery" class="text-center text-gray-500 text-sm py-8">
+          No matches found
+        </div>
+        <div v-else-if="chat.conversations.length === 0" class="text-center text-gray-500 text-sm py-8">
           No conversations yet
         </div>
       </div>
@@ -240,8 +395,9 @@ function renderMarkdown(content) {
     >
       <!-- Toggle Sidebar (mobile) -->
       <button
-        @click="showSidebar = !showSidebar"
-        class="md:hidden absolute top-20 left-2 z-10 p-2 bg-apex-card rounded-lg"
+        v-if="!showSidebar"
+        @click="showSidebar = true"
+        class="md:hidden fixed top-20 left-4 z-40 p-2 bg-apex-card border border-apex-border rounded-lg shadow-lg"
       >
         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
           <path fill-rule="evenodd" d="M3 5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 10a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 15a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clip-rule="evenodd" />
@@ -421,6 +577,105 @@ function renderMarkdown(content) {
         </form>
       </div>
     </main>
+
+    <!-- Context Menu -->
+    <Teleport to="body">
+      <div
+        v-if="contextMenu.visible"
+        class="fixed bg-apex-card border border-apex-border rounded-lg shadow-xl py-1 z-50 min-w-[160px]"
+        :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }"
+      >
+        <button
+          @click="handleContextAction('rename')"
+          class="w-full px-4 py-2 text-left text-sm hover:bg-white/5 flex items-center gap-2"
+        >
+          <span class="text-gray-400">✏️</span> Rename
+        </button>
+        <button
+          @click="handleContextAction('favorite')"
+          class="w-full px-4 py-2 text-left text-sm hover:bg-white/5 flex items-center gap-2"
+        >
+          <span class="text-gray-400">{{ contextMenu.conv?.favorite ? '☆' : '★' }}</span>
+          {{ contextMenu.conv?.favorite ? 'Unfavorite' : 'Favorite' }}
+        </button>
+        <button
+          @click="handleContextAction('export')"
+          class="w-full px-4 py-2 text-left text-sm hover:bg-white/5 flex items-center gap-2"
+        >
+          <span class="text-gray-400">📤</span> Export
+        </button>
+        <button
+          @click="handleContextAction('archive')"
+          class="w-full px-4 py-2 text-left text-sm hover:bg-white/5 flex items-center gap-2"
+        >
+          <span class="text-gray-400">📦</span> Archive
+        </button>
+        <hr class="border-apex-border my-1" />
+        <button
+          @click="handleContextAction('delete')"
+          class="w-full px-4 py-2 text-left text-sm hover:bg-red-500/10 text-red-400 flex items-center gap-2"
+        >
+          <span>🗑️</span> Delete
+        </button>
+      </div>
+      <!-- Click outside to close -->
+      <div
+        v-if="contextMenu.visible"
+        @click="hideContextMenu"
+        class="fixed inset-0 z-40"
+      ></div>
+    </Teleport>
+
+    <!-- Export Modal -->
+    <Teleport to="body">
+      <div
+        v-if="showExportModal"
+        class="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+        @click.self="showExportModal = false"
+      >
+        <div class="card w-80">
+          <h3 class="text-lg font-bold mb-4">Export Conversation</h3>
+          <div class="space-y-2">
+            <button
+              @click="handleExport('json')"
+              class="btn-secondary w-full text-left flex items-center gap-3"
+            >
+              <span class="text-lg">📄</span>
+              <div>
+                <div class="font-medium">JSON</div>
+                <div class="text-xs text-gray-500">Full data, re-importable</div>
+              </div>
+            </button>
+            <button
+              @click="handleExport('markdown')"
+              class="btn-secondary w-full text-left flex items-center gap-3"
+            >
+              <span class="text-lg">📝</span>
+              <div>
+                <div class="font-medium">Markdown</div>
+                <div class="text-xs text-gray-500">Readable, shareable</div>
+              </div>
+            </button>
+            <button
+              @click="handleExport('txt')"
+              class="btn-secondary w-full text-left flex items-center gap-3"
+            >
+              <span class="text-lg">📃</span>
+              <div>
+                <div class="font-medium">Plain Text</div>
+                <div class="text-xs text-gray-500">Simple format</div>
+              </div>
+            </button>
+          </div>
+          <button
+            @click="showExportModal = false"
+            class="btn-ghost w-full mt-4"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 

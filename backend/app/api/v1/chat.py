@@ -12,7 +12,7 @@ from uuid import UUID, uuid4
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, Response
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -163,6 +163,14 @@ class ChatRequest(BaseModel):
     agent: str = "CLAUDE"
     stream: bool = True
     use_pac: bool = False  # Load PAC (Perfected Alchemical Codex) version of prompt
+
+
+class ConversationUpdate(BaseModel):
+    """Schema for updating conversation metadata."""
+    title: Optional[str] = None
+    favorite: Optional[bool] = None
+    archived: Optional[bool] = None
+    tags: Optional[list[str]] = None
 
 
 class ConversationResponse(BaseModel):
@@ -434,15 +442,14 @@ async def delete_conversation(
         )
 
     await db.delete(conversation)
+    await db.commit()
     return {"message": "Conversation deleted"}
 
 
 @router.patch("/conversations/{conversation_id}")
 async def update_conversation(
     conversation_id: UUID,
-    title: Optional[str] = None,
-    favorite: Optional[bool] = None,
-    archived: Optional[bool] = None,
+    updates: ConversationUpdate,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
@@ -460,11 +467,102 @@ async def update_conversation(
             detail="Conversation not found"
         )
 
-    if title is not None:
-        conversation.title = title
-    if favorite is not None:
-        conversation.favorite = favorite
-    if archived is not None:
-        conversation.archived = archived
+    if updates.title is not None:
+        conversation.title = updates.title
+    if updates.favorite is not None:
+        conversation.favorite = updates.favorite
+    if updates.archived is not None:
+        conversation.archived = updates.archived
+    if updates.tags is not None:
+        conversation.tags = updates.tags
 
+    await db.commit()
     return {"message": "Conversation updated"}
+
+
+@router.get("/conversations/{conversation_id}/export")
+async def export_conversation(
+    conversation_id: UUID,
+    format: str = "json",
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Export a conversation in various formats (json, markdown, txt)."""
+    from sqlalchemy.orm import selectinload
+    from urllib.parse import quote
+
+    result = await db.execute(
+        select(Conversation)
+        .options(selectinload(Conversation.messages))
+        .where(Conversation.id == conversation_id)
+        .where(Conversation.user_id == user.id)
+    )
+    conversation = result.scalar_one_or_none()
+
+    if not conversation:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Conversation not found"
+        )
+
+    # Generate safe filename
+    safe_title = (conversation.title or "conversation")[:50].replace("/", "-").replace("\\", "-")
+    safe_title = quote(safe_title, safe="")
+
+    if format == "json":
+        data = {
+            "title": conversation.title,
+            "created_at": conversation.created_at.isoformat(),
+            "updated_at": conversation.updated_at.isoformat(),
+            "favorite": conversation.favorite,
+            "tags": conversation.tags,
+            "messages": [
+                {
+                    "role": m.role,
+                    "content": m.content,
+                    "timestamp": m.created_at.isoformat()
+                }
+                for m in sorted(conversation.messages, key=lambda x: x.created_at)
+            ]
+        }
+        return Response(
+            content=json.dumps(data, indent=2, ensure_ascii=False),
+            media_type="application/json",
+            headers={"Content-Disposition": f'attachment; filename="{safe_title}.json"'}
+        )
+
+    elif format == "markdown":
+        lines = [f"# {conversation.title or 'Conversation'}\n"]
+        lines.append(f"*Created: {conversation.created_at.strftime('%Y-%m-%d %H:%M')}*\n")
+        lines.append(f"*Exported: {datetime.utcnow().strftime('%Y-%m-%d %H:%M')} UTC*\n")
+        lines.append("\n---\n")
+
+        for m in sorted(conversation.messages, key=lambda x: x.created_at):
+            role_label = "**You:**" if m.role == "user" else f"**{m.role.title()}:**"
+            lines.append(f"\n{role_label}\n\n{m.content}\n")
+
+        return Response(
+            content="\n".join(lines),
+            media_type="text/markdown; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename="{safe_title}.md"'}
+        )
+
+    elif format == "txt":
+        lines = [f"{conversation.title or 'Conversation'}\n{'=' * 50}\n"]
+        lines.append(f"Created: {conversation.created_at.strftime('%Y-%m-%d %H:%M')}\n\n")
+
+        for m in sorted(conversation.messages, key=lambda x: x.created_at):
+            role_label = "USER" if m.role == "user" else m.role.upper()
+            lines.append(f"[{role_label}]\n{m.content}\n\n")
+
+        return Response(
+            content="\n".join(lines),
+            media_type="text/plain; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename="{safe_title}.txt"'}
+        )
+
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid format. Use: json, markdown, txt"
+        )

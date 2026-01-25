@@ -169,6 +169,54 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
+  async function toggleFavorite(id) {
+    const conv = conversations.value.find(c => c.id === id)
+    if (conv) {
+      await updateConversation(id, { favorite: !conv.favorite })
+    }
+  }
+
+  async function archiveConversation(id) {
+    const conv = conversations.value.find(c => c.id === id)
+    if (conv) {
+      await updateConversation(id, { archived: !conv.archived })
+      // Remove from list if archived (we show non-archived by default)
+      if (!conv.archived) {
+        conversations.value = conversations.value.filter(c => c.id !== id)
+      }
+    }
+  }
+
+  async function exportConversation(id, format = 'json') {
+    const apiUrl = import.meta.env.VITE_API_URL || ''
+    const token = localStorage.getItem('accessToken')
+
+    const response = await fetch(`${apiUrl}/api/v1/chat/conversations/${id}/export?format=${format}`, {
+      headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+    })
+
+    if (!response.ok) throw new Error('Export failed')
+
+    const blob = await response.blob()
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+
+    // Get filename from Content-Disposition header or generate one
+    const contentDisposition = response.headers.get('Content-Disposition')
+    let filename = `conversation.${format === 'markdown' ? 'md' : format}`
+    if (contentDisposition) {
+      const match = contentDisposition.match(/filename="?(.+?)"?$/)
+      if (match) filename = match[1]
+    }
+
+    link.download = filename
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
+  }
+
   return {
     conversations,
     currentConversation,
@@ -182,5 +230,8 @@ export const useChatStore = defineStore('chat', () => {
     sendMessage,
     deleteConversation,
     updateConversation,
+    toggleFavorite,
+    archiveConversation,
+    exportConversation,
   }
 })
