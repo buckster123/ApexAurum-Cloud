@@ -54,6 +54,18 @@ const showPromptViewer = ref(false)
 const showCodexViewer = ref(false)
 const viewingCodex = ref(null)
 
+// API Key Management (BYOK - Beta)
+const apiKeyStatus = ref({
+  configured: false,
+  key_hint: null,
+  added_at: null,
+  subscription_status: 'beta',
+})
+const newApiKey = ref('')
+const savingApiKey = ref(false)
+const apiKeyError = ref('')
+const apiKeySuccess = ref('')
+
 // Computed: Agents that have PAC versions
 const pacAgents = computed(() => nativeAgents.value.filter(a => a.has_pac))
 
@@ -87,6 +99,7 @@ onMounted(async () => {
   displayName.value = auth.user?.display_name || ''
   await fetchPreferences()
   await fetchUsage()
+  await fetchApiKeyStatus()
 
   if (devMode.value) {
     await fetchNativeAgents()
@@ -109,6 +122,66 @@ async function fetchUsage() {
     usage.value = response.data
   } catch (e) {
     console.error('Failed to fetch usage:', e)
+  }
+}
+
+// API Key Management
+async function fetchApiKeyStatus() {
+  try {
+    const response = await api.get('/api/v1/user/api-key/status')
+    apiKeyStatus.value = response.data
+  } catch (e) {
+    console.error('Failed to fetch API key status:', e)
+  }
+}
+
+async function saveApiKey() {
+  if (!newApiKey.value.trim()) {
+    apiKeyError.value = 'Please enter an API key'
+    return
+  }
+
+  savingApiKey.value = true
+  apiKeyError.value = ''
+  apiKeySuccess.value = ''
+
+  try {
+    const response = await api.post('/api/v1/user/api-key', {
+      api_key: newApiKey.value.trim()
+    })
+    apiKeyStatus.value = {
+      configured: true,
+      key_hint: response.data.key_hint,
+      added_at: new Date().toISOString(),
+      subscription_status: 'beta',
+    }
+    newApiKey.value = ''
+    apiKeySuccess.value = response.data.message || 'API key saved successfully!'
+    setTimeout(() => apiKeySuccess.value = '', 5000)
+  } catch (e) {
+    apiKeyError.value = e.response?.data?.detail || 'Failed to save API key'
+  } finally {
+    savingApiKey.value = false
+  }
+}
+
+async function removeApiKey() {
+  if (!confirm('Remove your API key? You won\'t be able to chat until you add a new one.')) {
+    return
+  }
+
+  try {
+    await api.delete('/api/v1/user/api-key')
+    apiKeyStatus.value = {
+      configured: false,
+      key_hint: null,
+      added_at: null,
+      subscription_status: 'beta',
+    }
+    apiKeySuccess.value = 'API key removed'
+    setTimeout(() => apiKeySuccess.value = '', 3000)
+  } catch (e) {
+    apiKeyError.value = 'Failed to remove API key'
   }
 }
 
@@ -458,6 +531,89 @@ async function handleMemoryImport(event) {
           >
             {{ loading ? 'Saving...' : 'Save Preferences' }}
           </button>
+        </div>
+      </div>
+
+      <!-- API Key (BYOK Beta) - Always visible -->
+      <div class="card mb-6" :class="{ 'border-gold/30': apiKeyStatus.configured }">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-xl font-bold">API Key</h2>
+          <span
+            class="text-xs px-2 py-1 rounded"
+            :class="apiKeyStatus.configured
+              ? 'bg-green-500/20 text-green-400'
+              : 'bg-yellow-500/20 text-yellow-400'"
+          >
+            {{ apiKeyStatus.configured ? 'Configured' : 'Required' }}
+          </span>
+        </div>
+
+        <p class="text-sm text-gray-400 mb-4">
+          ApexAurum is in beta - bring your own Anthropic API key to start chatting with the Agents.
+          <a
+            href="https://console.anthropic.com/settings/keys"
+            target="_blank"
+            class="text-gold hover:underline"
+          >
+            Get one here
+          </a>
+        </p>
+
+        <!-- Current Key Status -->
+        <div v-if="apiKeyStatus.configured" class="bg-apex-darker rounded-lg p-4 mb-4">
+          <div class="flex items-center justify-between">
+            <div>
+              <div class="text-sm text-gray-400">Current Key</div>
+              <div class="font-mono text-gold">{{ apiKeyStatus.key_hint }}</div>
+            </div>
+            <button
+              @click="removeApiKey"
+              class="text-sm text-red-400 hover:text-red-300"
+            >
+              Remove
+            </button>
+          </div>
+          <div v-if="apiKeyStatus.added_at" class="text-xs text-gray-500 mt-2">
+            Added {{ new Date(apiKeyStatus.added_at).toLocaleDateString() }}
+          </div>
+        </div>
+
+        <!-- Add/Update Key Form -->
+        <div class="space-y-3">
+          <div>
+            <label class="block text-sm text-gray-400 mb-2">
+              {{ apiKeyStatus.configured ? 'Update Key' : 'Enter API Key' }}
+            </label>
+            <input
+              v-model="newApiKey"
+              type="password"
+              class="input font-mono"
+              placeholder="sk-ant-api03-..."
+              @keyup.enter="saveApiKey"
+            />
+          </div>
+
+          <div v-if="apiKeyError" class="text-sm text-red-400 bg-red-500/10 p-3 rounded-lg">
+            {{ apiKeyError }}
+          </div>
+
+          <div v-if="apiKeySuccess" class="text-sm text-green-400 bg-green-500/10 p-3 rounded-lg">
+            {{ apiKeySuccess }}
+          </div>
+
+          <button
+            @click="saveApiKey"
+            class="btn-primary"
+            :disabled="savingApiKey || !newApiKey.trim()"
+          >
+            {{ savingApiKey ? 'Validating...' : (apiKeyStatus.configured ? 'Update Key' : 'Save Key') }}
+          </button>
+        </div>
+
+        <div class="mt-4 pt-4 border-t border-apex-border">
+          <p class="text-xs text-gray-500">
+            Your key is encrypted and stored securely. We never see or log your full API key.
+          </p>
         </div>
       </div>
 

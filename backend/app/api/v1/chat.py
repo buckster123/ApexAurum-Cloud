@@ -21,13 +21,11 @@ from app.database import get_db
 from app.models.user import User
 from app.models.conversation import Conversation, Message
 from app.auth.deps import get_current_user, get_current_user_optional
-from app.services.claude import ClaudeService
+from app.services.claude import ClaudeService, create_claude_service
+from app.api.v1.user import get_user_api_key
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
-
-# Initialize Claude service
-_claude_service = None
 
 # Native prompts directory (in Docker: /app/native_prompts, local: backend/native_prompts)
 NATIVE_PROMPTS_DIR = Path(__file__).parent.parent.parent.parent / "native_prompts"
@@ -72,14 +70,6 @@ Help users with whatever they need in a clear, helpful manner.""",
 
 # Cache for native prompts (loaded once)
 _native_prompt_cache = {}
-
-
-def get_claude_service() -> ClaudeService:
-    """Get or create Claude service singleton."""
-    global _claude_service
-    if _claude_service is None:
-        _claude_service = ClaudeService()
-    return _claude_service
 
 
 def load_native_prompt(agent_id: str, use_pac: bool = False) -> Optional[str]:
@@ -203,45 +193,66 @@ async def send_message(
 
     If stream=True, returns Server-Sent Events (SSE) stream.
     If stream=False, returns complete response as JSON.
+
+    Beta Mode: Requires user to have their own API key configured.
     """
+    # Beta: Require authentication
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Please log in to chat with the Agents."
+        )
+
+    # Beta: Require user's own API key (BYOK)
+    user_api_key = get_user_api_key(user)
+    if not user_api_key:
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail={
+                "error": "api_key_required",
+                "message": "Please add your Anthropic API key in Settings to start chatting.",
+                "action": "setup_api_key"
+            }
+        )
+
+    # Create Claude service with user's API key
     try:
-        claude = get_claude_service()
+        claude = create_claude_service(user_api_key)
     except ValueError as e:
         logger.error(f"Claude service initialization failed: {e}")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="AI service not configured"
+            detail="Could not initialize AI service. Please check your API key."
         )
 
-    # Get or create conversation (only if user is authenticated)
+    # Get or create conversation
     conversation = None
-    if user:
-        if request.conversation_id:
-            result = await db.execute(
-                select(Conversation)
-                .where(Conversation.id == request.conversation_id)
-                .where(Conversation.user_id == user.id)
-            )
-            conversation = result.scalar_one_or_none()
-
-        if not conversation:
-            # Create new conversation
-            conversation = Conversation(
-                id=uuid4(),
-                user_id=user.id,
-                title=request.message[:50] + "..." if len(request.message) > 50 else request.message,
-            )
-            db.add(conversation)
-            await db.flush()
-
-        # Save user message to database
-        user_msg = Message(
-            id=uuid4(),
-            conversation_id=conversation.id,
-            role="user",
-            content=request.message,
+    if request.conversation_id:
+        result = await db.execute(
+            select(Conversation)
+            .where(Conversation.id == request.conversation_id)
+            .where(Conversation.user_id == user.id)
         )
-        db.add(user_msg)
+        conversation = result.scalar_one_or_none()
+
+    if not conversation:
+        # Create new conversation
+        conversation = Conversation(
+            id=uuid4(),
+            user_id=user.id,
+            title=request.message[:50] + "..." if len(request.message) > 50 else request.message,
+        )
+        db.add(conversation)
+        await db.flush()
+
+    # Save user message to database
+    user_msg = Message(
+        id=uuid4(),
+        conversation_id=conversation.id,
+        role="user",
+        content=request.message,
+    )
+    db.add(user_msg)
 
     # Build messages for Claude
     messages = [{"role": "user", "content": request.message}]
@@ -254,8 +265,7 @@ async def send_message(
         async def stream_response():
             full_response = ""
             try:
-                # conversation may be None if unauthenticated
-                conv_id = str(conversation.id) if conversation else None
+                conv_id = str(conversation.id)
                 yield f"data: {json.dumps({'type': 'start', 'conversation_id': conv_id})}\n\n"
 
                 async for event in claude.chat_stream(

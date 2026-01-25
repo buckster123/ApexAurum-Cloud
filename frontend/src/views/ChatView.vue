@@ -66,6 +66,24 @@ const allAgents = computed(() => {
 
 const selectedAgent = ref('AZOTH')
 
+// API Key status (BYOK Beta)
+const hasApiKey = ref(true) // Assume true until we check
+const checkingApiKey = ref(true)
+
+// Check API key status
+async function checkApiKeyStatus() {
+  checkingApiKey.value = true
+  try {
+    const response = await api.get('/api/v1/user/api-key/status')
+    hasApiKey.value = response.data.configured
+  } catch (e) {
+    // If not logged in or error, assume no key
+    hasApiKey.value = false
+  } finally {
+    checkingApiKey.value = false
+  }
+}
+
 // Select an agent (with sound for PAC agents)
 function selectAgent(agentId) {
   const isPac = agentId.endsWith('-PAC')
@@ -98,6 +116,7 @@ async function fetchCustomAgents() {
 
 // Load conversation if ID in route
 onMounted(async () => {
+  await checkApiKeyStatus()
   await chat.fetchConversations()
   await fetchCustomAgents()
 
@@ -421,8 +440,36 @@ function renderMarkdown(content) {
         class="flex-1 overflow-y-auto px-4 py-6"
       >
         <div class="max-w-3xl mx-auto space-y-6">
-          <!-- Welcome message if no messages -->
-          <div v-if="chat.messages.length === 0" class="text-center py-20">
+          <!-- API Key Required Prompt -->
+          <div v-if="!checkingApiKey && !hasApiKey" class="text-center py-20">
+            <div class="text-6xl mb-6">&#128273;</div>
+            <h2 class="text-2xl font-bold mb-2">API Key Required</h2>
+            <p class="text-gray-400 mb-6 max-w-md mx-auto">
+              ApexAurum is in beta - bring your own Anthropic API key to start chatting with the Agents.
+            </p>
+            <router-link
+              to="/settings"
+              class="btn-primary inline-flex items-center gap-2"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd" />
+              </svg>
+              Set Up API Key
+            </router-link>
+            <p class="text-sm text-gray-500 mt-6">
+              Don't have a key?
+              <a
+                href="https://console.anthropic.com/settings/keys"
+                target="_blank"
+                class="text-gold hover:underline"
+              >
+                Get one from Anthropic
+              </a>
+            </p>
+          </div>
+
+          <!-- Welcome message if no messages (and has API key) -->
+          <div v-else-if="chat.messages.length === 0 && !checkingApiKey" class="text-center py-20">
             <div class="text-6xl font-serif font-bold text-gold mb-4">Au</div>
             <h2 class="text-2xl font-bold mb-2">Welcome to ApexAurum Cloud</h2>
             <p class="text-gray-400 mb-8">140 Tools. Five Minds. One Village.</p>
@@ -550,14 +597,14 @@ function renderMarkdown(content) {
               ref="inputRef"
               v-model="inputMessage"
               type="text"
-              :placeholder="isUsingPacAgent ? 'Speak to the Stone...' : 'Message ApexAurum...'"
+              :placeholder="!hasApiKey ? 'Add your API key in Settings to start...' : (isUsingPacAgent ? 'Speak to the Stone...' : 'Message ApexAurum...')"
               class="input flex-1"
               :class="isUsingPacAgent ? 'pac-input' : ''"
               :style="isUsingPacAgent ? {
                 background: 'rgba(26, 10, 46, 0.8)',
                 borderColor: 'rgba(255, 215, 0, 0.2)',
               } : {}"
-              :disabled="chat.isStreaming"
+              :disabled="chat.isStreaming || !hasApiKey"
             />
             <button
               type="submit"
@@ -569,7 +616,7 @@ function renderMarkdown(content) {
                 color: '#FFD700',
                 boxShadow: '0 0 20px rgba(255, 215, 0, 0.2)'
               } : {}"
-              :disabled="!inputMessage.trim() || chat.isStreaming"
+              :disabled="!inputMessage.trim() || chat.isStreaming || !hasApiKey"
             >
               <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                 <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z" />

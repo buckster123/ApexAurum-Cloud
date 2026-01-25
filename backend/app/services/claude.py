@@ -2,26 +2,50 @@
 Claude API Service
 
 Wrapper for Anthropic Claude API with streaming support.
+Supports BYOK (Bring Your Own Key) for beta users.
 """
 
+import logging
 from typing import AsyncGenerator, Optional
+
 import anthropic
 
 from app.config import get_settings
 
 settings = get_settings()
+logger = logging.getLogger(__name__)
 
 
 class ClaudeService:
-    """Service for interacting with Claude API."""
+    """
+    Service for interacting with Claude API.
 
-    def __init__(self):
-        if not settings.anthropic_api_key:
-            raise ValueError("ANTHROPIC_API_KEY not configured")
+    Supports two modes:
+    - BYOK (Bring Your Own Key): User provides their API key
+    - Platform key: Uses environment variable (for subscribed users, future)
+    """
 
-        self.client = anthropic.AsyncAnthropic(
-            api_key=settings.anthropic_api_key
-        )
+    def __init__(self, api_key: Optional[str] = None):
+        """
+        Initialize the Claude service.
+
+        Args:
+            api_key: Optional user-provided API key (BYOK mode).
+                     If None, uses platform key from environment.
+        """
+        # Determine which key to use
+        self.using_user_key = api_key is not None
+
+        if api_key:
+            # BYOK mode - use user's key
+            self.api_key = api_key
+        elif settings.anthropic_api_key:
+            # Platform key mode
+            self.api_key = settings.anthropic_api_key
+        else:
+            raise ValueError("No API key available")
+
+        self.client = anthropic.AsyncAnthropic(api_key=self.api_key)
 
     async def chat(
         self,
@@ -90,30 +114,52 @@ class ClaudeService:
         if tools:
             kwargs["tools"] = tools
 
-        async with self.client.messages.stream(**kwargs) as stream:
-            async for event in stream:
-                if event.type == "content_block_delta":
-                    if hasattr(event.delta, "text"):
+        try:
+            async with self.client.messages.stream(**kwargs) as stream:
+                async for event in stream:
+                    if event.type == "content_block_delta":
+                        if hasattr(event.delta, "text"):
+                            yield {
+                                "type": "token",
+                                "content": event.delta.text,
+                            }
+                    elif event.type == "message_start":
                         yield {
-                            "type": "token",
-                            "content": event.delta.text,
+                            "type": "start",
+                            "model": event.message.model,
                         }
-                elif event.type == "message_start":
-                    yield {
-                        "type": "start",
-                        "model": event.message.model,
-                    }
-                elif event.type == "message_stop":
-                    yield {
-                        "type": "end",
-                    }
-                elif event.type == "content_block_start":
-                    if event.content_block.type == "tool_use":
+                    elif event.type == "message_stop":
                         yield {
-                            "type": "tool_start",
-                            "tool_name": event.content_block.name,
-                            "tool_id": event.content_block.id,
+                            "type": "end",
                         }
+                    elif event.type == "content_block_start":
+                        if event.content_block.type == "tool_use":
+                            yield {
+                                "type": "tool_start",
+                                "tool_name": event.content_block.name,
+                                "tool_id": event.content_block.id,
+                            }
+        except anthropic.AuthenticationError:
+            logger.warning("API key authentication failed during stream")
+            yield {
+                "type": "error",
+                "error": "api_key_invalid",
+                "message": "Your API key is invalid or has been revoked. Please update it in Settings.",
+            }
+        except anthropic.RateLimitError:
+            logger.warning("Rate limit hit during stream")
+            yield {
+                "type": "error",
+                "error": "rate_limit",
+                "message": "Rate limit reached. Please wait a moment and try again.",
+            }
+        except Exception as e:
+            logger.error(f"Claude stream error: {e}")
+            yield {
+                "type": "error",
+                "error": "api_error",
+                "message": f"API error: {str(e)}",
+            }
 
     async def count_tokens(self, text: str, model: str = "claude-3-haiku-20240307") -> int:
         """Count tokens in text."""
@@ -122,3 +168,16 @@ class ClaudeService:
             messages=[{"role": "user", "content": text}],
         )
         return response.input_tokens
+
+
+def create_claude_service(user_api_key: Optional[str] = None) -> ClaudeService:
+    """
+    Factory function to create a ClaudeService instance.
+
+    Args:
+        user_api_key: User's API key for BYOK mode (decrypted)
+
+    Returns:
+        ClaudeService configured with the appropriate key
+    """
+    return ClaudeService(api_key=user_api_key)
