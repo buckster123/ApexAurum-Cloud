@@ -10,15 +10,13 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies
-# Use backend/ prefix since Railway may build from repo root
 COPY backend/requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Force rebuild - Railway cache invalidation
-ARG BUILD_DATE=2026-01-25-v7
-RUN echo "Build: $BUILD_DATE" > /tmp/build-info.txt
+# Force rebuild v8
+RUN echo "Build: v8-noauth-$(date +%s)" > /tmp/build-info.txt
 
-# Copy application code from backend directory
+# Copy application code
 COPY backend/app ./app
 COPY backend/alembic ./alembic
 COPY backend/alembic.ini ./alembic.ini
@@ -31,7 +29,5 @@ USER apex
 ENV PORT=8080
 EXPOSE $PORT
 
-# Railway handles healthchecks - removing Docker healthcheck to prevent startup race condition
-
-# Start command with explicit logging
-CMD ["sh", "-c", "echo 'Starting uvicorn...' && python -u -m uvicorn app.main:app --host 0.0.0.0 --port $PORT --log-level info"]
+# Start command
+CMD ["sh", "-c", "echo 'Starting uvicorn v8...' && python -u -m uvicorn app.main:app --host 0.0.0.0 --port $PORT --log-level info"]
