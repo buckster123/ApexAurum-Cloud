@@ -15,7 +15,7 @@ COPY requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Force rebuild v17
-RUN echo "Build: v17-prompts-$(date +%s)" > /tmp/build-info.txt
+RUN echo "Build: v18-pac-mode-$(date +%s)" > /tmp/build-info.txt
 
 # Copy application code (relative to backend/)
 COPY app ./app
