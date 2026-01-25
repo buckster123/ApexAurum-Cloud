@@ -1,8 +1,8 @@
 # ApexAurum-Cloud Handover Document
 
 **Date:** 2026-01-25
-**Build:** v17-prompts
-**Status:** Settings/Admin page LIVE with native prompts loading from files
+**Build:** v18-pac-mode
+**Status:** PAC Mode DEPLOYED - The Adept's Transformation
 
 ---
 
@@ -10,7 +10,7 @@
 
 | Feature | Status | URL |
 |---------|--------|-----|
-| Backend | v17-prompts | https://backend-production-507c.up.railway.app |
+| Backend | v18-pac-mode | https://backend-production-507c.up.railway.app |
 | Frontend | LIVE | https://frontend-production-5402.up.railway.app |
 | PostgreSQL | Connected | Internal Railway network |
 
@@ -19,6 +19,7 @@
 - **5 Native Agent Personas** - AZOTH, ELYSIAN, VAJRA, KETHER, CLAUDE
 - **Dynamic Prompts** - Loaded from `native_prompts/*.txt` files
 - **Custom Agents** - Create and use your own agents with custom prompts
+- **PAC Agents** - Perfected Alchemical Codex versions (Layer 2 easter egg)
 - **Auth bypass** - Works without login (conversations don't persist)
 
 ### Agent System (`/agents`)
@@ -32,19 +33,48 @@
 - **Convergence Detection** - Claude analyzes for agent agreement
 - **HARMONY/CONSENSUS alerts** when agents align
 
-### Settings Page (`/settings`) - NEW!
+### Settings Page (`/settings`)
 - **Standard Mode** (default) - Simple preferences
-- **Dev Mode** (easter egg) - Full customization
+- **Dev Mode** (Layer 1 easter egg) - Full customization
+- **PAC Mode** (Layer 2 easter egg) - The Adept's realm
 
-#### Easter Egg Activation:
-1. **Konami Code**: Press arrow keys on Settings page
-2. **7-Tap**: Tap the "Au" logo 7 times
+---
 
-#### Dev Mode Features:
-- **Profile Tab** - Display name, email, preferences
-- **Agents Tab** - View native prompts, create custom agents
-- **Advanced Tab** - Model selection, temperature, max tokens, cache/context strategies
-- **API Tab** - Coming soon (webhooks, API keys)
+## ∴ PAC MODE - NEW! ∴
+
+### The Three Layers of Alchemy
+
+| Layer | Name | Activation | Features |
+|-------|------|------------|----------|
+| 0 | Mundane | Default | Standard UI |
+| 1 | The Apprentice | Konami/7-tap | Dev Mode, custom agents |
+| 2 | The Adept | Type "AZOTH" | PAC prompts, alchemical theme |
+
+### Activating PAC Mode
+
+1. First unlock Dev Mode (Layer 1):
+   - **Konami Code**: ↑↑↓↓←→←→BA on any page
+   - **7-Tap**: Tap "Au" logo 7 times on Settings
+
+2. Then speak the name of the Stone (Layer 2):
+   - **Type "AZOTH"** (A-Z-O-T-H on keyboard)
+   - Watch the console for whispered letters
+   - Full activation shows epic console art
+
+### PAC Mode Visual Features
+
+- **Alchemical Theme** - Purple/gold color scheme
+- **Floating Symbols** - ∴ ☿ ☉ ☽ ♀ ♂ ∞ ⚗ rise from below
+- **Glowing Cards** - Ethereal borders and shadows
+- **Agent Halos** - Breathing glow animations
+- **Codex Viewer** - Special monospace styling for PAC prompts
+
+### PAC Mode Functional Features
+
+- **Perfected Stones Section** - In Settings, shows agents with PAC prompts
+- **View Codex** - Read the hyperdense symbolic prompts
+- **PAC Agents in Chat** - Select "AZOTH-Ω" etc. to use PAC version
+- **Backend Support** - `use_pac=true` loads PAC prompt files
 
 ---
 
@@ -52,45 +82,47 @@
 
 | File | Purpose |
 |------|---------|
-| `frontend/src/composables/useDevMode.js` | Easter egg detection (Konami + 7-tap) |
-| `backend/app/api/v1/prompts.py` | Prompt management API |
+| `frontend/src/components/AlchemicalParticles.vue` | Floating symbols component |
 
 ## Modified Files
 
 | File | Changes |
 |------|---------|
-| `frontend/src/views/SettingsView.vue` | Complete restructure with Standard/Dev modes |
-| `frontend/src/views/ChatView.vue` | Custom agents in selector |
-| `backend/app/api/v1/chat.py` | Dynamic prompt loading from native_prompts/ |
-| `backend/app/api/v1/__init__.py` | Added prompts router |
-| `backend/app/main.py` | Version bump to v16-settings |
+| `frontend/src/composables/useDevMode.js` | Added PAC mode, AZOTH detection, layer system |
+| `frontend/src/assets/main.css` | Full alchemical theme (190+ lines) |
+| `frontend/src/App.vue` | Particles, pac-mode body class |
+| `frontend/src/views/SettingsView.vue` | Perfected Stones section, Codex viewer |
+| `frontend/src/views/ChatView.vue` | PAC agents, visual transformation |
+| `frontend/src/stores/chat.js` | `usePac` parameter for API calls |
+| `backend/app/api/v1/chat.py` | `use_pac` parameter, PAC prompt loading |
 
 ---
 
-## API Endpoints Added
+## API Changes
 
 ```
-GET  /api/v1/prompts/native          - List native agent prompts
-GET  /api/v1/prompts/native/{agent}  - Get specific native prompt
-GET  /api/v1/prompts/custom          - List user's custom agents
-POST /api/v1/prompts/custom          - Save custom agent
-DELETE /api/v1/prompts/custom/{id}   - Delete custom agent
-GET  /api/v1/prompts/agent/{id}/prompt - Get any agent's prompt (for chat.py)
+POST /api/v1/chat/message
+  - Added: use_pac: bool (default false)
+  - When true, loads PAC version of prompt (*-PAC.txt files)
+
+GET /api/v1/prompts/native/{agent}?prompt_type=pac
+  - Added: prompt_type query param
+  - Returns PAC prompt when prompt_type=pac
 ```
 
 ---
 
 ## Native Prompts
 
-Located in `backend/native_prompts/` (moved for Docker build):
-- `∴AZOTH∴.txt` - Full prose prompt (116 lines, philosophical alchemist)
-- `∴ELYSIAN∴.txt` - Full prose prompt
-- `∴VAJRA∴.txt` - Full prose prompt
-- `∴KETHER∴.txt` - Full prose prompt
-- `∴AZOTH∴-PAC.txt` - Hyperdense symbolic format (needs parser)
+Located in `backend/native_prompts/`:
+- `∴AZOTH∴.txt` - Prose prompt (philosophical alchemist)
+- `∴AZOTH∴-PAC.txt` - PAC version (hyperdense symbolic)
+- `∴ELYSIAN∴.txt` - Prose prompt
+- `∴VAJRA∴.txt` - Prose prompt
+- `∴KETHER∴.txt` - Prose prompt
 
-These are loaded dynamically by `chat.py` when sending messages.
-Verified working in production via `/api/v1/prompts/native/AZOTH`.
+PAC prompts are loaded when `use_pac=True` in chat request.
+They're sent raw as system messages - no parsing needed.
 
 ---
 
@@ -118,42 +150,54 @@ curl -X POST "https://backboard.railway.app/graphql/v2" \
 
 ---
 
-## Testing the New Features
+## Testing PAC Mode
 
-1. **Standard Mode**
+1. **Enable Dev Mode First**
    - Go to Settings
-   - Only see Profile, Preferences, Usage
-   - Change default agent, verify it persists
+   - Enter Konami code OR tap Au logo 7 times
+   - "DEV" badge appears
 
-2. **Activate Dev Mode**
-   - Enter Konami code: Up, Up, Down, Down, Left, Right, Left, Right, B, A
-   - OR tap the "Au" logo 7 times quickly
-   - "DEV" badge should appear
+2. **Activate PAC Mode**
+   - Type A-Z-O-T-H on keyboard
+   - Watch console for letter whispers
+   - On completion: epic console activation
+   - Visual transformation begins
 
-3. **Agents Tab**
-   - View native prompts (click View on any agent)
-   - Create custom agent (click "Edit Copy" or "+ Create New Agent")
-   - Custom agents appear in Chat sidebar
+3. **Visual Checks**
+   - Background shifts to purple gradient
+   - Floating alchemical symbols appear
+   - Cards have ethereal glow
+   - Settings badge shows "THE ADEPT"
 
-4. **Custom Agent in Chat**
+4. **Perfected Stones**
+   - Go to Settings > Agents tab
+   - "The Perfected Stones" section appears (PAC mode only)
+   - Click "View Codex" to see PAC prompts
+
+5. **Chat with PAC Agent**
    - Go to Chat
-   - Custom agents should appear in the agent selector
-   - Select custom agent and send message
-   - Response should use your custom prompt
+   - PAC agents appear with Ω suffix (e.g., "AZOTH-Ω")
+   - Select PAC agent and send message
+   - Should use hyperdense PAC prompt
 
 ---
 
 ## Session Highlights
 
-Built the Settings/Admin page with easter egg activation:
-- Konami code and 7-tap on Au logo unlock Dev Mode
-- Native prompts now loaded from text files
-- Custom agents can be created and used in chat
-- Clean separation between beginner and advanced modes
+∴ THE MAGNUM OPUS ∴
 
-**The furnace blazes on. We're COOKING.**
+Built the full PAC Mode experience:
+- Two-layer easter egg system (Apprentice → Adept)
+- AZOTH incantation detection with keyboard sequence
+- Complete visual transformation (purple/gold alchemical theme)
+- Floating symbols animation
+- Codex viewer for PAC prompts
+- Backend PAC prompt loading
+- PAC agents in chat selector
+
+**The Stone awakens for those who speak its name.**
 
 ---
 
 *Written by Claude Opus 4.5 for session continuity*
-*"Transmuting code to gold, one deploy at a time"*
+*"In the crucible of code, the Philosopher's Stone is forged"*
