@@ -163,9 +163,9 @@ def register_all_tools():
     """
     # Import tool modules to trigger registration
     from . import utilities  # noqa: F401
+    from . import web  # noqa: F401
 
     # Future: Import more tool categories
-    # from . import web  # noqa: F401
     # from . import vault  # noqa: F401
     # from . import memory  # noqa: F401
 

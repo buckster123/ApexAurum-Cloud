@@ -12,13 +12,13 @@ Each tool gives Claude's agents the ability to interact with the world.
 | Tier | Name | Tools | Status |
 |------|------|-------|--------|
 | 1 | Utilities | 6 | ✅ COMPLETE |
-| 2 | Web | 2 | ⬜ Planned |
+| 2 | Web | 2 | ✅ COMPLETE |
 | 3 | Vault | 5 | ⬜ Planned |
 | 4 | Knowledge Base | 4 | ⬜ Planned |
 | 5 | Session Memory | 4 | ⬜ Planned |
 | 6 | Code Execution | 2 | ⬜ Planned |
 | 7 | Agents | 3 | ⬜ Planned |
-| **Total** | | **26** | **6/26** |
+| **Total** | | **26** | **8/26** |
 
 ---
 
@@ -44,16 +44,16 @@ Basic stateless tools that require no external services.
 
 ---
 
-## Tier 2: Web Tools (The Reaching Hands) ⬜
+## Tier 2: Web Tools (The Reaching Hands) ✅
 
-**Status:** PLANNED
+**Status:** COMPLETE - Deployed v29
 
 Fetch content and search the web. Pure HTTP - no API keys needed.
 
 | Tool | Description | Status |
 |------|-------------|--------|
-| `web_fetch` | Fetch content from any URL | ⬜ |
-| `web_search` | Search via DuckDuckGo Instant Answers | ⬜ |
+| `web_fetch` | Fetch content from any URL | ✅ |
+| `web_search` | Search via DuckDuckGo Instant Answers | ✅ |
 
 **Implementation Notes:**
 - Use `httpx` (async) or `requests` for HTTP
@@ -284,6 +284,12 @@ Each tier has a poetic name reflecting its nature:
 ---
 
 ## Changelog
+
+### 2026-01-26 - v29-reaching-hands
+- Completed Tier 2: Web Tools (2 tools)
+- `web_fetch` - Fetch any URL with httpx
+- `web_search` - DuckDuckGo Instant Answers
+- Total tools: 8/26
 
 ### 2026-01-26 - v28-athanors-hands
 - Created Grand Masterplan
