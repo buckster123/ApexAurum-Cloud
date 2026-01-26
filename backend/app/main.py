@@ -53,6 +53,12 @@ async def lifespan(app: FastAPI):
     print("=" * 50)
     print("ApexAurum Cloud v39 - Steel Browser")
     print("=" * 50)
+
+    # Import all models before database init to ensure SQLAlchemy
+    # can resolve all relationship string references
+    from app import models  # noqa: F401
+    print("Models loaded")
+
     await init_db()
     print("Database initialized")
 
