@@ -1,8 +1,8 @@
 # ApexAurum-Cloud Handover Document
 
 **Date:** 2026-01-26
-**Build:** v25-vault-polished
-**Status:** PRODUCTION READY + The Vault Complete + Alchemical Polish
+**Build:** v25-vault-final
+**Status:** PRODUCTION READY + The Vault Complete + Final Polish
 
 ---
 
@@ -18,6 +18,27 @@
 - **Empty state:** "The chamber awaits"
 - **Modals:** "Conjure Chamber", "Dissolve into the void"
 - **Volume fix:** `RAILWAY_RUN_UID=0` required for write permissions
+
+### Final Polish (v25-vault-final)
+- **Keyboard shortcuts:**
+  - `N` - New folder (Conjure Chamber)
+  - `U` - Upload files
+  - `/` - Focus search bar
+  - `F` - Toggle favorite (single file selected)
+  - `Delete` - Delete selected items
+  - `Escape` - Close modals, clear selection
+  - `G` / `L` - Grid / List view
+  - `Ctrl+A` - Select all
+- **Sounds wired up:**
+  - Crystallization tone on upload complete
+  - Unsealing tone on folder navigation
+  - Dissolution tone on delete
+- **Selection system:**
+  - Ctrl/Cmd+click or Shift+click to select
+  - Checkboxes appear on hover (list view)
+  - Selection toolbar with count and actions
+  - Amber highlight on selected items
+- **Search bar:** In toolbar, focus with `/`
 
 ### What Was Implemented
 
