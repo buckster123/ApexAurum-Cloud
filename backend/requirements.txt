@@ -29,6 +29,7 @@ aiohttp>=3.9.0
 
 # AI/ML
 anthropic>=0.75.0
+openai>=1.12.0  # For multi-provider LLM support (OpenAI-compatible APIs)
 numpy>=1.26.0
 
 # Optional: sentence-transformers (large, needs lots of RAM)
