@@ -339,3 +339,9 @@ async def close_db():
     """Close database connections."""
     engine = get_engine()
     await engine.dispose()
+
+
+# Convenience alias for tools - returns the session factory
+def async_session():
+    """Get async session factory. Usage: async with async_session() as db: ..."""
+    return get_session_factory()()
