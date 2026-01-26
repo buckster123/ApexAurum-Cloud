@@ -1,14 +1,84 @@
 # ApexAurum-Cloud Handover Document
 
 **Date:** 2026-01-26
-**Build:** v26-cortex-phase3
-**Status:** PRODUCTION READY + The Vault + Cortex Diver Phase 3 (Terminal & Execution)
+**Build:** v27-all-seeing-eye
+**Status:** PRODUCTION READY + Cortex Diver Phase 4 (RAG & Intelligence)
 
 ---
 
-## Current Session: Cortex Diver Phase 1
+## Current Session: Phase 4 - The All-Seeing Eye
 
-**Goal:** Transform The Vault into a full IDE experience in dev mode.
+**Goal:** Add RAG capabilities to Cortex Diver - semantic search, project context injection, and codebase-aware AI assistance.
+
+### What Was Implemented
+
+**Backend (files.py):**
+- `GET /files/search/content` - Search inside file contents
+  - Full-text search across all user files
+  - Returns matching lines with surrounding context
+  - Supports file type and folder filtering
+- `GET /files/context` - Get project structure for AI
+  - File tree, key files with previews
+  - Language breakdown
+- `GET /files/context/prompt` - Formatted context for agent injection
+  - Markdown-formatted project overview
+  - Ready to inject into agent prompts
+- `POST /files/context/relevant` - Find files relevant to a query
+  - Keyword-based relevance scoring
+  - Returns files with content for RAG
+
+**Frontend (AgentPanel.vue):**
+- **Project Context Toggle** - 👁️ button to enable "All-Seeing Eye"
+  - Loads project structure and key files
+  - Injects into agent prompts when enabled
+- **Auto-RAG** - Automatically finds relevant files for questions
+  - Shows context indicators on messages (📋 code, 👁️ project, 🔗 N files)
+- **Quick Actions** - One-click prompts:
+  - 🔍 Explain Project (needs context)
+  - 🐛 Find Issues (needs selection)
+  - 📝 Document (needs selection)
+  - ♻️ Refactor (needs selection)
+  - ✅ Tests (needs selection)
+
+**Frontend (SearchPanel.vue):**
+- **Content Search UI** - Search inside files
+  - Live search with debounce
+  - Shows matching lines with context
+  - Click to open file at line
+  - Line highlight animation
+
+**Frontend (CortexDiver.vue):**
+- Integrated SearchPanel
+- Keyboard shortcut: `Ctrl+Shift+F` for search
+- Status bar toggles for Search, Agent, Terminal
+- Search result → open file → go to line
+
+**Frontend (MonacoEditor.vue):**
+- `goToLine(line)` method for search results
+- Line highlight animation on navigation
+
+### Keyboard Shortcuts (Full List)
+- `Ctrl+S` - Save file
+- `Ctrl+W` - Close tab
+- `Ctrl+Shift+A` - Ask agent about selection
+- `Ctrl+Shift+F` - Search in files
+- `F5` - Run code
+- `Ctrl+\`` - Toggle terminal
+- `Escape` - Close panels
+
+### How It Works
+
+1. **Content Search**: User presses `Ctrl+Shift+F`, types query, sees matches across all files with context. Click a result to open file at that line.
+
+2. **Project Context**: Click 👁️ in agent panel header. Loads project structure, key files (README, main.py, package.json, etc.), and language stats. This context is injected into every agent message.
+
+3. **Auto-RAG**: When user asks a question, the system automatically finds relevant files based on keywords. These files are included in the agent prompt.
+
+4. **Quick Actions**: Pre-built prompts for common tasks. "Explain Project" enables context and asks about the codebase. Others work best with code selected.
+
+---
+
+## Previous: Cortex Diver Phase 1-3
 
 ### What Was Implemented
 
@@ -90,43 +160,19 @@
 - `Ctrl+\`` - Toggle terminal
 - `Escape` - Close panels
 
-### Next Phase: The Grand Finale
+### Future Enhancements
 
-**Phase 4: RAG & Intelligence** - "The All-Seeing Eye"
+**Phase 5: Vector Embeddings** (Optional)
+- Add pgvector extension to PostgreSQL
+- Generate embeddings for file chunks
+- True semantic search ("find error handling" → finds try/catch patterns)
 
-The final piece that transforms Cortex Diver from an IDE into a true AI-powered development environment.
-
-**Planned Features:**
-1. **File Indexing** - Embed user files for semantic search
-   - Backend: `/files/index` endpoint to create embeddings
-   - Store in PostgreSQL with pgvector or simple JSON
-   - Incremental updates on file changes
-
-2. **Semantic Search** - Find code by meaning, not just text
-   - "Find error handling code"
-   - "Where is authentication implemented?"
-   - Returns relevant file snippets
-
-3. **Codebase-Aware Agent** - Agent that knows your project
-   - Inject relevant file context into agent prompts
-   - "Explain this project structure"
-   - "How do these files relate?"
-   - Auto-context from open files + search results
-
-4. **Project Summary** - One-click project understanding
-   - Generate README from codebase analysis
-   - Identify key patterns and architecture
-   - Dependency mapping
-
-**Architecture Notes:**
-- Could use Anthropic's embeddings or a local model
-- Start simple: keyword + file type matching, then add embeddings
-- RAG context window management (prioritize relevant chunks)
-
-**Resources:**
-- Railway Pro: Plenty of compute for embeddings
-- User quota: 5GB files = manageable index size
-- PostgreSQL: Already have it, can add vector extension
+**Phase 5 Alternative: Enhanced Features**
+- File sharing (public links)
+- Version history / git integration
+- Collaborative editing
+- Code snippets library
+- Project templates
 
 ---
 

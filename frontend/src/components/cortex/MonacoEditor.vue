@@ -224,11 +224,33 @@ function getSelectedText() {
   return model.getValueInRange(editor.getSelection())
 }
 
+function goToLine(lineNumber, column = 1) {
+  if (!editor) return
+  editor.revealLineInCenter(lineNumber)
+  editor.setPosition({ lineNumber, column })
+  editor.focus()
+
+  // Highlight the line briefly
+  const decorations = editor.createDecorationsCollection([{
+    range: new monaco.Range(lineNumber, 1, lineNumber, 1),
+    options: {
+      isWholeLine: true,
+      className: 'cortex-highlight-line',
+    }
+  }])
+
+  // Remove highlight after animation
+  setTimeout(() => {
+    decorations.clear()
+  }, 1500)
+}
+
 defineExpose({
   focus,
   insertText,
   replaceSelection,
   getSelectedText,
+  goToLine,
 })
 </script>
 
@@ -244,5 +266,16 @@ defineExpose({
 
 .monaco-editor .margin {
   background-color: #0D0D0D !important;
+}
+
+/* Search result highlight animation */
+.cortex-highlight-line {
+  background-color: rgba(255, 215, 0, 0.2) !important;
+  animation: cortex-highlight-fade 1.5s ease-out forwards;
+}
+
+@keyframes cortex-highlight-fade {
+  0% { background-color: rgba(255, 215, 0, 0.4); }
+  100% { background-color: transparent; }
 }
 </style>

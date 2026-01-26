@@ -1289,6 +1289,542 @@ async def search_files(
     return [file_to_response(f) for f in files]
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# RAG & INTELLIGENCE - Content Search and Project Context
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class ContentSearchResult(BaseModel):
+    """A search result with file info and matching content."""
+    file_id: UUID
+    file_name: str
+    file_type: str
+    folder_id: Optional[UUID]
+    matches: list[dict]  # [{ line: int, content: str, context_before: str, context_after: str }]
+    match_count: int
+
+
+class ContentSearchResponse(BaseModel):
+    """Response for content search."""
+    query: str
+    results: list[ContentSearchResult]
+    total_matches: int
+    files_searched: int
+
+
+@router.get("/search/content", response_model=ContentSearchResponse)
+async def search_file_contents(
+    q: str,
+    file_type: Optional[str] = None,
+    folder_id: Optional[UUID] = None,
+    limit: int = 20,
+    context_lines: int = 2,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Search inside file contents (The All-Seeing Eye).
+
+    Searches text-based files for the query string.
+    Returns matching lines with surrounding context.
+
+    Used by Cortex Diver for semantic code search.
+    """
+    import re
+
+    # Build query for searchable files
+    query = (
+        select(File)
+        .where(File.user_id == user.id)
+        .where(File.file_type.in_(["document", "code", "data"]))
+        .where(File.is_archived == False)
+    )
+
+    if file_type:
+        query = query.where(File.file_type == file_type)
+
+    if folder_id:
+        query = query.where(File.folder_id == folder_id)
+
+    query = query.order_by(File.updated_at.desc())
+
+    result = await db.execute(query)
+    files = result.scalars().all()
+
+    results = []
+    total_matches = 0
+    files_searched = 0
+
+    # Compile search pattern (case-insensitive)
+    try:
+        pattern = re.compile(re.escape(q), re.IGNORECASE)
+    except re.error:
+        pattern = re.compile(re.escape(q), re.IGNORECASE)
+
+    for file in files:
+        file_path = Path(file.storage_path)
+        if not file_path.exists():
+            continue
+
+        files_searched += 1
+
+        try:
+            with open(file_path, "r", encoding="utf-8", errors="replace") as f:
+                lines = f.readlines()
+        except Exception:
+            continue
+
+        matches = []
+        for i, line in enumerate(lines):
+            if pattern.search(line):
+                # Get context
+                start = max(0, i - context_lines)
+                end = min(len(lines), i + context_lines + 1)
+
+                context_before = "".join(lines[start:i]).rstrip('\n')
+                context_after = "".join(lines[i+1:end]).rstrip('\n')
+
+                matches.append({
+                    "line": i + 1,  # 1-indexed
+                    "content": line.rstrip('\n'),
+                    "context_before": context_before,
+                    "context_after": context_after,
+                })
+
+                if len(matches) >= 10:  # Max matches per file
+                    break
+
+        if matches:
+            results.append(ContentSearchResult(
+                file_id=file.id,
+                file_name=file.name,
+                file_type=file.file_type,
+                folder_id=file.folder_id,
+                matches=matches,
+                match_count=len(matches),
+            ))
+            total_matches += len(matches)
+
+            if len(results) >= limit:
+                break
+
+    return ContentSearchResponse(
+        query=q,
+        results=results,
+        total_matches=total_matches,
+        files_searched=files_searched,
+    )
+
+
+class ProjectContextFile(BaseModel):
+    """A file in the project context."""
+    id: UUID
+    name: str
+    path: str  # Full path from root
+    file_type: str
+    size_bytes: int
+    preview: Optional[str] = None  # First N lines for key files
+
+
+class ProjectContext(BaseModel):
+    """Project structure and context for AI assistance."""
+    total_files: int
+    total_folders: int
+    file_tree: list[dict]  # Nested structure
+    key_files: list[ProjectContextFile]  # Important files with previews
+    languages: dict[str, int]  # File counts by language
+    storage_used: int
+
+
+@router.get("/context", response_model=ProjectContext)
+async def get_project_context(
+    folder_id: Optional[UUID] = None,
+    include_previews: bool = True,
+    preview_lines: int = 50,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get project structure and context for AI assistance.
+
+    Returns a summary of the user's files including:
+    - File tree structure
+    - Key files with content previews (README, main files, configs)
+    - Language breakdown
+
+    Used by Cortex Diver's AI agent for codebase awareness.
+    """
+    # Get all folders
+    folders_result = await db.execute(
+        select(Folder)
+        .where(Folder.user_id == user.id)
+        .where(Folder.is_archived == False)
+        .order_by(Folder.name)
+    )
+    folders = folders_result.scalars().all()
+
+    # Get all files
+    files_query = select(File).where(File.user_id == user.id).where(File.is_archived == False)
+    if folder_id:
+        # Only files in this subtree
+        files_query = files_query.where(File.folder_id == folder_id)
+    files_result = await db.execute(files_query.order_by(File.name))
+    files = files_result.scalars().all()
+
+    # Build file tree
+    def build_tree(parent_id=None, path=""):
+        items = []
+
+        # Add folders
+        for folder in folders:
+            if folder.parent_id == parent_id:
+                folder_path = f"{path}/{folder.name}" if path else folder.name
+                children = build_tree(folder.id, folder_path)
+                items.append({
+                    "type": "folder",
+                    "id": str(folder.id),
+                    "name": folder.name,
+                    "path": folder_path,
+                    "children": children,
+                })
+
+        # Add files
+        for file in files:
+            if file.folder_id == parent_id:
+                file_path = f"{path}/{file.name}" if path else file.name
+                items.append({
+                    "type": "file",
+                    "id": str(file.id),
+                    "name": file.name,
+                    "path": file_path,
+                    "file_type": file.file_type,
+                    "size": file.size_bytes,
+                })
+
+        return items
+
+    file_tree = build_tree(folder_id if folder_id else None)
+
+    # Identify key files (README, main files, configs)
+    KEY_FILE_PATTERNS = [
+        "readme", "readme.md", "readme.txt",
+        "main.py", "app.py", "index.js", "index.ts", "main.js", "main.ts",
+        "package.json", "requirements.txt", "pyproject.toml", "cargo.toml",
+        "dockerfile", "docker-compose.yml", "docker-compose.yaml",
+        ".env.example", "config.py", "settings.py", "config.js", "config.ts",
+        "makefile", "justfile",
+    ]
+
+    key_files = []
+    for file in files:
+        lower_name = file.name.lower()
+        is_key = any(lower_name == pattern or lower_name.endswith(f"/{pattern}") for pattern in KEY_FILE_PATTERNS)
+
+        # Also include entry-point-like files
+        if not is_key and file.file_type == "code":
+            if lower_name in ["index.vue", "app.vue", "main.vue", "__init__.py", "mod.rs", "lib.rs"]:
+                is_key = True
+
+        if is_key:
+            file_path = file.name
+            # Find path by traversing folders
+            folder_id_curr = file.folder_id
+            while folder_id_curr:
+                folder = next((f for f in folders if f.id == folder_id_curr), None)
+                if folder:
+                    file_path = f"{folder.name}/{file_path}"
+                    folder_id_curr = folder.parent_id
+                else:
+                    break
+
+            preview = None
+            if include_previews and file.file_type in ("document", "code", "data"):
+                file_disk_path = Path(file.storage_path)
+                if file_disk_path.exists():
+                    try:
+                        with open(file_disk_path, "r", encoding="utf-8", errors="replace") as f:
+                            preview_content = []
+                            for i, line in enumerate(f):
+                                if i >= preview_lines:
+                                    break
+                                preview_content.append(line)
+                            preview = "".join(preview_content)
+                    except Exception:
+                        pass
+
+            key_files.append(ProjectContextFile(
+                id=file.id,
+                name=file.name,
+                path=file_path,
+                file_type=file.file_type,
+                size_bytes=file.size_bytes,
+                preview=preview,
+            ))
+
+    # Count languages
+    language_counts = {}
+    for file in files:
+        if file.file_type == "code":
+            lang = get_monaco_language(file.name)
+            language_counts[lang] = language_counts.get(lang, 0) + 1
+
+    # Storage used
+    storage_used = sum(f.size_bytes for f in files)
+
+    return ProjectContext(
+        total_files=len(files),
+        total_folders=len(folders),
+        file_tree=file_tree,
+        key_files=key_files,
+        languages=language_counts,
+        storage_used=storage_used,
+    )
+
+
+@router.get("/context/prompt")
+async def get_project_context_prompt(
+    folder_id: Optional[UUID] = None,
+    max_files: int = 10,
+    preview_lines: int = 30,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get project context formatted for AI agent injection.
+
+    Returns a markdown-formatted string containing:
+    - Project structure overview
+    - Key file contents
+    - Language breakdown
+
+    This can be directly injected into agent prompts for codebase awareness.
+    """
+    # Get project context
+    context = await get_project_context(
+        folder_id=folder_id,
+        include_previews=True,
+        preview_lines=preview_lines,
+        user=user,
+        db=db
+    )
+
+    # Format as prompt context
+    lines = [
+        "## Project Context",
+        "",
+        f"**Files:** {context.total_files} | **Folders:** {context.total_folders}",
+        "",
+    ]
+
+    # Languages
+    if context.languages:
+        lang_str = ", ".join(f"{lang}: {count}" for lang, count in sorted(context.languages.items(), key=lambda x: -x[1])[:5])
+        lines.append(f"**Languages:** {lang_str}")
+        lines.append("")
+
+    # File tree (simplified)
+    def format_tree(items, depth=0):
+        result = []
+        indent = "  " * depth
+        for item in items[:20]:  # Limit items
+            if item["type"] == "folder":
+                result.append(f"{indent}📁 {item['name']}/")
+                if depth < 2:  # Limit depth
+                    result.extend(format_tree(item.get("children", []), depth + 1))
+            else:
+                icon = "📄" if item.get("file_type") == "document" else "💻" if item.get("file_type") == "code" else "📊"
+                result.append(f"{indent}{icon} {item['name']}")
+        return result
+
+    lines.append("### Structure")
+    lines.append("```")
+    lines.extend(format_tree(context.file_tree))
+    lines.append("```")
+    lines.append("")
+
+    # Key files with previews
+    if context.key_files:
+        lines.append("### Key Files")
+        lines.append("")
+
+        for kf in context.key_files[:max_files]:
+            lines.append(f"#### {kf.path}")
+            if kf.preview:
+                lang = get_monaco_language(kf.name)
+                lines.append(f"```{lang}")
+                # Truncate preview if too long
+                preview = kf.preview
+                if len(preview) > 3000:
+                    preview = preview[:3000] + "\n... (truncated)"
+                lines.append(preview.rstrip())
+                lines.append("```")
+            lines.append("")
+
+    return {
+        "prompt": "\n".join(lines),
+        "file_count": context.total_files,
+        "key_file_count": len(context.key_files),
+    }
+
+
+class RelevantFilesRequest(BaseModel):
+    """Request for finding relevant files based on a query."""
+    query: str
+    current_file_id: Optional[UUID] = None
+    max_files: int = 5
+
+
+class RelevantFileResult(BaseModel):
+    """A relevant file with content."""
+    id: UUID
+    name: str
+    path: str
+    relevance: str  # Why this file is relevant
+    content: Optional[str] = None
+
+
+@router.post("/context/relevant")
+async def find_relevant_files(
+    request: RelevantFilesRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Find files relevant to a query for RAG context injection.
+
+    Uses keyword matching and file patterns to find related files.
+    Returns file contents that can be injected into agent prompts.
+
+    This is a simple relevance algorithm - can be enhanced with embeddings later.
+    """
+    import re
+
+    # Get all text-based files
+    result = await db.execute(
+        select(File)
+        .where(File.user_id == user.id)
+        .where(File.file_type.in_(["document", "code", "data"]))
+        .where(File.is_archived == False)
+    )
+    files = result.scalars().all()
+
+    # Get folders for path building
+    folders_result = await db.execute(
+        select(Folder)
+        .where(Folder.user_id == user.id)
+    )
+    folders = {f.id: f for f in folders_result.scalars().all()}
+
+    def get_file_path(file):
+        path = file.name
+        folder_id = file.folder_id
+        while folder_id:
+            folder = folders.get(folder_id)
+            if folder:
+                path = f"{folder.name}/{path}"
+                folder_id = folder.parent_id
+            else:
+                break
+        return path
+
+    # Extract keywords from query
+    query_lower = request.query.lower()
+    keywords = set(re.findall(r'\b\w+\b', query_lower))
+    keywords.discard('the')
+    keywords.discard('and')
+    keywords.discard('for')
+    keywords.discard('this')
+    keywords.discard('that')
+    keywords.discard('with')
+    keywords.discard('how')
+    keywords.discard('what')
+    keywords.discard('why')
+
+    relevant_files = []
+
+    for file in files:
+        if request.current_file_id and file.id == request.current_file_id:
+            continue
+
+        score = 0
+        relevance_reasons = []
+
+        file_path = get_file_path(file)
+        file_path_lower = file_path.lower()
+        file_name_lower = file.name.lower()
+
+        # Check filename matches
+        for kw in keywords:
+            if kw in file_name_lower:
+                score += 3
+                relevance_reasons.append(f"filename contains '{kw}'")
+
+            if kw in file_path_lower:
+                score += 1
+                if f"filename contains '{kw}'" not in relevance_reasons:
+                    relevance_reasons.append(f"path contains '{kw}'")
+
+        # Check file content (if accessible)
+        file_disk_path = Path(file.storage_path)
+        if file_disk_path.exists():
+            try:
+                with open(file_disk_path, "r", encoding="utf-8", errors="replace") as f:
+                    content = f.read(10000)  # Read first 10KB
+                    content_lower = content.lower()
+
+                    for kw in keywords:
+                        if len(kw) >= 3 and kw in content_lower:
+                            matches = content_lower.count(kw)
+                            score += min(matches, 5)
+                            if matches > 0:
+                                relevance_reasons.append(f"contains '{kw}' ({matches}x)")
+
+            except Exception:
+                content = None
+        else:
+            content = None
+
+        if score > 0:
+            relevant_files.append({
+                "file": file,
+                "path": file_path,
+                "score": score,
+                "reasons": relevance_reasons[:3],  # Top 3 reasons
+            })
+
+    # Sort by relevance score
+    relevant_files.sort(key=lambda x: x["score"], reverse=True)
+
+    # Return top N with content
+    results = []
+    for item in relevant_files[:request.max_files]:
+        file = item["file"]
+        content = None
+
+        file_disk_path = Path(file.storage_path)
+        if file_disk_path.exists():
+            try:
+                with open(file_disk_path, "r", encoding="utf-8", errors="replace") as f:
+                    content = f.read(8000)  # Limit content size
+                    if len(content) >= 8000:
+                        content += "\n... (truncated)"
+            except Exception:
+                pass
+
+        results.append(RelevantFileResult(
+            id=file.id,
+            name=file.name,
+            path=item["path"],
+            relevance=", ".join(item["reasons"]),
+            content=content,
+        ))
+
+    return {
+        "query": request.query,
+        "results": results,
+        "total_matched": len(relevant_files),
+    }
+
+
 @router.get("/recent", response_model=list[FileResponse])
 async def get_recent_files(
     limit: int = 20,

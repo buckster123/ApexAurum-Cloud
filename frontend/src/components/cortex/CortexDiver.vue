@@ -14,6 +14,7 @@ import FileTabs from './FileTabs.vue'
 import MonacoEditor from './MonacoEditor.vue'
 import AgentPanel from './AgentPanel.vue'
 import TerminalPanel from './TerminalPanel.vue'
+import SearchPanel from './SearchPanel.vue'
 
 const props = defineProps({
   folderId: {
@@ -32,8 +33,10 @@ const { playTone } = useSound()
 const editorRef = ref(null)
 const sidebarWidth = ref(240)
 const agentPanelWidth = ref(320)
+const searchPanelWidth = ref(320)
 const terminalHeight = ref(200)
 const showAgentPanel = ref(false)
+const showSearchPanel = ref(false)
 const showTerminal = ref(false)
 const statusMessage = ref('')
 
@@ -153,6 +156,44 @@ function handleApplyCode(code) {
   }
 }
 
+// Open file by ID (from agent panel relevant files)
+async function handleOpenFileById(fileId) {
+  // Find the file in the current directory or fetch it
+  const file = filesStore.files?.find(f => f.id === fileId)
+  if (file) {
+    await openFile(file)
+  } else {
+    // Try to fetch file info and open it
+    try {
+      const response = await import('@/services/api').then(m => m.default.get(`/api/v1/files/${fileId}`))
+      if (response.data) {
+        await cortex.openFile(response.data)
+        cortexSounds.tabOpen()
+        statusMessage.value = `Opened ${response.data.name}`
+        setTimeout(() => statusMessage.value = '', 2000)
+      }
+    } catch (e) {
+      cortexSounds.error()
+      statusMessage.value = 'Failed to open file'
+    }
+  }
+}
+
+// Open file from search result and go to line
+async function handleSearchResultClick(fileId, lineNumber) {
+  await handleOpenFileById(fileId)
+
+  // Go to line in editor
+  if (lineNumber && editorRef.value?.goToLine) {
+    // Small delay to ensure file is loaded
+    setTimeout(() => {
+      editorRef.value.goToLine(lineNumber)
+      statusMessage.value = `Line ${lineNumber}`
+      setTimeout(() => statusMessage.value = '', 1500)
+    }, 100)
+  }
+}
+
 function handleCursorChange(cursor) {
   cortex.setCursor(cursor)
 }
@@ -179,6 +220,13 @@ function handleKeyboard(event) {
   if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key === 'A') {
     event.preventDefault()
     showAgentPanel.value = true
+    return
+  }
+
+  // Ctrl+Shift+F - Search in files
+  if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key === 'F') {
+    event.preventDefault()
+    showSearchPanel.value = !showSearchPanel.value
     return
   }
 
@@ -395,14 +443,26 @@ watch(() => props.folderId, async (folderId) => {
         </div>
       </div>
 
+      <!-- Search panel (collapsible) -->
+      <SearchPanel
+        v-if="showSearchPanel"
+        :folder-id="folderId"
+        :style="{ width: `${searchPanelWidth}px` }"
+        class="border-l border-apex-border"
+        @close="showSearchPanel = false"
+        @open-file="handleSearchResultClick"
+      />
+
       <!-- Agent panel (collapsible) -->
       <AgentPanel
         v-if="showAgentPanel"
         :selection="cortex.selection"
         :active-file="activeTab"
+        :folder-id="folderId"
         :style="{ width: `${agentPanelWidth}px` }"
         class="border-l border-apex-border"
         @apply-code="handleApplyCode"
+        @open-file="handleOpenFileById"
         @close="showAgentPanel = false"
       />
     </div>
@@ -419,6 +479,28 @@ watch(() => props.folderId, async (folderId) => {
         >
           <span class="font-mono">$</span>
           <span>Terminal</span>
+        </button>
+        <span class="text-gray-600">|</span>
+        <!-- Search toggle -->
+        <button
+          @click="showSearchPanel = !showSearchPanel"
+          class="flex items-center gap-1 hover:text-gray-300 transition-colors"
+          :class="{ 'text-amber-400': showSearchPanel }"
+          title="Search in files (Ctrl+Shift+F)"
+        >
+          <span>🔍</span>
+          <span>Search</span>
+        </button>
+        <span class="text-gray-600">|</span>
+        <!-- Agent toggle -->
+        <button
+          @click="showAgentPanel = !showAgentPanel"
+          class="flex items-center gap-1 hover:text-gray-300 transition-colors"
+          :class="{ 'text-amber-400': showAgentPanel }"
+          title="AI Agent (Ctrl+Shift+A)"
+        >
+          <span>🧠</span>
+          <span>Agent</span>
         </button>
         <span class="text-gray-600">|</span>
         <span v-if="activeTab">{{ activeLanguage }}</span>

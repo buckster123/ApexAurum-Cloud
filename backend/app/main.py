@@ -50,7 +50,7 @@ async def lifespan(app: FastAPI):
     """Application lifespan manager."""
     # Startup
     print("=" * 50)
-    print("ApexAurum Cloud v25 - The Vault")
+    print("ApexAurum Cloud v27 - The All-Seeing Eye")
     print("=" * 50)
     await init_db()
     print("Database initialized")
@@ -108,7 +108,7 @@ async def health_check():
     return {
         "status": "healthy",
         "version": "0.1.0",
-        "build": "v26-cortex-p3",
+        "build": "v27-all-seeing-eye",
         "agents": {
             "native": 5,
             "pac": 4,
@@ -125,6 +125,9 @@ async def health_check():
             "vault",
             "cortex-diver",
             "code-execution",
+            "content-search",
+            "project-context",
+            "rag-injection",
         ],
     }
 
