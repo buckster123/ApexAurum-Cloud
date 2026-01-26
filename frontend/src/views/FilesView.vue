@@ -4,17 +4,25 @@
  *
  * User file management with hierarchical folders, upload/download,
  * grid/list views, and storage tracking.
+ *
+ * In dev mode, transforms into Cortex Diver - a full IDE experience.
  */
 
 import { ref, computed, onMounted, watch, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useFilesStore } from '@/stores/files'
 import { useSound } from '@/composables/useSound'
+import { useDevMode } from '@/composables/useDevMode'
+import CortexDiver from '@/components/cortex/CortexDiver.vue'
 
 const route = useRoute()
 const router = useRouter()
 const store = useFilesStore()
 const { sounds, playTone } = useSound()
+const { devMode } = useDevMode()
+
+// Cortex Diver mode (activated in dev mode)
+const cortexMode = ref(false)
 
 // Alchemical sounds for The Vault
 const vaultSounds = {
@@ -394,10 +402,30 @@ function formatDate(dateStr) {
     year: 'numeric',
   })
 }
+
+function enterCortexMode() {
+  cortexMode.value = true
+  // Play activation sound
+  playTone(659, 0.1, 'sine', 0.2)
+  setTimeout(() => playTone(880, 0.15, 'sine', 0.2), 100)
+}
+
+function exitCortexMode() {
+  cortexMode.value = false
+}
 </script>
 
 <template>
+  <!-- Cortex Diver Mode (Dev Mode IDE) -->
+  <CortexDiver
+    v-if="cortexMode && devMode"
+    :folder-id="route.params.folderId"
+    @exit-cortex="exitCortexMode"
+  />
+
+  <!-- Standard Vault View -->
   <div
+    v-else
     class="min-h-screen bg-apex-dark pt-16"
     @click="handleGlobalClick"
     @dragover="handleDragOver"
@@ -420,6 +448,16 @@ function formatDate(dateStr) {
           <h1 class="text-2xl font-bold text-white flex items-center gap-2">
             <span class="text-gold">The Vault</span>
             <span class="text-lg opacity-50">⚗️</span>
+            <!-- Cortex Diver toggle (dev mode only) -->
+            <button
+              v-if="devMode"
+              @click="enterCortexMode"
+              class="ml-4 px-3 py-1 text-xs bg-gradient-to-r from-amber-900/50 to-purple-900/50 border border-amber-600/30 rounded-full text-amber-300 hover:text-amber-100 hover:border-amber-500/50 transition-all"
+              title="Enter Cortex Diver IDE"
+            >
+              <span class="mr-1">🧠</span>
+              CORTEX DIVER
+            </button>
           </h1>
           <p class="text-gray-400 text-sm mt-1">Your alchemical sanctum</p>
         </div>

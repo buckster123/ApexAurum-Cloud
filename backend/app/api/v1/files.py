@@ -774,6 +774,247 @@ async def preview_file(
     }
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# CORTEX DIVER - FILE CONTENT ENDPOINTS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class FileContentRequest(BaseModel):
+    content: str
+
+
+@router.get("/{file_id}/content")
+async def get_file_content(
+    file_id: UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get full file content for editing.
+
+    Returns the complete file content (no truncation) for text-based files.
+    Used by Cortex Diver IDE.
+    """
+    result = await db.execute(
+        select(File)
+        .where(File.id == file_id)
+        .where(File.user_id == user.id)
+    )
+    file = result.scalar_one_or_none()
+    if not file:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="File not found"
+        )
+
+    file_path = Path(file.storage_path)
+    if not file_path.exists():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="File not found on disk"
+        )
+
+    # Only allow text-based files
+    if file.file_type not in ("document", "code", "data"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot edit binary files"
+        )
+
+    # Read full content
+    try:
+        with open(file_path, "r", encoding="utf-8", errors="replace") as f:
+            content = f.read()
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to read file: {str(e)}"
+        )
+
+    # Update access stats
+    file.access_count += 1
+    file.last_accessed_at = datetime.utcnow()
+    await db.commit()
+
+    return {
+        "id": file.id,
+        "name": file.name,
+        "file_type": file.file_type,
+        "mime_type": file.mime_type,
+        "size_bytes": file.size_bytes,
+        "content": content,
+        "language": get_monaco_language(file.name),
+    }
+
+
+@router.put("/{file_id}/content")
+async def save_file_content(
+    file_id: UUID,
+    request: FileContentRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Save file content from editor.
+
+    Overwrites the file with new content and updates metadata.
+    Used by Cortex Diver IDE.
+    """
+    settings = get_settings()
+
+    result = await db.execute(
+        select(File)
+        .where(File.id == file_id)
+        .where(File.user_id == user.id)
+    )
+    file = result.scalar_one_or_none()
+    if not file:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="File not found"
+        )
+
+    # Only allow text-based files
+    if file.file_type not in ("document", "code", "data"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot edit binary files"
+        )
+
+    file_path = Path(file.storage_path)
+
+    # Calculate new size and check quota
+    new_content = request.content.encode("utf-8")
+    new_size = len(new_content)
+    size_delta = new_size - file.size_bytes
+
+    # Check quota if size is increasing
+    if size_delta > 0:
+        user_settings = user.settings or {}
+        used = user_settings.get("storage_used_bytes", 0)
+        quota = user_settings.get("storage_quota_bytes", settings.default_quota_bytes)
+
+        if used + size_delta > quota:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail=f"Storage quota exceeded. Available: {quota - used} bytes"
+            )
+
+    # Write content
+    try:
+        with open(file_path, "w", encoding="utf-8") as f:
+            f.write(request.content)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to save file: {str(e)}"
+        )
+
+    # Update file metadata
+    old_size = file.size_bytes
+    file.size_bytes = new_size
+    file.checksum = hashlib.sha256(new_content).hexdigest()
+    file.updated_at = datetime.utcnow()
+
+    # Update user storage stats
+    if size_delta != 0:
+        user_settings = user.settings or {}
+        user_settings["storage_used_bytes"] = user_settings.get("storage_used_bytes", 0) + size_delta
+        user.settings = user_settings
+
+    await db.commit()
+    await db.refresh(file)
+
+    return {
+        "id": file.id,
+        "name": file.name,
+        "size_bytes": file.size_bytes,
+        "saved": True,
+        "size_delta": size_delta,
+    }
+
+
+def get_monaco_language(filename: str) -> str:
+    """Map file extension to Monaco editor language."""
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+
+    language_map = {
+        # Web
+        "js": "javascript",
+        "jsx": "javascript",
+        "ts": "typescript",
+        "tsx": "typescript",
+        "html": "html",
+        "htm": "html",
+        "css": "css",
+        "scss": "scss",
+        "less": "less",
+        "vue": "html",
+        "svelte": "html",
+        # Python
+        "py": "python",
+        "pyw": "python",
+        "pyi": "python",
+        # Systems
+        "c": "c",
+        "h": "c",
+        "cpp": "cpp",
+        "hpp": "cpp",
+        "cc": "cpp",
+        "rs": "rust",
+        "go": "go",
+        "java": "java",
+        "kt": "kotlin",
+        "swift": "swift",
+        # Data/Config
+        "json": "json",
+        "yaml": "yaml",
+        "yml": "yaml",
+        "toml": "toml",
+        "xml": "xml",
+        "sql": "sql",
+        "graphql": "graphql",
+        # Shell
+        "sh": "shell",
+        "bash": "shell",
+        "zsh": "shell",
+        "fish": "shell",
+        "ps1": "powershell",
+        # Markup
+        "md": "markdown",
+        "mdx": "markdown",
+        "rst": "restructuredtext",
+        "tex": "latex",
+        # Other
+        "rb": "ruby",
+        "php": "php",
+        "lua": "lua",
+        "r": "r",
+        "dockerfile": "dockerfile",
+        "makefile": "makefile",
+        "env": "ini",
+        "ini": "ini",
+        "conf": "ini",
+        "txt": "plaintext",
+        "log": "plaintext",
+    }
+
+    # Handle special filenames
+    special_files = {
+        "dockerfile": "dockerfile",
+        "makefile": "makefile",
+        ".gitignore": "ignore",
+        ".dockerignore": "ignore",
+        ".env": "ini",
+        ".editorconfig": "ini",
+    }
+
+    lower_name = filename.lower()
+    if lower_name in special_files:
+        return special_files[lower_name]
+
+    return language_map.get(ext, "plaintext")
+
+
 @router.patch("/{file_id}", response_model=FileResponse)
 async def update_file(
     file_id: UUID,
