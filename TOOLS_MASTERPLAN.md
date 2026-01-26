@@ -15,10 +15,10 @@ Each tool gives Claude's agents the ability to interact with the world.
 | 2 | Web | 2 | ✅ COMPLETE |
 | 3 | Vault | 3/5 | 🔶 PARTIAL |
 | 4 | Knowledge Base | 4 | ✅ COMPLETE |
-| 5 | Session Memory | 4 | ⬜ Planned |
+| 5 | Session Memory | 4 | ✅ COMPLETE |
 | 6 | Code Execution | 2 | ⬜ Planned |
 | 7 | Agents | 3 | ⬜ Planned |
-| **Total** | | **26** | **15/26** |
+| **Total** | | **26** | **19/26** |
 
 ---
 
@@ -116,18 +116,18 @@ Bridge to MCP Knowledge Base or external KB service. Semantic search over docs.
 
 ---
 
-## Tier 5: Session Memory (The Remembering Hands) ⬜
+## Tier 5: Session Memory (The Remembering Hands) ✅
 
-**Status:** PLANNED
+**Status:** COMPLETE - Deployed v32
 
 Per-conversation scratchpad for multi-step reasoning.
 
 | Tool | Description | Status |
 |------|-------------|--------|
-| `scratch_store` | Store key-value in conversation | ⬜ |
-| `scratch_get` | Retrieve value by key | ⬜ |
-| `scratch_list` | List all keys in session | ⬜ |
-| `scratch_clear` | Clear all session data | ⬜ |
+| `scratch_store` | Store key-value in conversation | ✅ |
+| `scratch_get` | Retrieve value by key | ✅ |
+| `scratch_list` | List all keys in session | ✅ |
+| `scratch_clear` | Clear all session data | ✅ |
 
 **Implementation Notes:**
 - Stored in conversation metadata (JSONB)
@@ -284,6 +284,15 @@ Each tier has a poetic name reflecting its nature:
 ---
 
 ## Changelog
+
+### 2026-01-26 - v32-remembering-hands
+- Completed Tier 5: Session Memory Tools (4 tools)
+- `scratch_store` - Store key-value pairs (10KB/value, 100KB total)
+- `scratch_get` - Retrieve stored values
+- `scratch_list` - List all keys with metadata
+- `scratch_clear` - Clear all or specific keys
+- In-memory per-conversation storage
+- Total tools: 19/26
 
 ### 2026-01-26 - v31-knowing-hands
 - Completed Tier 4: Knowledge Base Tools (4 tools)

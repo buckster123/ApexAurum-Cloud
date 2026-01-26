@@ -114,12 +114,12 @@ async def health_check():
     return {
         "status": "healthy",
         "version": "0.1.0",
-        "build": "v31-knowing-hands",
+        "build": "v32-remembering-hands",
         "agents": {
             "native": 5,
             "pac": 4,
         },
-        "tools": 15,  # Tier 1 (6) + Tier 2 (2) + Tier 3 (3) + Tier 4 (4)
+        "tools": 19,  # T1(6) + T2(2) + T3(3) + T4(4) + T5(4)
         "features": [
             "streaming",
             "pac-mode",
