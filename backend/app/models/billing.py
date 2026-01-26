@@ -169,8 +169,8 @@ class CreditTransaction(Base):
         ForeignKey("messages.id", ondelete="SET NULL")
     )
 
-    # Metadata (model used, tokens, etc.)
-    metadata: Mapped[Optional[dict]] = mapped_column(JSONB, default=dict)
+    # Extra data (model used, tokens, etc.)
+    extra_data: Mapped[Optional[dict]] = mapped_column(JSONB, default=dict)
 
     # Timestamp
     created_at: Mapped[datetime] = mapped_column(

@@ -95,8 +95,8 @@ def upgrade() -> None:
         sa.Column('stripe_payment_intent_id', sa.String(255), nullable=True),
         sa.Column('message_id', UUID(as_uuid=True), sa.ForeignKey('messages.id', ondelete='SET NULL'), nullable=True),
 
-        # Metadata
-        sa.Column('metadata', JSONB, nullable=True),
+        # Extra data (model, tokens, etc.)
+        sa.Column('extra_data', JSONB, nullable=True),
 
         # Timestamp
         sa.Column('created_at', sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),

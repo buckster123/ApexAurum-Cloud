@@ -207,7 +207,7 @@ class BillingService:
             transaction_type=transaction_type,
             description=description or f"Added {amount_cents} credits",
             stripe_payment_intent_id=stripe_payment_intent_id,
-            metadata=metadata or {},
+            extra_data=metadata or {},
         )
         self.db.add(transaction)
         await self.db.flush()
@@ -246,7 +246,7 @@ class BillingService:
             transaction_type="usage",
             description=description or f"Deducted {amount_cents} credits",
             message_id=message_id,
-            metadata=metadata or {},
+            extra_data=metadata or {},
         )
         self.db.add(transaction)
         await self.db.flush()
