@@ -219,6 +219,7 @@ class ChatRequest(BaseModel):
     stream: bool = True
     use_pac: bool = False  # Load PAC (Perfected Alchemical Codex) version of prompt
     max_tokens: int = DEFAULT_MAX_TOKENS  # Output token limit (up to 16384 for Opus/Sonnet 4.5)
+    save_conversation: bool = True  # Set to False for ephemeral chats (Cortex Diver code assist)
 
 
 class ConversationUpdate(BaseModel):
@@ -367,34 +368,35 @@ async def send_message(
             detail="Could not initialize AI service. Please check your API key."
         )
 
-    # Get or create conversation
+    # Get or create conversation (skip if ephemeral chat)
     conversation = None
-    if request.conversation_id:
-        result = await db.execute(
-            select(Conversation)
-            .where(Conversation.id == request.conversation_id)
-            .where(Conversation.user_id == user.id)
-        )
-        conversation = result.scalar_one_or_none()
+    if request.save_conversation:
+        if request.conversation_id:
+            result = await db.execute(
+                select(Conversation)
+                .where(Conversation.id == request.conversation_id)
+                .where(Conversation.user_id == user.id)
+            )
+            conversation = result.scalar_one_or_none()
 
-    if not conversation:
-        # Create new conversation
-        conversation = Conversation(
+        if not conversation:
+            # Create new conversation
+            conversation = Conversation(
+                id=uuid4(),
+                user_id=user.id,
+                title=request.message[:50] + "..." if len(request.message) > 50 else request.message,
+            )
+            db.add(conversation)
+            await db.flush()
+
+        # Save user message to database
+        user_msg = Message(
             id=uuid4(),
-            user_id=user.id,
-            title=request.message[:50] + "..." if len(request.message) > 50 else request.message,
+            conversation_id=conversation.id,
+            role="user",
+            content=request.message,
         )
-        db.add(conversation)
-        await db.flush()
-
-    # Save user message to database
-    user_msg = Message(
-        id=uuid4(),
-        conversation_id=conversation.id,
-        role="user",
-        content=request.message,
-    )
-    db.add(user_msg)
+        db.add(user_msg)
 
     # Build messages for Claude
     messages = [{"role": "user", "content": request.message}]
@@ -454,8 +456,8 @@ async def send_message(
                 if block.get("text"):
                     assistant_content += block["text"]
 
-            # Save assistant message (only if user is authenticated)
-            if conversation:
+            # Save assistant message (only if saving conversation)
+            if conversation and request.save_conversation:
                 assistant_msg = Message(
                     id=uuid4(),
                     conversation_id=conversation.id,

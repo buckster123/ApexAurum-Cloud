@@ -12,6 +12,7 @@ import { useCortexStore } from '@/stores/cortex'
 import { useSound } from '@/composables/useSound'
 import FileTabs from './FileTabs.vue'
 import MonacoEditor from './MonacoEditor.vue'
+import AgentPanel from './AgentPanel.vue'
 
 const props = defineProps({
   folderId: {
@@ -117,12 +118,35 @@ function handleContentChange(content) {
 }
 
 function handleSelectionChange(selection) {
-  cortex.setSelection(selection)
+  // Enrich selection with file context
+  const enrichedSelection = {
+    ...selection,
+    filename: activeTab.value?.name,
+    language: activeLanguage.value,
+  }
+  cortex.setSelection(enrichedSelection)
 
   // If action is 'ask-agent', open the agent panel
   if (selection.action === 'ask-agent' && selection.text) {
     showAgentPanel.value = true
-    // Future: Send to agent
+  }
+}
+
+// Apply code from agent to editor
+function handleApplyCode(code) {
+  if (!editorRef.value) return
+
+  // If there's a selection, replace it
+  if (cortex.selection?.text) {
+    editorRef.value.replaceSelection(code)
+    cortexSounds.save()
+    statusMessage.value = 'Code applied'
+    setTimeout(() => statusMessage.value = '', 1500)
+  } else {
+    // Otherwise insert at cursor
+    editorRef.value.insertText(code)
+    statusMessage.value = 'Code inserted'
+    setTimeout(() => statusMessage.value = '', 1500)
   }
 }
 
@@ -333,36 +357,15 @@ watch(() => props.folderId, async (folderId) => {
       </div>
 
       <!-- Agent panel (collapsible) -->
-      <div
+      <AgentPanel
         v-if="showAgentPanel"
-        class="flex flex-col border-l border-apex-border bg-apex-darker"
+        :selection="cortex.selection"
+        :active-file="activeTab"
         :style="{ width: `${agentPanelWidth}px` }"
-      >
-        <div class="flex items-center justify-between px-3 py-2 border-b border-apex-border">
-          <span class="text-xs text-amber-400 uppercase tracking-wider">Agent</span>
-          <button
-            @click="showAgentPanel = false"
-            class="text-gray-500 hover:text-gray-300"
-          >
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-
-        <!-- Agent content -->
-        <div class="flex-1 p-3 overflow-y-auto">
-          <div v-if="cortex.selection?.text" class="mb-4">
-            <p class="text-xs text-gray-500 mb-1">Selected code:</p>
-            <pre class="text-xs bg-apex-dark p-2 rounded overflow-x-auto max-h-32">{{ cortex.selection.text }}</pre>
-          </div>
-
-          <div class="text-center text-gray-500 py-8">
-            <p class="text-sm">Agent integration coming soon</p>
-            <p class="text-xs mt-1">Select code and ask questions</p>
-          </div>
-        </div>
-      </div>
+        class="border-l border-apex-border"
+        @apply-code="handleApplyCode"
+        @close="showAgentPanel = false"
+      />
     </div>
 
     <!-- Status bar -->
