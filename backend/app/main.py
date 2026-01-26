@@ -51,7 +51,7 @@ async def lifespan(app: FastAPI):
     """Application lifespan manager."""
     # Startup
     print("=" * 50)
-    print("ApexAurum Cloud v38 - Music Generation")
+    print("ApexAurum Cloud v39 - Steel Browser")
     print("=" * 50)
     await init_db()
     print("Database initialized")
@@ -114,12 +114,12 @@ async def health_check():
     return {
         "status": "healthy",
         "version": "0.1.0",
-        "build": "v38-music-generation",
+        "build": "v39-steel-browser",
         "agents": {
             "native": 5,
             "pac": 4,
         },
-        "tools": 35,  # 9 Tiers! Music online!
+        "tools": 40,  # 10 Tiers! Steel Browser online!
         "features": [
             "streaming",
             "pac-mode",
@@ -137,6 +137,7 @@ async def health_check():
             "rag-injection",
             "tool-registry",
             "tool-execution",
+            "steel-browser",
         ],
     }
 

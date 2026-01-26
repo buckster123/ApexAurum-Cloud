@@ -22,6 +22,7 @@ class ToolCategory(str, Enum):
     FILES = "files"
     AGENT = "agent"
     MUSIC = "music"
+    BROWSER = "browser"
 
 
 class ToolResult(BaseModel):

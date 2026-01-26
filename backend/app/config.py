@@ -49,6 +49,9 @@ class Settings(BaseSettings):
     suno_api_key: Optional[str] = None
     openai_api_key: Optional[str] = None
 
+    # Steel Browser
+    steel_url: Optional[str] = None  # e.g., https://steel-browser-production-d237.up.railway.app
+
     # Embedding config (for vector search)
     embedding_provider: str = "openai"  # "openai" or "voyage"
     embedding_model: str = "text-embedding-3-small"  # OpenAI model

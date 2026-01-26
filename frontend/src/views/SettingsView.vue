@@ -52,6 +52,8 @@ const categoryLabels = {
   memory: '🧠 Memory',
   knowledge: '📚 Knowledge',
   agent: '🤖 Agents',
+  music: '🎵 Music',
+  browser: '🖥️ Browser',
 }
 const { devMode, pacMode, handleTap, tapCount, alchemyLayer, layerName } = useDevMode()
 const { soundEnabled, toggleSound, sounds } = useSound()
