@@ -1,12 +1,90 @@
 # ApexAurum-Cloud Handover Document
 
 **Date:** 2026-01-26
-**Build:** v27-all-seeing-eye
-**Status:** PRODUCTION READY + Cortex Diver Phase 4 (RAG & Intelligence)
+**Build:** v28-athanors-hands
+**Status:** PRODUCTION READY + Phase 5 (Tool System)
 
 ---
 
-## Current Session: Phase 4 - The All-Seeing Eye
+## Current Session: Phase 5 - The Athanor's Hands
+
+**Goal:** Give Claude agents the ability to use tools - calculators, time, random numbers, and more. "Hands for the mind."
+
+### What Was Implemented
+
+**Backend (tools/):**
+- `app/tools/base.py` - Tool base classes
+  - `BaseTool` - Abstract base with schema and execute
+  - `SyncTool` - For synchronous tools
+  - `ToolSchema` - Name, description, input_schema for Claude API
+  - `ToolResult` - Success/failure with result/error
+  - `ToolContext` - User, conversation, agent context
+- `app/tools/__init__.py` - Singleton tool registry
+  - `register_all_tools()` - Called at startup
+  - `get_claude_tools()` - Returns Claude API format
+  - `execute()` - Route to tool with validation
+- `app/tools/utilities.py` - 6 Tier 1 utility tools:
+  - `get_current_time` - Current date/time in various formats
+  - `calculator` - Safe math expression evaluation
+  - `random_number` - Random integers or floats
+  - `count_words` - Text analysis (words, chars, sentences)
+  - `uuid_generate` - UUID v1/v4 generation
+  - `json_format` - Parse, validate, pretty-print JSON
+
+**Backend (services/):**
+- `app/services/tool_executor.py` - Safe tool execution
+  - Context-aware execution
+  - `execute_tool_use()` - Handle Claude's tool_use blocks
+  - `execute_multiple()` - Batch execution
+
+**Backend (claude.py):**
+- `tools` parameter added to `chat()` and `chat_stream()`
+- Stream handling for `tool_use` content blocks
+- Accumulates partial JSON for tool inputs
+
+**Backend (chat.py):**
+- Full agentic tool loop (max 5 turns)
+- Streaming: yields tool_start, tool_executing, tool_result events
+- Non-streaming: loops until no more tool_use blocks
+- Saves tool_calls and tool_results to message metadata
+
+**Backend (tools.py API):**
+- `GET /api/v1/tools` - List all tools
+- `GET /api/v1/tools/categories` - List categories
+- `GET /api/v1/tools/claude-format` - Tools in Claude API format
+- `GET /api/v1/tools/{name}` - Get tool schema
+- `POST /api/v1/tools/{name}/execute` - Execute tool directly
+- `POST /api/v1/tools/batch/execute` - Execute multiple tools
+
+**Frontend (chat.js):**
+- `toolsEnabled` state with localStorage persistence
+- `currentToolExecution` for UI indicator
+- SSE handling for tool events
+
+**Frontend (ChatView.vue):**
+- Tools toggle in sidebar with count indicator
+- Tool execution indicator during streaming
+- Tool results shown inline in messages
+
+**Frontend (SettingsView.vue):**
+- Tools toggle checkbox in preferences
+
+### Quick Test
+
+```bash
+# Verify tools are live
+curl https://backend-production-507c.up.railway.app/api/v1/tools
+
+# Test Claude format
+curl https://backend-production-507c.up.railway.app/api/v1/tools/claude-format
+
+# Check health
+curl https://backend-production-507c.up.railway.app/health
+```
+
+---
+
+## Previous: Phase 4 - The All-Seeing Eye
 
 **Goal:** Add RAG capabilities to Cortex Diver - semantic search, project context injection, and codebase-aware AI assistance.
 
@@ -316,6 +394,7 @@ curl -H "Authorization: Bearer TOKEN" \
 | Mobile Responsive | LIVE | Hamburger nav, slide-in sidebar |
 | The Vault | LIVE | User file storage |
 | Cortex Diver | LIVE | IDE in dev mode |
+| Tool Execution | LIVE | 6 utility tools (calculator, time, etc.) |
 
 ### PAC Agents (Perfected Alchemical Codex)
 | Agent | Base | PAC | Color |
@@ -337,7 +416,31 @@ curl -H "Authorization: Bearer TOKEN" \
 
 ## Version History
 
-### v25-vault (Current Session)
+### v28-athanors-hands (Current Session)
+- **The Athanor's Hands** - Tool execution system
+  - Tool base classes and registry (singleton pattern)
+  - 6 Tier 1 utility tools (calculator, time, random, count_words, uuid, json)
+  - Tool executor service with context management
+  - Claude API integration with tool_use handling
+  - Full agentic tool loop (streaming + non-streaming)
+  - Tools API endpoints (list, schema, execute, batch)
+  - Frontend tools toggle with execution indicators
+
+### v27-all-seeing-eye
+- **The All-Seeing Eye** - RAG & Intelligence for Cortex Diver
+  - Content search across files
+  - Project context injection
+  - Auto-RAG for relevant files
+  - Quick actions in agent panel
+
+### v26-cortex-phases
+- **Cortex Diver Phases 1-4** - Full IDE experience
+  - Monaco editor with custom theme
+  - Terminal with code execution
+  - Agent panel with context awareness
+  - File tabs and keyboard shortcuts
+
+### v25-vault
 - **The Vault** - User file storage system
   - Database models: File, Folder with hierarchical structure
   - Full CRUD API with quota enforcement
