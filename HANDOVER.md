@@ -10,21 +10,25 @@
 
 ### What Was Implemented
 1. **Model Registry** - Claude 4.5 family now available:
-   - Claude Opus 4.5 (`claude-opus-4-5-20251101`) - Most powerful, deep reasoning
-   - Claude Sonnet 4.5 (`claude-sonnet-4-5-20250929`) - Excellent balance (DEFAULT)
-   - Claude Haiku 4.5 (`claude-haiku-4-5-20251001`) - Fastest, efficient
+   - ⚜️ Claude Opus 4.5 (`claude-opus-4-5-20251101`) - Most powerful, deep reasoning
+   - ✦ Claude Sonnet 4.5 (`claude-sonnet-4-5-20250929`) - Excellent balance (DEFAULT)
+   - ◇ Claude Haiku 4.5 (`claude-haiku-4-5-20251001`) - Fastest, efficient
 
-2. **Increased Limits** - max_tokens increased to 8192 (from 4096)
+2. **Max Tokens Control** - Slider in sidebar (1K to 16K)
+   - Default: 8192
+   - Opus/Sonnet 4.5 support up to 16384
+   - Persisted to localStorage
 
-3. **Model Selector UI** - Dropdown in sidebar with tier icons and descriptions
+3. **Model Selector UI** - Dropdown in sidebar with tier icons
 
-4. **Persisted Selection** - Model choice saved to localStorage
+4. **Settings Sync** - Updated Settings > Model Settings with new models
 
 ### Key Changes
-- `backend/app/services/claude.py` - Added AVAILABLE_MODELS registry, DEFAULT_MODEL, DEFAULT_MAX_TOKENS
-- `backend/app/api/v1/chat.py` - Added `/chat/models` endpoint
-- `frontend/src/stores/chat.js` - Added model state, fetchModels(), setSelectedModel()
-- `frontend/src/views/ChatView.vue` - Added model selector dropdown
+- `backend/app/services/claude.py` - AVAILABLE_MODELS registry, defaults
+- `backend/app/api/v1/chat.py` - `/chat/models` endpoint, max_tokens in ChatRequest
+- `frontend/src/stores/chat.js` - Model + maxTokens state and actions
+- `frontend/src/views/ChatView.vue` - Model dropdown + tokens slider
+- `frontend/src/views/SettingsView.vue` - Updated model list, token slider to 16K
 
 ### Philosophy
 *"The more context-freedom and the less token-anxiety the natives have, the better they perform"*
@@ -91,13 +95,14 @@ curl https://backend-production-507c.up.railway.app/health
 ## Version History
 
 ### v24-unleashed (Current Session)
-- **Unleash the Stones** - Full-power model selection
+- **Unleash the Stones** - Full-power model selection + token control
   - Model registry with Claude 4.5 family (Opus 4.5, Sonnet 4.5, Haiku 4.5)
   - Default changed from Haiku 3 to Sonnet 4.5
-  - max_tokens increased from 4096 to 8192
+  - max_tokens configurable from 1K to 16K (default 8K)
   - New `/chat/models` API endpoint
-  - Frontend model selector dropdown in sidebar
-  - Model selection persisted to localStorage
+  - Frontend model selector dropdown + token slider in sidebar
+  - Model and token settings persisted to localStorage
+  - Updated Settings > Model Settings with new models and slider
   - Tier icons: ⚜️ Opus, ✦ Sonnet, ◇ Haiku
 
 ### v23-multiverse
