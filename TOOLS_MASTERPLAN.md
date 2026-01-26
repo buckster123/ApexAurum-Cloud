@@ -187,25 +187,282 @@ Multi-agent capabilities - spawn sub-agents for complex tasks.
 
 ---
 
-## Future Tiers (Dreaming)
+---
 
-### Tier 8: Music (The Creative Hands)
-- `music_generate` - Generate via Suno API
-- `music_status` - Check generation status
-- `music_list` - List generated tracks
-- Requires: Suno API key
+# FUTURE TIERS - The Expanding Athanor
 
-### Tier 9: Vector Search (The Searching Hands)
-- `vector_add` - Add to vector store
-- `vector_search` - Semantic search
-- `vector_delete` - Remove vectors
-- Requires: pgvector extension
+*"The Great Work never ends. New hands emerge from the crucible."*
 
-### Tier 10: Browser (The Exploring Hands)
-- `browser_navigate` - Open URL
-- `browser_screenshot` - Capture page
-- `browser_click` - Click element
-- Requires: Browserbase or similar
+## Progress Overview (Future)
+
+| Tier | Name | Tools | Status | Priority |
+|------|------|-------|--------|----------|
+| 8 | Vector Search | 5 | ⬜ PLANNED | 🔴 HIGH |
+| 9 | Music | 4 | ⬜ PLANNED | 🟡 MEDIUM |
+| 10 | Browser | 5 | ⬜ PLANNED | 🟡 MEDIUM |
+| 11 | Email | 4 | ⬜ PLANNED | 🟢 LOW |
+| 12 | Calendar | 4 | ⬜ PLANNED | 🟢 LOW |
+| 13 | Image | 4 | ⬜ PLANNED | 🟡 MEDIUM |
+| **Future Total** | | **26** | | |
+
+---
+
+## Tier 8: Vector Search (The Remembering Deep) ⬜
+
+**Priority:** 🔴 HIGH - Foundation for semantic memory and RAG
+**Requires:** pgvector extension (Railway PostgreSQL supports it)
+
+Semantic search over user content. Enables "remember this" and intelligent retrieval.
+
+| Tool | Description | Status |
+|------|-------------|--------|
+| `vector_store` | Store text with embedding | ⬜ |
+| `vector_search` | Semantic similarity search | ⬜ |
+| `vector_delete` | Remove vectors by ID | ⬜ |
+| `vector_list` | List stored vectors | ⬜ |
+| `vector_stats` | Collection statistics | ⬜ |
+
+**Implementation Notes:**
+- Use pgvector extension for PostgreSQL
+- Embedding model: `text-embedding-3-small` (OpenAI) or local
+- Dimension: 1536 (OpenAI) or 384 (local)
+- Collections scoped per user
+- Auto-embed on store, return with similarity score
+
+**Database Schema:**
+```sql
+CREATE EXTENSION IF NOT EXISTS vector;
+
+CREATE TABLE user_vectors (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id),
+    collection VARCHAR(100) DEFAULT 'default',
+    content TEXT NOT NULL,
+    metadata JSONB DEFAULT '{}',
+    embedding vector(1536),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+
+    CONSTRAINT fk_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_vectors_user ON user_vectors(user_id);
+CREATE INDEX idx_vectors_collection ON user_vectors(user_id, collection);
+CREATE INDEX idx_vectors_embedding ON user_vectors USING ivfflat (embedding vector_cosine_ops);
+```
+
+**Use Cases:**
+- "Remember that I prefer Python over JavaScript"
+- "What did we discuss about the API design?"
+- "Find similar code to this function"
+- Per-user semantic memory layer
+
+**Dependencies:**
+- OpenAI API key for embeddings (or local model)
+- pgvector extension enabled
+
+---
+
+## Tier 9: Music (The Creative Hands) ⬜
+
+**Priority:** 🟡 MEDIUM - Creative feature, already in local ApexAurum
+**Requires:** Suno API key
+
+AI music generation via Suno API.
+
+| Tool | Description | Status |
+|------|-------------|--------|
+| `music_generate` | Generate track from prompt | ⬜ |
+| `music_status` | Check generation status | ⬜ |
+| `music_list` | List user's generated tracks | ⬜ |
+| `music_download` | Get track URL/file | ⬜ |
+
+**Implementation Notes:**
+- Async generation (returns task ID)
+- Poll for completion
+- Store metadata in database
+- Audio files in Vault or external storage
+- Rate limit: 5 generations per hour
+
+**Source Reference:**
+- `/home/hailo/claude-root/Projects/ApexAurum/tools/music.py`
+
+**Database Schema:**
+```sql
+CREATE TABLE music_tracks (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id),
+    suno_id VARCHAR(100),
+    title VARCHAR(255),
+    prompt TEXT,
+    style VARCHAR(100),
+    duration_seconds INTEGER,
+    audio_url TEXT,
+    status VARCHAR(20) DEFAULT 'pending',
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    completed_at TIMESTAMPTZ
+);
+```
+
+---
+
+## Tier 10: Browser (The Exploring Hands) ⬜
+
+**Priority:** 🟡 MEDIUM - Powerful but complex
+**Requires:** Browserbase API or Playwright cloud
+
+Headless browser automation for web interaction.
+
+| Tool | Description | Status |
+|------|-------------|--------|
+| `browser_open` | Open URL in session | ⬜ |
+| `browser_screenshot` | Capture page screenshot | ⬜ |
+| `browser_click` | Click element by selector | ⬜ |
+| `browser_type` | Type text into input | ⬜ |
+| `browser_extract` | Extract text/data from page | ⬜ |
+
+**Implementation Notes:**
+- Session-based (persistent browser context)
+- Screenshot returns base64 or Vault file
+- Selector support: CSS, XPath, text content
+- Timeout: 30s per action
+- Max sessions per user: 2
+
+**Options:**
+1. **Browserbase** - Managed browser API (easiest)
+2. **Playwright** - Self-hosted (more control)
+3. **Puppeteer Cloud** - Google's option
+
+**Use Cases:**
+- Fill out forms
+- Extract data from dynamic pages
+- Take screenshots for verification
+- Automate repetitive web tasks
+
+---
+
+## Tier 11: Email (The Messenger Hands) ⬜
+
+**Priority:** 🟢 LOW - Useful but security-sensitive
+**Requires:** SMTP credentials or email API (SendGrid, Resend)
+
+Send and draft emails on behalf of user.
+
+| Tool | Description | Status |
+|------|-------------|--------|
+| `email_send` | Send email (requires confirmation) | ⬜ |
+| `email_draft` | Create draft without sending | ⬜ |
+| `email_template` | Use saved template | ⬜ |
+| `email_history` | List sent emails | ⬜ |
+
+**Implementation Notes:**
+- ALWAYS require user confirmation before send
+- Store drafts in database
+- Rate limit: 10 emails per hour
+- Template variables: {{name}}, {{date}}, etc.
+- HTML and plain text support
+
+**Security:**
+- User must configure their SMTP/API credentials
+- Never store full credentials, use encrypted vault
+- Log all sent emails
+
+---
+
+## Tier 12: Calendar (The Scheduling Hands) ⬜
+
+**Priority:** 🟢 LOW - Integration-dependent
+**Requires:** Google Calendar API or CalDAV
+
+Calendar management for scheduling.
+
+| Tool | Description | Status |
+|------|-------------|--------|
+| `calendar_list` | List upcoming events | ⬜ |
+| `calendar_create` | Create new event | ⬜ |
+| `calendar_update` | Modify existing event | ⬜ |
+| `calendar_delete` | Remove event | ⬜ |
+
+**Implementation Notes:**
+- OAuth2 for Google Calendar
+- CalDAV for self-hosted calendars
+- Timezone-aware
+- Recurring event support
+- Reminder integration
+
+---
+
+## Tier 13: Image (The Seeing Hands) ⬜
+
+**Priority:** 🟡 MEDIUM - Visual capabilities
+**Requires:** OpenAI DALL-E API or Stability AI
+
+Image generation and analysis.
+
+| Tool | Description | Status |
+|------|-------------|--------|
+| `image_generate` | Generate image from prompt | ⬜ |
+| `image_edit` | Edit/inpaint existing image | ⬜ |
+| `image_analyze` | Describe image contents | ⬜ |
+| `image_variation` | Create variations of image | ⬜ |
+
+**Implementation Notes:**
+- DALL-E 3 for generation
+- Claude Vision for analysis (already available)
+- Store in Vault
+- Size options: 256, 512, 1024
+- Style options: vivid, natural
+
+---
+
+## Future Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                      Tool Tiers (Complete)                       │
+├─────────────────────────────────────────────────────────────────┤
+│  Tier 1-7: Utilities, Web, Vault, KB, Memory, Code, Agents      │
+│            26 tools ✅                                           │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                     Tool Tiers (Future)                          │
+├─────────────────────────────────────────────────────────────────┤
+│  Tier 8:  Vectors   │ Semantic memory, RAG foundation           │
+│  Tier 9:  Music     │ AI music generation (Suno)                │
+│  Tier 10: Browser   │ Web automation (Browserbase)              │
+│  Tier 11: Email     │ Communication (SMTP/API)                  │
+│  Tier 12: Calendar  │ Scheduling (Google/CalDAV)                │
+│  Tier 13: Image     │ Visual generation (DALL-E)                │
+│           26 more tools planned                                  │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    Grand Total: 52 Tools                         │
+│            "The Athanor grows ever more powerful"                │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Implementation Priority
+
+### Phase 1: Foundation (Next)
+- [ ] Tier 8: Vector Search - Enables semantic memory
+- [ ] Enable pgvector on Railway PostgreSQL
+- [ ] Choose embedding provider (OpenAI vs local)
+
+### Phase 2: Creative
+- [ ] Tier 9: Music - Port from local ApexAurum
+- [ ] Tier 13: Image - DALL-E integration
+
+### Phase 3: Automation
+- [ ] Tier 10: Browser - Web automation
+- [ ] Tier 11: Email - Communication
+
+### Phase 4: Integration
+- [ ] Tier 12: Calendar - External services
 
 ---
 
