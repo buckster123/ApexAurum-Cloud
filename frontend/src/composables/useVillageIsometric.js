@@ -483,6 +483,7 @@ export function useVillageIsometric(containerRef, options = {}) {
   const activeZone = ref(null)
   const selectedAgent = shallowRef(null)
   const hoveredObject = shallowRef(null)
+  const webglError = ref(null)
 
   let scene, camera, renderer
   let animationFrameId
@@ -506,6 +507,20 @@ export function useVillageIsometric(containerRef, options = {}) {
       return false
     }
 
+    // Check WebGL support first
+    try {
+      const canvas = document.createElement('canvas')
+      const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl')
+      if (!gl) {
+        throw new Error('WebGL not supported')
+      }
+    } catch (e) {
+      console.error('Village3D: WebGL not available:', e.message)
+      webglError.value = 'WebGL is not available on this device. Please use 2D mode.'
+      options.onWebGLError?.('WebGL not supported')
+      return false
+    }
+
     // Scene
     scene = new THREE.Scene()
     scene.background = new THREE.Color(0x0a0a0f)
@@ -526,8 +541,16 @@ export function useVillageIsometric(containerRef, options = {}) {
     camera.position.set(50, 50, 50)
     camera.lookAt(0, 0, 0)
 
-    // Renderer
-    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
+    // Renderer - wrap in try/catch for WebGL context creation
+    try {
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
+    } catch (e) {
+      console.error('Village3D: Failed to create WebGL renderer:', e.message)
+      webglError.value = 'Failed to create 3D renderer. Please use 2D mode.'
+      options.onWebGLError?.(e.message)
+      return false
+    }
+
     renderer.setSize(width, height)
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     renderer.shadowMap.enabled = true
@@ -920,6 +943,7 @@ export function useVillageIsometric(containerRef, options = {}) {
     activeZone,
     selectedAgent,
     hoveredObject,
+    webglError,
     agents,
     ensureAgent,
     handleToolStart,

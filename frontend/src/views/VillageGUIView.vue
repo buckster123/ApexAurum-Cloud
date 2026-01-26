@@ -150,6 +150,12 @@ function handleTaskClick(task) {
   // Could focus on agent in view
 }
 
+function handleWebGLError(error) {
+  console.warn('WebGL not available, falling back to 2D mode')
+  viewMode.value = '2d'
+  localStorage.setItem('village-view-mode', '2d')
+}
+
 onMounted(() => {
   connectWebSocket()
 })
@@ -224,6 +230,7 @@ onUnmounted(() => {
           <VillageIsometric
             :events="eventLog"
             :status="status"
+            @webgl-error="handleWebGLError"
           />
         </div>
       </div>

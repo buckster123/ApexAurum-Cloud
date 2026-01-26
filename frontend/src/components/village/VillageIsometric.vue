@@ -20,7 +20,7 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['zone-click', 'agent-click'])
+const emit = defineEmits(['zone-click', 'agent-click', 'webgl-error'])
 
 const containerRef = ref(null)
 const showAgentPopup = ref(false)
@@ -42,6 +42,9 @@ const villageOptions = {
   },
   onZoneClick: (zoneName, label) => {
     emit('zone-click', { name: zoneName, label })
+  },
+  onWebGLError: (error) => {
+    emit('webgl-error', error)
   }
 }
 
@@ -50,6 +53,7 @@ const {
   activeZone,
   selectedAgent,
   hoveredObject,
+  webglError,
   agents,
   ensureAgent,
   handleToolStart,
@@ -118,9 +122,22 @@ onMounted(() => {
       class="village-isometric-canvas w-full h-full"
     ></div>
 
+    <!-- WebGL Error overlay -->
+    <div
+      v-if="webglError"
+      class="absolute inset-0 flex items-center justify-center bg-apex-dark"
+    >
+      <div class="text-center max-w-md px-6">
+        <div class="text-4xl mb-4">⚠️</div>
+        <p class="text-red-400 font-medium mb-2">3D Not Available</p>
+        <p class="text-gray-400 text-sm mb-4">{{ webglError }}</p>
+        <p class="text-gray-500 text-xs">Your device doesn't support WebGL. The 2D Canvas view works great!</p>
+      </div>
+    </div>
+
     <!-- Loading overlay -->
     <div
-      v-if="!isInitialized"
+      v-else-if="!isInitialized"
       class="absolute inset-0 flex items-center justify-center bg-apex-dark"
     >
       <div class="text-center">
