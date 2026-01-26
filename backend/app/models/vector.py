@@ -67,8 +67,8 @@ class UserVector(Base):
         default=datetime.utcnow
     )
 
-    # Relationships
-    user = relationship("User", back_populates="vectors")
+    # Relationships - no back_populates to avoid circular dependency
+    user = relationship("User")
 
     __table_args__ = (
         Index('idx_vectors_user_collection', 'user_id', 'collection'),
