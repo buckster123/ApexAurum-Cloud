@@ -1,8 +1,8 @@
 # ApexAurum-Cloud Handover Document
 
 **Date:** 2026-01-26
-**Build:** v26-cortex-phase1
-**Status:** PRODUCTION READY + The Vault Complete + Cortex Diver Phase 1
+**Build:** v26-cortex-phase2
+**Status:** PRODUCTION READY + The Vault + Cortex Diver Phase 2 (Agent Integration)
 
 ---
 
@@ -42,12 +42,31 @@
 - `Ctrl+Shift+A` - Ask agent about selection
 - `Middle-click` on tab - Close tab
 
-### Next Phases
+### Phase 2: Agent Integration (COMPLETE)
 
-**Phase 2: Agent Integration**
-- Wire selection to chat API
-- Agent can propose edits (diff view)
-- Inline code suggestions
+**Frontend:**
+- `AgentPanel.vue` - Chat interface with code awareness
+  - Shows selected code context
+  - Streams responses in real-time
+  - Extracts code blocks from responses
+  - "Apply to Editor" button for suggestions
+  - Sound effects (send/receive/apply)
+- CortexDiver integration:
+  - `handleApplyCode()` - Replace selection or insert at cursor
+  - Selection enriched with filename and language
+
+**Backend:**
+- `save_conversation: bool` parameter added to ChatRequest
+- Cortex Diver chats are ephemeral (don't clutter history)
+
+**Workflow:**
+1. Select code in editor
+2. Press `Ctrl+Shift+A` or right-click "Ask Agent"
+3. Agent panel opens with code context
+4. Ask questions, get code suggestions
+5. Click "Apply to Editor" to use suggested code
+
+### Next Phases
 
 **Phase 3: Terminal & Execution**
 - Sandboxed backend execution
