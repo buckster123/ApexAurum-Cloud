@@ -138,16 +138,24 @@ export const useFilesStore = defineStore('files', () => {
   }
 
   function getFileIcon(fileType) {
+    // Alchemical icons for The Vault
     const icons = {
-      document: '📄',
-      code: '💻',
-      image: '🖼️',
-      data: '📊',
-      archive: '📦',
-      other: '📎',
+      document: '📜',  // Sealed scroll - written wisdom
+      code: '⚗️',      // Alchemical formula - transmutation recipes
+      image: '🪞',     // Scrying mirror - captured reflections
+      data: '💎',      // Faceted stone - crystallized knowledge
+      archive: '🗃️',   // Sealed chest - compressed essence
+      other: '✧',      // Mystical artifact
     }
     return icons[fileType] || icons.other
   }
+
+  // Essence capacity status message
+  const essenceStatus = computed(() => {
+    if (storagePercent.value >= 90) return 'The vessel nears its limit!'
+    if (storagePercent.value >= 75) return 'Essence grows dense...'
+    return 'Essence flows freely'
+  })
 
   // ═══════════════════════════════════════════════════════════════════════════════
   // DIRECTORY ACTIONS
@@ -580,6 +588,7 @@ export const useFilesStore = defineStore('files', () => {
     storageColor,
     formattedStorageUsed,
     formattedStorageQuota,
+    essenceStatus,
 
     // Helpers
     formatBytes,

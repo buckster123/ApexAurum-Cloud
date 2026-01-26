@@ -6,13 +6,23 @@
  * grid/list views, and storage tracking.
  */
 
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useFilesStore } from '@/stores/files'
+import { useSound } from '@/composables/useSound'
 
 const route = useRoute()
 const router = useRouter()
 const store = useFilesStore()
+const { sounds, playTone } = useSound()
+
+// Alchemical sounds for The Vault
+const vaultSounds = {
+  upload: () => playTone(523, 0.15, 'sine', 0.2),      // Crystallization
+  folderOpen: () => playTone(392, 0.1, 'triangle', 0.15), // Unsealing
+  delete: () => playTone(220, 0.2, 'sawtooth', 0.1),   // Dissolution
+  success: () => sounds.success(),
+}
 
 // Local state
 const showNewFolderModal = ref(false)
@@ -246,12 +256,13 @@ function formatDate(dateStr) {
     @dragleave="handleDragLeave"
     @drop="handleDrop"
   >
-    <!-- Drag overlay -->
+    <!-- Drag overlay - Transmutation Portal -->
     <div
       v-if="dragOver"
-      class="fixed inset-0 bg-gold/10 border-4 border-dashed border-gold z-50 flex items-center justify-center pointer-events-none"
+      class="fixed inset-0 bg-amber-500/10 border-4 border-dashed border-amber-500 z-50 flex flex-col items-center justify-center pointer-events-none"
     >
-      <div class="text-2xl text-gold font-bold">Drop files to upload</div>
+      <div class="text-4xl mb-2">⚗️</div>
+      <div class="text-xl text-amber-400 font-bold">Release to transmit</div>
     </div>
 
     <div class="max-w-7xl mx-auto px-4 py-6">
@@ -260,19 +271,20 @@ function formatDate(dateStr) {
         <div>
           <h1 class="text-2xl font-bold text-white flex items-center gap-2">
             <span class="text-gold">The Vault</span>
+            <span class="text-lg opacity-50">⚗️</span>
           </h1>
-          <p class="text-gray-400 text-sm mt-1">Your secure file storage</p>
+          <p class="text-gray-400 text-sm mt-1">Your alchemical sanctum</p>
         </div>
 
-        <!-- Storage indicator -->
+        <!-- Essence Capacity -->
         <div class="text-right">
-          <div class="text-sm text-gray-400">
-            {{ store.formattedStorageUsed }} / {{ store.formattedStorageQuota }}
+          <div class="text-sm text-amber-400/80">
+            Essence: {{ store.formattedStorageUsed }} of {{ store.formattedStorageQuota }}
           </div>
+          <div class="text-xs text-gray-500 mt-0.5">{{ store.essenceStatus }}</div>
           <div class="w-32 h-2 bg-apex-darker rounded-full mt-1 overflow-hidden">
             <div
-              class="h-full transition-all duration-300"
-              :class="store.storageColor"
+              class="h-full transition-all duration-300 bg-gradient-to-r from-amber-600 to-gold"
               :style="{ width: `${store.storagePercent}%` }"
             ></div>
           </div>
@@ -360,7 +372,7 @@ function formatDate(dateStr) {
           Home
         </button>
         <template v-for="(item, index) in store.folderPath" :key="item.id">
-          <span class="text-gray-500">/</span>
+          <span class="text-amber-600/60 mx-1">∴</span>
           <button
             @click="navigateToFolder(item.id)"
             class="text-gray-300 hover:text-gold hover:underline whitespace-nowrap"
@@ -384,14 +396,15 @@ function formatDate(dateStr) {
         </button>
       </div>
 
-      <!-- Empty state -->
+      <!-- Empty state - Alchemical -->
       <div
         v-else-if="store.sortedFolders.length === 0 && store.sortedFiles.length === 0"
         class="text-center py-20"
       >
-        <div class="text-6xl mb-4">📁</div>
-        <p class="text-gray-400 text-lg">This folder is empty</p>
-        <p class="text-gray-500 text-sm mt-2">Upload files or create a folder to get started</p>
+        <div class="text-5xl mb-2 opacity-60">⚗️</div>
+        <div class="text-amber-600/40 text-sm mb-4 font-mono">∴ &nbsp; &nbsp; ∴</div>
+        <p class="text-gray-400 text-lg">The chamber awaits</p>
+        <p class="text-gray-500 text-sm mt-2">Transmit artifacts or conjure a new chamber</p>
       </div>
 
       <!-- Grid View -->
@@ -535,44 +548,44 @@ function formatDate(dateStr) {
       </div>
     </div>
 
-    <!-- Context Menu -->
+    <!-- Context Menu - Alchemical Actions -->
     <div
       v-if="contextMenu.show"
-      class="fixed bg-apex-dark border border-apex-border rounded-lg shadow-xl py-2 z-50"
+      class="fixed bg-apex-dark border border-amber-900/30 rounded-lg shadow-xl py-2 z-50"
       :style="{ left: `${contextMenu.x}px`, top: `${contextMenu.y}px` }"
     >
       <button
         @click="contextAction('open')"
-        class="w-full px-4 py-2 text-left text-sm text-gray-300 hover:bg-apex-border hover:text-white"
+        class="w-full px-4 py-2 text-left text-sm text-gray-300 hover:bg-amber-900/20 hover:text-amber-200"
       >
-        {{ contextMenu.isFolder ? 'Open' : 'Preview' }}
+        {{ contextMenu.isFolder ? '⊛ Enter Chamber' : '◉ Examine' }}
       </button>
       <button
         v-if="!contextMenu.isFolder"
         @click="contextAction('download')"
-        class="w-full px-4 py-2 text-left text-sm text-gray-300 hover:bg-apex-border hover:text-white"
+        class="w-full px-4 py-2 text-left text-sm text-gray-300 hover:bg-amber-900/20 hover:text-amber-200"
       >
-        Download
+        ↓ Distill
       </button>
       <button
         v-if="!contextMenu.isFolder"
         @click="contextAction('favorite')"
-        class="w-full px-4 py-2 text-left text-sm text-gray-300 hover:bg-apex-border hover:text-white"
+        class="w-full px-4 py-2 text-left text-sm text-gray-300 hover:bg-amber-900/20 hover:text-amber-200"
       >
-        {{ contextMenu.item?.favorite ? 'Remove Favorite' : 'Add to Favorites' }}
+        {{ contextMenu.item?.favorite ? '☆ Unstar Artifact' : '★ Star Artifact' }}
       </button>
-      <hr class="my-2 border-apex-border" />
+      <hr class="my-2 border-amber-900/30" />
       <button
         @click="contextAction('rename')"
-        class="w-full px-4 py-2 text-left text-sm text-gray-300 hover:bg-apex-border hover:text-white"
+        class="w-full px-4 py-2 text-left text-sm text-gray-300 hover:bg-amber-900/20 hover:text-amber-200"
       >
-        Rename
+        ∿ Transmute
       </button>
       <button
         @click="contextAction('delete')"
-        class="w-full px-4 py-2 text-left text-sm text-red-400 hover:bg-apex-border hover:text-red-300"
+        class="w-full px-4 py-2 text-left text-sm text-red-400 hover:bg-red-900/20 hover:text-red-300"
       >
-        Delete
+        ⊗ Dissolve
       </button>
     </div>
 
@@ -580,11 +593,11 @@ function formatDate(dateStr) {
     <Teleport to="body">
       <div v-if="showNewFolderModal" class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
         <div class="bg-apex-dark border border-apex-border rounded-lg p-6 w-full max-w-md">
-          <h2 class="text-lg font-bold text-white mb-4">New Folder</h2>
+          <h2 class="text-lg font-bold text-amber-200 mb-4">⊛ Conjure Chamber</h2>
           <input
             v-model="newFolderName"
             type="text"
-            placeholder="Folder name"
+            placeholder="Chamber name"
             class="w-full bg-apex-darker border border-apex-border rounded-lg px-4 py-2 text-white mb-4"
             @keyup.enter="createFolder"
             autofocus
@@ -621,14 +634,14 @@ function formatDate(dateStr) {
     <Teleport to="body">
       <div v-if="showDeleteConfirm" class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
         <div class="bg-apex-dark border border-apex-border rounded-lg p-6 w-full max-w-md">
-          <h2 class="text-lg font-bold text-white mb-4">Delete {{ deleteTarget?.isFolder ? 'Folder' : 'File' }}</h2>
+          <h2 class="text-lg font-bold text-red-400 mb-4">⊗ Dissolve {{ deleteTarget?.isFolder ? 'Chamber' : 'Artifact' }}</h2>
           <p class="text-gray-300 mb-4">
-            Are you sure you want to delete <span class="text-white font-medium">{{ deleteTarget?.item?.name }}</span>?
-            <span v-if="deleteTarget?.isFolder" class="text-red-400">All contents will be permanently deleted.</span>
+            Dissolve <span class="text-white font-medium">{{ deleteTarget?.item?.name }}</span> into the void?
+            <span v-if="deleteTarget?.isFolder" class="text-red-400 block mt-1">All contents will be lost to the aether.</span>
           </p>
           <div class="flex justify-end gap-3">
-            <button @click="showDeleteConfirm = false" class="btn-ghost">Cancel</button>
-            <button @click="confirmDelete" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg">Delete</button>
+            <button @click="showDeleteConfirm = false" class="btn-ghost">Preserve</button>
+            <button @click="confirmDelete" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg">Dissolve</button>
           </div>
         </div>
       </div>
