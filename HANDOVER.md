@@ -2,33 +2,70 @@
 
 **Date:** 2026-01-26
 **Build:** v24-unleashed
-**Status:** PRODUCTION READY - All 6 MASTERPLAN Features Complete + Model Selection!
+**Status:** PRODUCTION READY + The Vault Foundation Started
 
-## Current Session: Unleash the Stones ✅ COMPLETE
+---
 
-**Goal:** Enable full-power models and remove token anxiety for better agent performance.
+## Next Session: The Vault - Sprint 1 Completion
+
+**Goal:** Complete the user file storage system foundation and deploy.
+
+### What's Already Done (This Session)
+- ✅ `backend/app/models/file.py` - File + Folder models created
+- ✅ `backend/app/models/user.py` - Added folders/files relationships
+- ✅ `backend/app/config.py` - Added vault_path, quotas, file limits
+- ✅ `backend/app/models/__init__.py` - Exports updated
+- ✅ Plan written: `/home/hailo/.claude/plans/moonlit-stirring-rabbit.md`
+
+### What Needs to Be Done
+
+**Sprint 1 Remaining (Backend):**
+1. Add database migrations in `database.py` for folders/files tables
+2. Create `backend/app/api/v1/files.py` with:
+   - Folder CRUD endpoints
+   - File upload/download/delete
+   - Directory listing
+   - Quota checking
+
+**Sprint 1 Remaining (Frontend):**
+3. Create `frontend/src/stores/files.js` - Files store
+4. Add route in `frontend/src/router/index.js`
+5. Add "Files" link in `frontend/src/components/Navbar.vue`
+
+**Railway Setup Required:**
+6. Create volume in Railway dashboard:
+   - Service: Backend
+   - Name: `vault`
+   - Mount path: `/data`
+   - Size: 50GB initial
+
+### Key Files to Reference
+- **Plan:** `/home/hailo/.claude/plans/moonlit-stirring-rabbit.md` (full implementation details)
+- **Model:** `backend/app/models/file.py` (File, Folder, extension validation)
+- **Config:** `backend/app/config.py` (vault_path, quotas)
+
+### Quick Start Commands
+```bash
+# Health check
+curl https://backend-production-507c.up.railway.app/health
+
+# After API deployed, test files endpoint
+curl -H "Authorization: Bearer TOKEN" \
+  https://backend-production-507c.up.railway.app/api/v1/files
+```
+
+---
+
+## Previous Session: Unleash the Stones ✅ COMPLETE
+
+**Goal:** Enable full-power models and remove token anxiety.
 
 ### What Was Implemented
-1. **Model Registry** - Claude 4.5 family now available:
-   - ⚜️ Claude Opus 4.5 (`claude-opus-4-5-20251101`) - Most powerful, deep reasoning
-   - ✦ Claude Sonnet 4.5 (`claude-sonnet-4-5-20250929`) - Excellent balance (DEFAULT)
-   - ◇ Claude Haiku 4.5 (`claude-haiku-4-5-20251001`) - Fastest, efficient
-
-2. **Max Tokens Control** - Slider in sidebar (1K to 16K)
-   - Default: 8192
-   - Opus/Sonnet 4.5 support up to 16384
-   - Persisted to localStorage
-
-3. **Model Selector UI** - Dropdown in sidebar with tier icons
-
-4. **Settings Sync** - Updated Settings > Model Settings with new models
-
-### Key Changes
-- `backend/app/services/claude.py` - AVAILABLE_MODELS registry, defaults
-- `backend/app/api/v1/chat.py` - `/chat/models` endpoint, max_tokens in ChatRequest
-- `frontend/src/stores/chat.js` - Model + maxTokens state and actions
-- `frontend/src/views/ChatView.vue` - Model dropdown + tokens slider
-- `frontend/src/views/SettingsView.vue` - Updated model list, token slider to 16K
+1. **Model Registry** - Claude 4.5 family:
+   - ⚜️ Opus 4.5, ✦ Sonnet 4.5 (default), ◇ Haiku 4.5
+2. **Max Tokens Control** - Slider 1K-16K in sidebar
+3. **Model Selector UI** - Dropdown with tier icons
+4. **Settings Sync** - Updated model list and token slider
 
 ### Philosophy
 *"The more context-freedom and the less token-anxiety the natives have, the better they perform"*
