@@ -208,6 +208,125 @@ async def init_db():
                 NULL;
             END $$;
             """,
+            # ═══════════════════════════════════════════════════════════════════════
+            # TIER 11: NEO-CORTEX - Unified Memory System
+            # Memory layers, visibility realms, attention tracking
+            # ═══════════════════════════════════════════════════════════════════════
+            """
+            DO $$
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                               WHERE table_name = 'user_vectors' AND column_name = 'layer') THEN
+                    ALTER TABLE user_vectors ADD COLUMN layer VARCHAR(20) DEFAULT 'working' NOT NULL;
+                END IF;
+            END $$;
+            """,
+            """
+            DO $$
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                               WHERE table_name = 'user_vectors' AND column_name = 'visibility') THEN
+                    ALTER TABLE user_vectors ADD COLUMN visibility VARCHAR(20) DEFAULT 'private' NOT NULL;
+                END IF;
+            END $$;
+            """,
+            """
+            DO $$
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                               WHERE table_name = 'user_vectors' AND column_name = 'agent_id') THEN
+                    ALTER TABLE user_vectors ADD COLUMN agent_id VARCHAR(50);
+                END IF;
+            END $$;
+            """,
+            """
+            DO $$
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                               WHERE table_name = 'user_vectors' AND column_name = 'message_type') THEN
+                    ALTER TABLE user_vectors ADD COLUMN message_type VARCHAR(50) DEFAULT 'observation' NOT NULL;
+                END IF;
+            END $$;
+            """,
+            """
+            DO $$
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                               WHERE table_name = 'user_vectors' AND column_name = 'attention_weight') THEN
+                    ALTER TABLE user_vectors ADD COLUMN attention_weight FLOAT DEFAULT 1.0 NOT NULL;
+                END IF;
+            END $$;
+            """,
+            """
+            DO $$
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                               WHERE table_name = 'user_vectors' AND column_name = 'access_count') THEN
+                    ALTER TABLE user_vectors ADD COLUMN access_count INTEGER DEFAULT 0 NOT NULL;
+                END IF;
+            END $$;
+            """,
+            """
+            DO $$
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                               WHERE table_name = 'user_vectors' AND column_name = 'last_accessed_at') THEN
+                    ALTER TABLE user_vectors ADD COLUMN last_accessed_at TIMESTAMP WITH TIME ZONE;
+                END IF;
+            END $$;
+            """,
+            """
+            DO $$
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                               WHERE table_name = 'user_vectors' AND column_name = 'responding_to') THEN
+                    ALTER TABLE user_vectors ADD COLUMN responding_to JSONB DEFAULT '[]'::jsonb NOT NULL;
+                END IF;
+            END $$;
+            """,
+            """
+            DO $$
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                               WHERE table_name = 'user_vectors' AND column_name = 'conversation_thread') THEN
+                    ALTER TABLE user_vectors ADD COLUMN conversation_thread VARCHAR(100);
+                END IF;
+            END $$;
+            """,
+            """
+            DO $$
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                               WHERE table_name = 'user_vectors' AND column_name = 'related_agents') THEN
+                    ALTER TABLE user_vectors ADD COLUMN related_agents JSONB DEFAULT '[]'::jsonb NOT NULL;
+                END IF;
+            END $$;
+            """,
+            """
+            DO $$
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                               WHERE table_name = 'user_vectors' AND column_name = 'tags') THEN
+                    ALTER TABLE user_vectors ADD COLUMN tags JSONB DEFAULT '[]'::jsonb NOT NULL;
+                END IF;
+            END $$;
+            """,
+            # Neo-Cortex indexes
+            """
+            CREATE INDEX IF NOT EXISTS idx_vectors_layer ON user_vectors(layer);
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS idx_vectors_visibility ON user_vectors(visibility);
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS idx_vectors_agent ON user_vectors(agent_id);
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS idx_vectors_user_visibility ON user_vectors(user_id, visibility);
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS idx_vectors_user_layer ON user_vectors(user_id, layer);
+            """,
         ]
 
         from sqlalchemy import text
