@@ -1,0 +1,553 @@
+"""
+Billing Service - Usage tracking, limits enforcement, and Stripe integration.
+
+Handles:
+- Subscription limit checking
+- Credit balance management
+- Usage recording
+- Stripe customer/subscription management
+"""
+
+import logging
+from datetime import datetime
+from typing import Optional, Tuple
+from uuid import UUID, uuid4
+
+import stripe
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.config import get_settings, TIER_LIMITS, CREDIT_PACKS
+from app.models.billing import Subscription, CreditBalance, CreditTransaction, WebhookEvent
+from app.models.user import User
+from app.services.pricing import calculate_cost_cents, get_tier_for_model
+
+logger = logging.getLogger(__name__)
+settings = get_settings()
+
+# Initialize Stripe
+if settings.stripe_secret_key:
+    stripe.api_key = settings.stripe_secret_key
+
+
+class BillingService:
+    """
+    Service for billing operations.
+
+    Provides methods for:
+    - Checking if user can send messages
+    - Checking if user can use specific models/features
+    - Recording usage (subscription counter or credit deduction)
+    - Managing subscriptions and credits
+    """
+
+    def __init__(self, db: AsyncSession):
+        self.db = db
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # SUBSCRIPTION MANAGEMENT
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    async def get_or_create_subscription(self, user_id: UUID) -> Subscription:
+        """
+        Get user's subscription, creating free tier if none exists.
+
+        Also ensures Stripe customer exists.
+        """
+        result = await self.db.execute(
+            select(Subscription).where(Subscription.user_id == user_id)
+        )
+        subscription = result.scalar_one_or_none()
+
+        if subscription:
+            return subscription
+
+        # Get user for Stripe customer creation
+        user_result = await self.db.execute(
+            select(User).where(User.id == user_id)
+        )
+        user = user_result.scalar_one_or_none()
+        if not user:
+            raise ValueError(f"User {user_id} not found")
+
+        # Create Stripe customer
+        stripe_customer_id = await self._create_stripe_customer(user)
+
+        # Create free subscription
+        subscription = Subscription(
+            id=uuid4(),
+            user_id=user_id,
+            stripe_customer_id=stripe_customer_id,
+            tier="free",
+            status="active",
+            messages_used=0,
+            messages_limit=TIER_LIMITS["free"]["messages_per_month"],
+        )
+        self.db.add(subscription)
+        await self.db.flush()
+
+        logger.info(f"Created free subscription for user {user_id}")
+        return subscription
+
+    async def _create_stripe_customer(self, user: User) -> str:
+        """Create Stripe customer for user."""
+        if not settings.stripe_secret_key:
+            # Return placeholder if Stripe not configured
+            return f"cus_local_{user.id}"
+
+        try:
+            customer = stripe.Customer.create(
+                email=user.email,
+                name=user.display_name or user.email.split("@")[0],
+                metadata={"user_id": str(user.id)},
+            )
+            logger.info(f"Created Stripe customer {customer.id} for user {user.id}")
+            return customer.id
+        except stripe.StripeError as e:
+            logger.error(f"Failed to create Stripe customer: {e}")
+            # Return placeholder on error
+            return f"cus_error_{user.id}"
+
+    async def get_subscription_status(self, user_id: UUID) -> dict:
+        """Get comprehensive subscription status for API response."""
+        subscription = await self.get_or_create_subscription(user_id)
+        credit_balance = await self.get_or_create_credit_balance(user_id)
+
+        tier_config = TIER_LIMITS.get(subscription.tier, TIER_LIMITS["free"])
+        messages_limit = tier_config["messages_per_month"]
+
+        # Calculate remaining messages
+        messages_remaining = None
+        if messages_limit is not None:
+            messages_remaining = max(0, messages_limit - subscription.messages_used)
+
+        # Check if at or near limit
+        at_limit = messages_remaining == 0 if messages_remaining is not None else False
+        near_limit = (
+            messages_remaining is not None
+            and messages_limit is not None
+            and messages_remaining <= messages_limit * 0.2
+        )
+
+        return {
+            "tier": subscription.tier,
+            "subscription_status": subscription.status,
+            "messages_used": subscription.messages_used,
+            "messages_limit": messages_limit,
+            "messages_remaining": messages_remaining,
+            "current_period_end": subscription.current_period_end,
+            "cancel_at_period_end": subscription.cancel_at_period_end,
+            "credit_balance_cents": credit_balance.balance_cents,
+            "credit_balance_usd": credit_balance.balance_cents / 100,
+            "features": {
+                "models": tier_config["models"],
+                "tools_enabled": tier_config["tools_enabled"],
+                "multi_provider": tier_config["multi_provider"],
+                "byok_allowed": tier_config["byok_allowed"],
+                "api_access": tier_config.get("api_access", False),
+            },
+            "at_limit": at_limit,
+            "near_limit": near_limit,
+        }
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # CREDIT MANAGEMENT
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    async def get_or_create_credit_balance(self, user_id: UUID) -> CreditBalance:
+        """Get user's credit balance, creating if none exists."""
+        result = await self.db.execute(
+            select(CreditBalance).where(CreditBalance.user_id == user_id)
+        )
+        credit_balance = result.scalar_one_or_none()
+
+        if credit_balance:
+            return credit_balance
+
+        # Create empty balance
+        credit_balance = CreditBalance(
+            id=uuid4(),
+            user_id=user_id,
+            balance_cents=0,
+            total_purchased_cents=0,
+            total_used_cents=0,
+        )
+        self.db.add(credit_balance)
+        await self.db.flush()
+
+        return credit_balance
+
+    async def add_credits(
+        self,
+        user_id: UUID,
+        amount_cents: int,
+        transaction_type: str = "purchase",
+        description: Optional[str] = None,
+        stripe_payment_intent_id: Optional[str] = None,
+        metadata: Optional[dict] = None,
+    ) -> CreditBalance:
+        """
+        Add credits to user's balance.
+
+        Creates transaction record for audit trail.
+        """
+        credit_balance = await self.get_or_create_credit_balance(user_id)
+
+        # Update balance
+        credit_balance.balance_cents += amount_cents
+        if transaction_type == "purchase":
+            credit_balance.total_purchased_cents += amount_cents
+
+        # Create transaction record
+        transaction = CreditTransaction(
+            id=uuid4(),
+            user_id=user_id,
+            amount_cents=amount_cents,
+            balance_after=credit_balance.balance_cents,
+            transaction_type=transaction_type,
+            description=description or f"Added {amount_cents} credits",
+            stripe_payment_intent_id=stripe_payment_intent_id,
+            metadata=metadata or {},
+        )
+        self.db.add(transaction)
+        await self.db.flush()
+
+        logger.info(f"Added {amount_cents}c credits to user {user_id}, balance now {credit_balance.balance_cents}c")
+        return credit_balance
+
+    async def deduct_credits(
+        self,
+        user_id: UUID,
+        amount_cents: int,
+        description: Optional[str] = None,
+        message_id: Optional[UUID] = None,
+        metadata: Optional[dict] = None,
+    ) -> bool:
+        """
+        Deduct credits from user's balance.
+
+        Returns True if successful, False if insufficient funds.
+        """
+        credit_balance = await self.get_or_create_credit_balance(user_id)
+
+        if credit_balance.balance_cents < amount_cents:
+            return False
+
+        # Update balance
+        credit_balance.balance_cents -= amount_cents
+        credit_balance.total_used_cents += amount_cents
+
+        # Create transaction record
+        transaction = CreditTransaction(
+            id=uuid4(),
+            user_id=user_id,
+            amount_cents=-amount_cents,  # Negative for deduction
+            balance_after=credit_balance.balance_cents,
+            transaction_type="usage",
+            description=description or f"Deducted {amount_cents} credits",
+            message_id=message_id,
+            metadata=metadata or {},
+        )
+        self.db.add(transaction)
+        await self.db.flush()
+
+        logger.debug(f"Deducted {amount_cents}c from user {user_id}, balance now {credit_balance.balance_cents}c")
+        return True
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # USAGE CHECKS & ENFORCEMENT
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    async def can_send_message(self, user_id: UUID) -> Tuple[bool, str]:
+        """
+        Check if user can send a message.
+
+        Logic:
+        1. Check subscription limit first
+        2. If at limit, check credit balance
+        3. Return (allowed, reason)
+        """
+        subscription = await self.get_or_create_subscription(user_id)
+        tier_config = TIER_LIMITS.get(subscription.tier, TIER_LIMITS["free"])
+
+        # Check subscription status
+        if subscription.status not in ("active", "trialing"):
+            return False, "subscription_inactive"
+
+        # Check subscription limit
+        messages_limit = tier_config["messages_per_month"]
+        if messages_limit is None:
+            # Unlimited (opus tier)
+            return True, "subscription"
+
+        if subscription.messages_used < messages_limit:
+            return True, "subscription"
+
+        # At subscription limit, check credits
+        credit_balance = await self.get_or_create_credit_balance(user_id)
+        if credit_balance.balance_cents > 0:
+            return True, "credits"
+
+        return False, "limit_reached"
+
+    async def can_use_model(self, user_id: UUID, model: str) -> bool:
+        """Check if user's tier allows the specified model."""
+        subscription = await self.get_or_create_subscription(user_id)
+        tier_config = TIER_LIMITS.get(subscription.tier, TIER_LIMITS["free"])
+
+        allowed_models = tier_config["models"]
+
+        # Check exact match first
+        if model in allowed_models:
+            return True
+
+        # Check model tier requirement
+        required_tier = get_tier_for_model(model)
+        tier_hierarchy = {"free": 0, "pro": 1, "opus": 2}
+
+        user_tier_level = tier_hierarchy.get(subscription.tier, 0)
+        required_tier_level = tier_hierarchy.get(required_tier, 0)
+
+        return user_tier_level >= required_tier_level
+
+    async def can_use_tools(self, user_id: UUID) -> bool:
+        """Check if user's tier allows tool usage."""
+        subscription = await self.get_or_create_subscription(user_id)
+        tier_config = TIER_LIMITS.get(subscription.tier, TIER_LIMITS["free"])
+        return tier_config["tools_enabled"]
+
+    async def can_use_multi_provider(self, user_id: UUID) -> bool:
+        """Check if user's tier allows multi-provider LLMs."""
+        subscription = await self.get_or_create_subscription(user_id)
+        tier_config = TIER_LIMITS.get(subscription.tier, TIER_LIMITS["free"])
+        return tier_config["multi_provider"]
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # USAGE RECORDING
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    async def record_message_usage(
+        self,
+        user_id: UUID,
+        provider: str,
+        model: str,
+        input_tokens: int,
+        output_tokens: int,
+        message_id: Optional[UUID] = None,
+    ) -> dict:
+        """
+        Record message usage, either incrementing subscription counter or deducting credits.
+
+        Returns usage info for the message.
+        """
+        subscription = await self.get_or_create_subscription(user_id)
+        tier_config = TIER_LIMITS.get(subscription.tier, TIER_LIMITS["free"])
+        messages_limit = tier_config["messages_per_month"]
+
+        # Calculate cost
+        cost_cents = calculate_cost_cents(provider, model, input_tokens, output_tokens)
+
+        usage_info = {
+            "provider": provider,
+            "model": model,
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "cost_cents": cost_cents,
+            "billing_type": None,
+        }
+
+        # Check if should use subscription or credits
+        if messages_limit is None or subscription.messages_used < messages_limit:
+            # Use subscription allowance
+            subscription.messages_used += 1
+            usage_info["billing_type"] = "subscription"
+            usage_info["messages_remaining"] = (
+                None if messages_limit is None
+                else messages_limit - subscription.messages_used
+            )
+        else:
+            # Use credits
+            success = await self.deduct_credits(
+                user_id=user_id,
+                amount_cents=cost_cents,
+                description=f"{model}: {input_tokens}in/{output_tokens}out tokens",
+                message_id=message_id,
+                metadata={
+                    "provider": provider,
+                    "model": model,
+                    "input_tokens": input_tokens,
+                    "output_tokens": output_tokens,
+                },
+            )
+            if not success:
+                logger.warning(f"Failed to deduct credits for user {user_id}")
+
+            credit_balance = await self.get_or_create_credit_balance(user_id)
+            usage_info["billing_type"] = "credits"
+            usage_info["credits_remaining"] = credit_balance.balance_cents
+
+        await self.db.flush()
+        return usage_info
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # SUBSCRIPTION PERIOD RESET
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    async def reset_subscription_usage(self, user_id: UUID) -> None:
+        """Reset subscription message counter (called when new billing period starts)."""
+        result = await self.db.execute(
+            select(Subscription).where(Subscription.user_id == user_id)
+        )
+        subscription = result.scalar_one_or_none()
+
+        if subscription:
+            subscription.messages_used = 0
+            await self.db.flush()
+            logger.info(f"Reset usage counter for user {user_id}")
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # WEBHOOK IDEMPOTENCY
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    async def is_webhook_processed(self, event_id: str) -> bool:
+        """Check if webhook event has already been processed."""
+        result = await self.db.execute(
+            select(WebhookEvent).where(WebhookEvent.id == event_id)
+        )
+        return result.scalar_one_or_none() is not None
+
+    async def mark_webhook_processed(
+        self,
+        event_id: str,
+        event_type: str,
+        payload: Optional[dict] = None,
+    ) -> None:
+        """Mark webhook event as processed."""
+        event = WebhookEvent(
+            id=event_id,
+            event_type=event_type,
+            processed_at=datetime.utcnow(),
+            payload=payload,
+        )
+        self.db.add(event)
+        await self.db.flush()
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # STRIPE CHECKOUT
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    async def create_subscription_checkout(
+        self,
+        user_id: UUID,
+        tier: str,
+        success_url: str,
+        cancel_url: str,
+    ) -> dict:
+        """Create Stripe Checkout session for subscription."""
+        if not settings.stripe_secret_key:
+            raise ValueError("Stripe not configured")
+
+        subscription = await self.get_or_create_subscription(user_id)
+
+        # Get price ID for tier
+        price_id = None
+        if tier == "pro":
+            price_id = settings.stripe_price_pro_monthly
+        elif tier == "opus":
+            price_id = settings.stripe_price_opus_monthly
+        else:
+            raise ValueError(f"Invalid tier: {tier}")
+
+        if not price_id:
+            raise ValueError(f"Price not configured for tier: {tier}")
+
+        try:
+            session = stripe.checkout.Session.create(
+                customer=subscription.stripe_customer_id,
+                mode="subscription",
+                line_items=[{"price": price_id, "quantity": 1}],
+                success_url=success_url,
+                cancel_url=cancel_url,
+                automatic_tax={"enabled": True},
+                billing_address_collection="required",
+                metadata={"user_id": str(user_id), "tier": tier},
+            )
+            return {
+                "checkout_url": session.url,
+                "session_id": session.id,
+            }
+        except stripe.StripeError as e:
+            logger.error(f"Stripe checkout error: {e}")
+            raise
+
+    async def create_credits_checkout(
+        self,
+        user_id: UUID,
+        pack: str,
+        success_url: str,
+        cancel_url: str,
+    ) -> dict:
+        """Create Stripe Checkout session for credit purchase."""
+        if not settings.stripe_secret_key:
+            raise ValueError("Stripe not configured")
+
+        subscription = await self.get_or_create_subscription(user_id)
+
+        # Get price ID for pack
+        price_id = None
+        if pack == "small":
+            price_id = settings.stripe_price_credits_500
+        elif pack == "large":
+            price_id = settings.stripe_price_credits_2500
+        else:
+            raise ValueError(f"Invalid pack: {pack}")
+
+        if not price_id:
+            raise ValueError(f"Price not configured for pack: {pack}")
+
+        pack_config = CREDIT_PACKS[pack]
+        total_credits = pack_config["credits"] + pack_config["bonus"]
+
+        try:
+            session = stripe.checkout.Session.create(
+                customer=subscription.stripe_customer_id,
+                mode="payment",
+                line_items=[{"price": price_id, "quantity": 1}],
+                success_url=success_url,
+                cancel_url=cancel_url,
+                automatic_tax={"enabled": True},
+                billing_address_collection="required",
+                metadata={
+                    "user_id": str(user_id),
+                    "pack": pack,
+                    "credits": str(total_credits),
+                },
+            )
+            return {
+                "checkout_url": session.url,
+                "session_id": session.id,
+            }
+        except stripe.StripeError as e:
+            logger.error(f"Stripe checkout error: {e}")
+            raise
+
+    async def create_portal_session(
+        self,
+        user_id: UUID,
+        return_url: str,
+    ) -> dict:
+        """Create Stripe Customer Portal session."""
+        if not settings.stripe_secret_key:
+            raise ValueError("Stripe not configured")
+
+        subscription = await self.get_or_create_subscription(user_id)
+
+        try:
+            session = stripe.billing_portal.Session.create(
+                customer=subscription.stripe_customer_id,
+                return_url=return_url,
+            )
+            return {"portal_url": session.url}
+        except stripe.StripeError as e:
+            logger.error(f"Stripe portal error: {e}")
+            raise

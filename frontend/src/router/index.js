@@ -80,6 +80,18 @@ const router = createRouter({
       component: () => import('@/views/VillageGUIView.vue'),
       meta: { requiresAuth: true }
     },
+    {
+      path: '/billing',
+      name: 'billing',
+      component: () => import('@/views/BillingView.vue'),
+      meta: { requiresAuth: false }  // Allow viewing pricing without auth
+    },
+    {
+      path: '/billing/success',
+      name: 'billing-success',
+      component: () => import('@/views/BillingView.vue'),
+      meta: { requiresAuth: true }  // Need auth to verify purchase
+    },
   ]
 })
 

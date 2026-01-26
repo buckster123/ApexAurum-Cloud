@@ -379,3 +379,28 @@ async def close_db():
 def async_session():
     """Get async session factory. Usage: async with async_session() as db: ..."""
     return get_session_factory()()
+
+
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def get_db_context():
+    """
+    Async context manager for database sessions outside of request handlers.
+
+    Use this for webhooks and background tasks where you need manual session control.
+
+    Usage:
+        async with get_db_context() as db:
+            # use db session
+            await db.commit()  # commit manually
+    """
+    session_factory = get_session_factory()
+    async with session_factory() as session:
+        try:
+            yield session
+        except Exception:
+            await session.rollback()
+            raise
+        finally:
+            await session.close()

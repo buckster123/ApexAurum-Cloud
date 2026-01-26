@@ -52,6 +52,17 @@ class Settings(BaseSettings):
     # Steel Browser
     steel_url: Optional[str] = None  # e.g., https://steel-browser-production-d237.up.railway.app
 
+    # Stripe (Billing & Monetization)
+    stripe_secret_key: Optional[str] = None
+    stripe_publishable_key: Optional[str] = None
+    stripe_webhook_secret: Optional[str] = None
+
+    # Stripe Price IDs (create these in Stripe Dashboard)
+    stripe_price_pro_monthly: Optional[str] = None  # $9.99/mo subscription
+    stripe_price_opus_monthly: Optional[str] = None  # $29.99/mo subscription
+    stripe_price_credits_500: Optional[str] = None  # $5 for 500 credits
+    stripe_price_credits_2500: Optional[str] = None  # $20 for 2500 credits
+
     # Embedding config (for vector search)
     embedding_provider: str = "openai"  # "openai" or "voyage"
     embedding_model: str = "text-embedding-3-small"  # OpenAI model
@@ -86,3 +97,59 @@ class Settings(BaseSettings):
 def get_settings() -> Settings:
     """Get cached settings instance."""
     return Settings()
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TIER CONFIGURATION - Feature limits by subscription tier
+# ═══════════════════════════════════════════════════════════════════════════════
+
+TIER_LIMITS = {
+    "free": {
+        "name": "Seeker",
+        "messages_per_month": 50,
+        "models": ["claude-haiku-4-5-20251001"],
+        "tools_enabled": False,
+        "multi_provider": False,
+        "byok_allowed": False,
+        "api_access": False,
+    },
+    "pro": {
+        "name": "Alchemist",
+        "messages_per_month": 1000,
+        "models": [
+            "claude-haiku-4-5-20251001",
+            "claude-sonnet-4-5-20250929",
+        ],
+        "tools_enabled": True,
+        "multi_provider": False,
+        "byok_allowed": True,
+        "api_access": False,
+    },
+    "opus": {
+        "name": "Adept",
+        "messages_per_month": None,  # Unlimited
+        "models": [
+            "claude-haiku-4-5-20251001",
+            "claude-sonnet-4-5-20250929",
+            "claude-opus-4-5-20251101",
+        ],
+        "tools_enabled": True,
+        "multi_provider": True,
+        "byok_allowed": True,
+        "api_access": True,
+    },
+}
+
+# Credit packs available for purchase
+CREDIT_PACKS = {
+    "small": {
+        "price_usd": 5.00,
+        "credits": 500,
+        "bonus": 0,
+    },
+    "large": {
+        "price_usd": 20.00,
+        "credits": 2000,
+        "bonus": 500,  # 25% bonus = 2500 total
+    },
+}

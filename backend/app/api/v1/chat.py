@@ -42,7 +42,10 @@ from app.services.memory import MemoryService
 from app.services.tool_executor import create_tool_executor
 from app.tools import registry as tool_registry, ToolContext, ToolCategory
 from app.api.v1.user import get_user_api_key
+from app.services.billing import BillingService
+from app.config import get_settings
 
+settings = get_settings()
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
@@ -447,9 +450,68 @@ async def send_message(
             detail="Please log in to chat with the Agents."
         )
 
+    # ═══════════════════════════════════════════════════════════════════════════
+    # BILLING CHECKS (only if Stripe is configured)
+    # ═══════════════════════════════════════════════════════════════════════════
+    billing_service = None
+    if settings.stripe_secret_key:
+        billing_service = BillingService(db)
+
+        # Check if user can send a message (subscription limit or credits)
+        can_send, billing_reason = await billing_service.can_send_message(user.id)
+        if not can_send:
+            raise HTTPException(
+                status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                detail={
+                    "error": "usage_limit",
+                    "message": "You've reached your monthly message limit. Purchase credits or upgrade your plan to continue.",
+                    "reason": billing_reason,
+                    "action": "upgrade_or_credits"
+                }
+            )
+
     # Determine which provider to use
     provider = request.provider or "anthropic"
     model = request.model or get_default_model(provider)
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # TIER-BASED ACCESS CHECKS (only if Stripe is configured)
+    # ═══════════════════════════════════════════════════════════════════════════
+    if billing_service:
+        # Check if user can use the requested model
+        if not await billing_service.can_use_model(user.id, model):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={
+                    "error": "model_not_allowed",
+                    "message": f"Your current plan doesn't include access to {model}. Upgrade to use this model.",
+                    "model": model,
+                    "action": "upgrade"
+                }
+            )
+
+        # Check if user can use tools (if requested)
+        if request.use_tools and not await billing_service.can_use_tools(user.id):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={
+                    "error": "tools_not_allowed",
+                    "message": "Tools are not available on the free tier. Upgrade to Pro or Opus to use tools.",
+                    "action": "upgrade"
+                }
+            )
+
+        # Check if user can use multi-provider (non-anthropic providers)
+        if provider != "anthropic" and not await billing_service.can_use_multi_provider(user.id):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={
+                    "error": "multi_provider_not_allowed",
+                    "message": "Multi-provider LLMs are only available on the Opus tier.",
+                    "provider": provider,
+                    "action": "upgrade"
+                }
+            )
 
     # For Anthropic, use user's BYOK key
     # For other providers, use platform keys (env vars)
@@ -726,6 +788,7 @@ async def send_message(
                     assistant_content += block["text"]
 
             # Save assistant message (only if saving conversation)
+            assistant_msg_id = None
             if conversation and request.save_conversation:
                 assistant_msg = Message(
                     id=uuid4(),
@@ -736,6 +799,21 @@ async def send_message(
                     tool_results=tool_results if tool_results else None,
                 )
                 db.add(assistant_msg)
+                assistant_msg_id = assistant_msg.id
+                await db.commit()
+
+            # Record billing usage (if Stripe is configured)
+            usage_info = None
+            usage = response.get("usage", {})
+            if billing_service and usage:
+                usage_info = await billing_service.record_message_usage(
+                    user_id=user.id,
+                    provider=provider,
+                    model=response.get("model", model),
+                    input_tokens=usage.get("input_tokens", 0),
+                    output_tokens=usage.get("output_tokens", 0),
+                    message_id=assistant_msg_id,
+                )
                 await db.commit()
 
             return {
@@ -746,6 +824,7 @@ async def send_message(
                 "usage": response.get("usage"),
                 "tool_calls": tool_calls if tool_calls else None,
                 "tool_results": tool_results if tool_results else None,
+                "billing": usage_info,
             }
 
         except Exception as e:

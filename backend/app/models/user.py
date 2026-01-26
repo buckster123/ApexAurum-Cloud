@@ -47,6 +47,10 @@ class User(Base):
     memories = relationship("Memory", back_populates="user", cascade="all, delete-orphan")
     music_tasks = relationship("MusicTask", back_populates="user", cascade="all, delete-orphan")
 
+    # Billing & Monetization
+    subscription = relationship("Subscription", back_populates="user", uselist=False, cascade="all, delete-orphan")
+    credit_balance = relationship("CreditBalance", back_populates="user", uselist=False, cascade="all, delete-orphan")
+
     # The Vault - File Storage
     folders = relationship("Folder", back_populates="user", cascade="all, delete-orphan")
     files = relationship("File", back_populates="user", cascade="all, delete-orphan")
