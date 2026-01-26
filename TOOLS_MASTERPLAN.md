@@ -285,6 +285,16 @@ Each tier has a poetic name reflecting its nature:
 
 ## Changelog
 
+### 2026-01-26 - v35-vault-fix
+- Fixed vault tools import error (`app.models.file` not `files`)
+- Fixed File model attributes (`name` not `filename`, `size_bytes` not `size`)
+- Added Tools Panel to Settings:
+  - Shows tool count badge
+  - Expandable list grouped by category
+  - Category icons (Utilities, Web, Vault, Memory, Knowledge, Agents)
+  - Tooltip descriptions on hover
+- All 24 tools now loading correctly
+
 ### 2026-01-26 - v34-spawning-hands
 - Completed Tier 7: Agent Tools (3 tools) - FINAL TIER!
 - `agent_spawn` - Spawn background agents (research, code, writer, analyst)
