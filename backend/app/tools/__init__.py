@@ -97,6 +97,7 @@ class ToolRegistry:
             ToolResult with success/failure
         """
         import time
+        from app.services.village_events import get_village_broadcaster
 
         tool = self.get_tool(name)
         if not tool:
@@ -113,14 +114,34 @@ class ToolRegistry:
                 error=error,
             )
 
+        # Get Village broadcaster for real-time visualization
+        broadcaster = get_village_broadcaster()
+        agent_id = getattr(context, 'agent_id', None) or "CLAUDE"
+
+        # Broadcast tool start to Village GUI
+        await broadcaster.broadcast_tool_start(name, params, agent_id)
+
         # Execute with timing
         start_time = time.time()
         try:
             result = await tool.execute(params, context)
             result.execution_time_ms = (time.time() - start_time) * 1000
+
+            # Broadcast tool complete to Village GUI
+            await broadcaster.broadcast_tool_complete(
+                name,
+                result.data if result.success else result.error,
+                success=result.success,
+                agent_id=agent_id
+            )
+
             return result
         except Exception as e:
             logger.exception(f"Tool execution failed: {name}")
+
+            # Broadcast tool error to Village GUI
+            await broadcaster.broadcast_tool_error(name, str(e), agent_id)
+
             return ToolResult(
                 success=False,
                 error=str(e),

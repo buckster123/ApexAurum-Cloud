@@ -51,7 +51,7 @@ async def lifespan(app: FastAPI):
     """Application lifespan manager."""
     # Startup
     print("=" * 50)
-    print("ApexAurum Cloud v41 - Neural Space")
+    print("ApexAurum Cloud v42 - Village WebSocket")
     print("=" * 50)
 
     # Import all models before database init to ensure SQLAlchemy
@@ -120,7 +120,7 @@ async def health_check():
     return {
         "status": "healthy",
         "version": "0.1.0",
-        "build": "v41-neural-space",
+        "build": "v42-village-ws",
         "agents": {
             "native": 5,
             "pac": 4,
@@ -146,6 +146,7 @@ async def health_check():
             "steel-browser",
             "neo-cortex",
             "neural-space-3d",
+            "village-websocket",
         ],
     }
 
@@ -165,6 +166,10 @@ async def root():
 
 # Mount API v1 router
 app.include_router(api_v1_router, prefix="/api/v1")
+
+# Mount WebSocket router for Village GUI
+from app.api.v1.village_ws import router as village_ws_router
+app.include_router(village_ws_router, prefix="/ws")
 
 
 # Exception handlers
