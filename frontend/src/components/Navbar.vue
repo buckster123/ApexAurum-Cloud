@@ -77,6 +77,13 @@ function closeMobileMenu() {
         >
           GUI
         </router-link>
+        <router-link
+          to="/billing"
+          class="text-gray-400 hover:text-white transition-colors"
+          active-class="text-gold"
+        >
+          Billing
+        </router-link>
       </div>
 
       <!-- Desktop User Menu -->
@@ -182,6 +189,13 @@ function closeMobileMenu() {
           class="px-4 py-3 rounded-lg text-gray-300 hover:bg-white/5 hover:text-gold transition-colors"
         >
           👁️ GUI
+        </router-link>
+        <router-link
+          to="/billing"
+          @click="closeMobileMenu"
+          class="px-4 py-3 rounded-lg text-gray-300 hover:bg-white/5 hover:text-gold transition-colors"
+        >
+          💳 Billing
         </router-link>
 
         <hr class="border-apex-border my-2" />
