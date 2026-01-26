@@ -70,7 +70,7 @@ Returns file names, sizes, and types. Root folder is used if no folder_id specif
         folder_id = params.get("folder_id")
 
         try:
-            from app.models.files import File, Folder
+            from app.models.file import File, Folder
             from app.database import async_session
 
             async with async_session() as db:
@@ -129,8 +129,8 @@ Returns file names, sizes, and types. Root folder is used if no folder_id specif
                 files_list = [
                     {
                         "id": str(f.id),
-                        "name": f.filename,
-                        "size": f.size,
+                        "name": f.name,
+                        "size": f.size_bytes,
                         "mime_type": f.mime_type,
                     }
                     for f in files
@@ -201,9 +201,8 @@ Note: Only text files are supported. Binary files will return metadata only.""",
             return ToolResult(success=False, error="file_id is required")
 
         try:
-            from app.models.files import File
+            from app.models.file import File
             from app.database import async_session
-            from app.api.v1.files import get_vault_path
             from pathlib import Path
 
             async with async_session() as db:
@@ -231,21 +230,20 @@ Note: Only text files are supported. Binary files will return metadata only.""",
                         "application/xml",
                         "application/x-python",
                     ] or
-                    file.filename.endswith(('.py', '.js', '.ts', '.md', '.txt', '.json', '.yaml', '.yml', '.html', '.css'))
+                    file.name.endswith(('.py', '.js', '.ts', '.md', '.txt', '.json', '.yaml', '.yml', '.html', '.css'))
                 )
 
                 result = {
                     "id": str(file.id),
-                    "name": file.filename,
-                    "size": file.size,
+                    "name": file.name,
+                    "size": file.size_bytes,
                     "mime_type": file.mime_type,
                     "is_text": is_text,
                 }
 
                 if is_text and file.storage_path:
-                    # Read from filesystem
-                    vault_path = get_vault_path(user_uuid)
-                    file_path = vault_path / file.storage_path
+                    # Read from filesystem - storage_path is the full path
+                    file_path = Path(file.storage_path)
 
                     if file_path.exists():
                         content = file_path.read_text(encoding="utf-8", errors="replace")
@@ -297,7 +295,7 @@ Use to check available space before creating files.""",
             return ToolResult(success=False, error="Authentication required to access vault")
 
         try:
-            from app.models.files import File, Folder
+            from app.models.file import File, Folder
             from app.database import async_session
 
             async with async_session() as db:
@@ -307,7 +305,7 @@ Use to check available space before creating files.""",
                 files_result = await db.execute(
                     select(
                         func.count(File.id).label("count"),
-                        func.coalesce(func.sum(File.size), 0).label("total_size")
+                        func.coalesce(func.sum(File.size_bytes), 0).label("total_size")
                     ).where(File.user_id == user_uuid)
                 )
                 file_stats = files_result.one()
