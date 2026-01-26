@@ -1,12 +1,65 @@
 # ApexAurum-Cloud Handover Document
 
 **Date:** 2026-01-26
-**Build:** v25-vault-final
-**Status:** PRODUCTION READY + The Vault Complete + Final Polish
+**Build:** v26-cortex-phase1
+**Status:** PRODUCTION READY + The Vault Complete + Cortex Diver Phase 1
 
 ---
 
-## Current Session: The Vault - Sprint 1 + Polish Complete
+## Current Session: Cortex Diver Phase 1
+
+**Goal:** Transform The Vault into a full IDE experience in dev mode.
+
+### What Was Implemented
+
+**Backend (files.py):**
+- `GET /files/{id}/content` - Full file content for editing
+- `PUT /files/{id}/content` - Save content with quota enforcement
+- `get_monaco_language()` - Maps extensions to Monaco language IDs
+
+**Frontend Components:**
+- `components/cortex/MonacoEditor.vue` - Custom themed Monaco wrapper
+  - Cortex Dark theme (gold accents, #0D0D0D background)
+  - Ctrl+S save, Ctrl+Shift+A ask agent
+  - Selection tracking for AI context
+- `components/cortex/FileTabs.vue` - Tab bar with dirty indicators
+- `components/cortex/CortexDiver.vue` - Full IDE layout
+  - File tree sidebar
+  - Monaco editor with tabs
+  - Agent panel (collapsible, placeholder)
+  - Status bar (cursor, language, file count)
+- `stores/cortex.js` - IDE state management
+
+**Activation:**
+1. Enable dev mode (Konami code or 7-tap Au logo)
+2. Navigate to Files (The Vault)
+3. Click "🧠 CORTEX DIVER" button in header
+4. Exit: Click "Exit Cortex" or press Escape when no tabs open
+
+**Keyboard Shortcuts:**
+- `Ctrl+S` - Save file
+- `Ctrl+W` - Close tab
+- `Ctrl+Shift+A` - Ask agent about selection
+- `Middle-click` on tab - Close tab
+
+### Next Phases
+
+**Phase 2: Agent Integration**
+- Wire selection to chat API
+- Agent can propose edits (diff view)
+- Inline code suggestions
+
+**Phase 3: Terminal & Execution**
+- Sandboxed backend execution
+- Terminal output panel
+
+**Phase 4: RAG & Intelligence**
+- Index user files for semantic search
+- Codebase-aware conversations
+
+---
+
+## Previous: The Vault - Sprint 1 + Polish Complete
 
 **Goal:** User file storage system with hierarchical folders + alchemical theming.
 
@@ -144,7 +197,8 @@ curl -H "Authorization: Bearer TOKEN" \
 | Export | LIVE | JSON, Markdown, TXT |
 | Import | LIVE | Local app conversations + memory |
 | Mobile Responsive | LIVE | Hamburger nav, slide-in sidebar |
-| The Vault | DEPLOY PENDING | User file storage |
+| The Vault | LIVE | User file storage |
+| Cortex Diver | LIVE | IDE in dev mode |
 
 ### PAC Agents (Perfected Alchemical Codex)
 | Agent | Base | PAC | Color |
