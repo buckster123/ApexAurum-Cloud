@@ -52,8 +52,8 @@ class User(Base):
     files = relationship("File", back_populates="user", cascade="all, delete-orphan")
 
     # The Remembering Deep - Vector Storage
-    # Note: Using foreign_keys to avoid circular import issues
-    vectors = relationship("UserVector", cascade="all, delete-orphan", passive_deletes=True)
+    # TODO: Re-enable after fixing import order
+    # vectors = relationship("UserVector", cascade="all, delete-orphan", passive_deletes=True)
 
     def __repr__(self):
         return f"<User {self.email}>"
