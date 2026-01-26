@@ -90,12 +90,43 @@
 - `Ctrl+\`` - Toggle terminal
 - `Escape` - Close panels
 
-### Next Phase
+### Next Phase: The Grand Finale
 
-**Phase 4: RAG & Intelligence**
-- Index user files for semantic search
-- Codebase-aware conversations
-- "Explain this project" queries
+**Phase 4: RAG & Intelligence** - "The All-Seeing Eye"
+
+The final piece that transforms Cortex Diver from an IDE into a true AI-powered development environment.
+
+**Planned Features:**
+1. **File Indexing** - Embed user files for semantic search
+   - Backend: `/files/index` endpoint to create embeddings
+   - Store in PostgreSQL with pgvector or simple JSON
+   - Incremental updates on file changes
+
+2. **Semantic Search** - Find code by meaning, not just text
+   - "Find error handling code"
+   - "Where is authentication implemented?"
+   - Returns relevant file snippets
+
+3. **Codebase-Aware Agent** - Agent that knows your project
+   - Inject relevant file context into agent prompts
+   - "Explain this project structure"
+   - "How do these files relate?"
+   - Auto-context from open files + search results
+
+4. **Project Summary** - One-click project understanding
+   - Generate README from codebase analysis
+   - Identify key patterns and architecture
+   - Dependency mapping
+
+**Architecture Notes:**
+- Could use Anthropic's embeddings or a local model
+- Start simple: keyword + file type matching, then add embeddings
+- RAG context window management (prioritize relevant chunks)
+
+**Resources:**
+- Railway Pro: Plenty of compute for embeddings
+- User quota: 5GB files = manageable index size
+- PostgreSQL: Already have it, can add vector extension
 
 ---
 
