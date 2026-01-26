@@ -68,6 +68,12 @@ const router = createRouter({
       component: () => import('@/views/FilesView.vue'),
       meta: { requiresAuth: true }
     },
+    {
+      path: '/neural',
+      name: 'neural',
+      component: () => import('@/views/NeuralView.vue'),
+      meta: { requiresAuth: true }
+    },
   ]
 })
 

@@ -63,6 +63,13 @@ function closeMobileMenu() {
         >
           Files
         </router-link>
+        <router-link
+          to="/neural"
+          class="text-gray-400 hover:text-white transition-colors"
+          active-class="text-gold"
+        >
+          Neural
+        </router-link>
       </div>
 
       <!-- Desktop User Menu -->
@@ -154,6 +161,13 @@ function closeMobileMenu() {
           class="px-4 py-3 rounded-lg text-gray-300 hover:bg-white/5 hover:text-gold transition-colors"
         >
           📁 Files
+        </router-link>
+        <router-link
+          to="/neural"
+          @click="closeMobileMenu"
+          class="px-4 py-3 rounded-lg text-gray-300 hover:bg-white/5 hover:text-gold transition-colors"
+        >
+          🧠 Neural
         </router-link>
 
         <hr class="border-apex-border my-2" />

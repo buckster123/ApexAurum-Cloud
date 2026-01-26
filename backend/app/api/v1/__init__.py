@@ -6,7 +6,7 @@ All API endpoints are mounted here.
 
 from fastapi import APIRouter
 
-from app.api.v1 import auth, chat, agents, village, tools, music, user, prompts, import_data, memory, files
+from app.api.v1 import auth, chat, agents, village, tools, music, user, prompts, import_data, memory, files, cortex
 
 router = APIRouter()
 
@@ -22,3 +22,4 @@ router.include_router(prompts.router, prefix="/prompts", tags=["Prompts"])
 router.include_router(import_data.router, prefix="/import", tags=["Import"])
 router.include_router(memory.router, prefix="/memory", tags=["Memory"])
 router.include_router(files.router, prefix="/files", tags=["Files"])
+router.include_router(cortex.router)  # Neo-Cortex dashboard (prefix already in cortex.py)

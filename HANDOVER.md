@@ -1,97 +1,119 @@
 # ApexAurum-Cloud Handover Document
 
 **Date:** 2026-01-26
-**Build:** v40-neo-cortex
-**Status:** PRODUCTION + 3D UI IN PROGRESS
+**Build:** v41-neural-space
+**Status:** PRODUCTION + 3D NEURAL SPACE DASHBOARD
 
 ---
 
-## Current Session Summary: Neo-Cortex Tools + 3D Dashboard Planning
+## Current Session Summary: Neural Space 3D Dashboard
 
 ### What Was Accomplished
 
-1. **Neo-Cortex Tier 11 Tools - DEPLOYED**
-   - 6 new tools: cortex_remember, cortex_recall, cortex_village, cortex_stats, cortex_export, cortex_import
-   - Memory layers: sensory → working → long_term → cortex
-   - Visibility realms: private, village, bridge
-   - Attention tracking with access_count and attention_weight
-   - Export/Import MemoryCore JSON format
+1. **Neural Space 3D Dashboard - IMPLEMENTED**
+   - Full Three.js 3D visualization of Neo-Cortex memories
+   - Memories render as glowing spheres in 3D space
+   - Agent colors: AZOTH=gold, VAJRA=blue, ELYSIAN=lilac, KETHER=purple
+   - Layer positioning: Cortex at center, Sensory at edges
+   - Click to select, double-click to focus camera
+   - Filter panel, detail panel, stats bar
 
-2. **Fixed Migration Issues**
-   - user_vectors table may not exist if pgvector not enabled
-   - Wrapped all migrations in exception handlers
-   - Graceful skip if table doesn't exist
+2. **Backend Cortex API - REGISTERED**
+   - Router registered in `backend/app/api/v1/__init__.py`
+   - Endpoints: `/api/v1/cortex/memories`, `/graph`, `/stats`, `/search`
+   - Memory CRUD with layer promotion/demotion
 
-3. **3D Neural Space Dashboard - PLANNED**
-   - Full plan created at `.claude/plans/rippling-whistling-chipmunk.md`
-   - Backend API partially implemented (`backend/app/api/v1/cortex.py`)
-   - Three.js 3D visualization with glowing memory nodes
-   - Full dashboard with filters, details panel, timeline
+3. **Frontend Components Created**
+   - `frontend/src/stores/neocortex.js` - Pinia store
+   - `frontend/src/composables/useThreeScene.js` - Three.js management
+   - `frontend/src/components/neural/NeuralSpace.vue` - 3D visualization
+   - `frontend/src/components/neural/MemoryFilters.vue` - Left sidebar
+   - `frontend/src/components/neural/MemoryDetailPanel.vue` - Right panel
+   - `frontend/src/components/neural/StatsBar.vue` - Top bar
+   - `frontend/src/components/neural/MemoryList.vue` - List/2D view
+   - `frontend/src/views/NeuralView.vue` - Main dashboard
+
+4. **Navigation Updated**
+   - Route added: `/neural`
+   - Navbar updated with "Neural" link
 
 ### Tool Count: 46
 
 | Tier | Name | Tools | Status |
 |------|------|-------|--------|
-| 1-10 | Previous | 40 | ✅ |
-| 11 | Neo-Cortex | 6 | ✅ Deployed |
+| 1-10 | Previous | 40 | Deployed |
+| 11 | Neo-Cortex | 6 | Deployed |
 | **Total** | | **46** | |
 
 ---
 
-## 3D NEURAL SPACE DASHBOARD - NEXT STEPS
+## Neural Space Dashboard Features
 
-### Plan Location
-**File:** `.claude/plans/rippling-whistling-chipmunk.md`
+### 3D Visualization
+- Memories as glowing spheres using Three.js
+- Layer positioning: Cortex center (0-20), Long-term (20-40), Working (40-60), Sensory (60-80)
+- Agent colors match existing palette
+- Orbit controls for rotation/zoom
+- Click to select, double-click to focus
+- Connection lines between related memories
 
-### Implementation Progress
+### Dashboard Layout
+```
++--------------------------------------------------------------+
+|  NEURAL SPACE  |  Stats Bar  |  View: [3D] [2D] [List]       |
++--------------------------------------------------------------+
+|        |                                          |          |
+| FILTERS|              3D NEURAL SPACE             | DETAILS  |
+| Layer  |                                          | Content  |
+| Agent  |         [Glowing memory nodes           | Metadata |
+| Vis    |          floating in space              | Related  |
+| Search |          with connections]              | Actions  |
+|        |                                          |          |
++--------------------------------------------------------------+
+```
 
-| Phase | Task | Status |
-|-------|------|--------|
-| 1 | Backend API endpoints | 🟡 Created, needs router registration |
-| 1 | Pinia store | ❌ Not started |
-| 2 | Three.js composable | ❌ Not started |
-| 2 | NeuralSpace.vue | ❌ Not started |
-| 3 | Dashboard layout | ❌ Not started |
-| 4 | Advanced features | ❌ Not started |
-| 5 | Polish + deploy | ❌ Not started |
+### Panels
+- **Left Filters:** Layer, visibility, agent, semantic search
+- **Center:** 3D/2D/List view toggle
+- **Right Details:** Selected memory content, metadata, promote/demote/delete
 
-### Files Created This Session
+---
 
-**Backend:**
-- `backend/app/api/v1/cortex.py` - REST API for dashboard (NEEDS ROUTER REGISTRATION)
+## Deployment Steps
 
-### Next Immediate Steps
+```bash
+# 1. Install Three.js in frontend
+cd frontend && npm install three
 
-1. **Register the cortex router** in `backend/app/api/v1/__init__.py`:
-   ```python
-   from app.api.v1.cortex import router as cortex_router
-   router.include_router(cortex_router)
-   ```
+# 2. Push changes
+git add -A && git commit -m "Neural Space: 3D Memory Dashboard" && git push
 
-2. **Install Three.js** in frontend:
-   ```bash
-   cd frontend && npm install three
-   ```
+# 3. Get commit hash
+git log --oneline -1
 
-3. **Create Pinia store:** `frontend/src/stores/neocortex.js`
+# 4. Deploy backend
+curl -s -X POST "https://backboard.railway.app/graphql/v2" \
+  -H "Authorization: Bearer 90fb849e-af7b-4ea5-8474-d57d8802a368" \
+  -H "Content-Type: application/json" \
+  -d '{"query": "mutation { serviceInstanceDeploy(serviceId: \"9d60ca55-a937-4b17-8ec4-3fb34ac3d47e\", environmentId: \"2e9882b4-9b33-4233-9376-5b5342739e74\", commitSha: \"HASH\") }"}'
 
-4. **Create components:**
-   - `frontend/src/composables/useThreeScene.js`
-   - `frontend/src/components/cortex/NeuralSpace.vue`
-   - `frontend/src/views/NeoCortexView.vue`
-
-5. **Add route:** `/cortex` in router
+# 5. Deploy frontend
+curl -s -X POST "https://backboard.railway.app/graphql/v2" \
+  -H "Authorization: Bearer 90fb849e-af7b-4ea5-8474-d57d8802a368" \
+  -H "Content-Type: application/json" \
+  -d '{"query": "mutation { serviceInstanceDeploy(serviceId: \"6cf1f965-94df-4ea0-96ca-d82959e2d3c5\", environmentId: \"2e9882b4-9b33-4233-9376-5b5342739e74\", commitSha: \"HASH\") }"}'
+```
 
 ---
 
 ## Quick Verification
 
 ```bash
-# Backend health (v40 with 46 tools)
-curl https://backend-production-507c.up.railway.app/health | jq '{build, tools}'
+# Backend health (v41 with neural-space-3d feature)
+curl https://backend-production-507c.up.railway.app/health | jq '{build, features}'
 
-# Check cortex tools registered
-curl https://backend-production-507c.up.railway.app/api/v1/tools | jq '.cortex_tools: [.tools[] | select(.name | startswith("cortex")) | .name]'
+# Check cortex API
+curl https://backend-production-507c.up.railway.app/api/v1/cortex/stats -H "Authorization: Bearer TOKEN"
 ```
 
 ---
@@ -108,53 +130,33 @@ curl https://backend-production-507c.up.railway.app/api/v1/tools | jq '.cortex_t
 
 ---
 
-## 3D Dashboard Vision
+## Files Created This Session
 
-```
-+--------------------------------------------------------------+
-|  NEURAL SPACE  |  Stats Bar  |  View: [3D] [2D] [List]       |
-+--------------------------------------------------------------+
-|        |                                          |          |
-| FILTERS|              3D NEURAL SPACE             | DETAILS  |
-| Layer  |                                          | Content  |
-| Agent  |         [Glowing memory nodes           | Metadata |
-| Type   |          floating in space              | Related  |
-| Date   |          with connections]              | Actions  |
-|        |                                          |          |
-|        +------------------------------------------+          |
-|        |  Timeline Scrubber  |  Quick Stats       |          |
-+--------------------------------------------------------------+
-```
+**Frontend:**
+- `src/stores/neocortex.js`
+- `src/composables/useThreeScene.js`
+- `src/components/neural/NeuralSpace.vue`
+- `src/components/neural/MemoryFilters.vue`
+- `src/components/neural/MemoryDetailPanel.vue`
+- `src/components/neural/StatsBar.vue`
+- `src/components/neural/MemoryList.vue`
+- `src/views/NeuralView.vue`
 
-### 3D Visualization Features
-- Memories as glowing nodes floating in 3D space
-- Layer positioning: Cortex at center (brightest), Sensory at edges (fading)
-- Agent colors: AZOTH=gold, VAJRA=blue, ELYSIAN=silver, KETHER=purple
-- Node size = attention_weight
-- Connections show relationships
-- Click to select, double-click to focus
+**Modified:**
+- `frontend/package.json` - Added three.js
+- `frontend/src/router/index.js` - Added /neural route
+- `frontend/src/components/Navbar.vue` - Added Neural link
+- `backend/app/api/v1/__init__.py` - Registered cortex router
+- `backend/app/main.py` - Updated to v41
 
 ---
 
 ## Known Issues
 
-1. **pgvector may not be enabled** - vector tools gracefully skip if table doesn't exist
-2. **UserVector relationship** - still commented out in models (low priority)
-3. **Cortex router not registered** - needs to be added to API router
+1. **pgvector may not be enabled** - Vector tools gracefully skip if table doesn't exist
+2. **Memories need to exist** - 3D view shows empty state until memories are created
+3. **Three.js needs npm install** - Run `npm install` in frontend before deploy
 
 ---
 
-## Session Git Commits
-
-```
-d1520bd - Fix Neo-Cortex migrations for missing user_vectors table
-9f26ac8 - Fix async_session export for tools
-6874134 - Add Neo-Cortex auto-migration to database.py
-f668ddd - Neo-Cortex: Tier 11 Unified Memory System
-58a10c1 - Complete pgvector backend implementation (in neo-cortex/)
-7431434 - Add Neo-Cortex dashboard API (Phase 1 partial)
-```
-
----
-
-*"The Neural Space awakens. Memories glow like stars. The Cortex visualized."*
+*"The Neural Space awakens. Memories glow like stars. The cosmos of thought visualized."*

@@ -51,7 +51,7 @@ async def lifespan(app: FastAPI):
     """Application lifespan manager."""
     # Startup
     print("=" * 50)
-    print("ApexAurum Cloud v40 - Neo-Cortex")
+    print("ApexAurum Cloud v41 - Neural Space")
     print("=" * 50)
 
     # Import all models before database init to ensure SQLAlchemy
@@ -120,7 +120,7 @@ async def health_check():
     return {
         "status": "healthy",
         "version": "0.1.0",
-        "build": "v40-neo-cortex",
+        "build": "v41-neural-space",
         "agents": {
             "native": 5,
             "pac": 4,
@@ -145,6 +145,7 @@ async def health_check():
             "tool-execution",
             "steel-browser",
             "neo-cortex",
+            "neural-space-3d",
         ],
     }
 
