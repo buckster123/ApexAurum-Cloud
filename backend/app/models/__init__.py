@@ -9,6 +9,7 @@ from app.models.village import VillageKnowledge
 from app.models.memory import Memory
 from app.models.music import MusicTask
 from app.models.agent_memory import AgentMemory
+from app.models.file import File, Folder
 
 __all__ = [
     "User",
@@ -19,4 +20,6 @@ __all__ = [
     "Memory",
     "MusicTask",
     "AgentMemory",
+    "File",
+    "Folder",
 ]
