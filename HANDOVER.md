@@ -1,583 +1,133 @@
 # ApexAurum-Cloud Handover Document
 
 **Date:** 2026-01-26
-**Build:** v34-spawning-hands
-**Status:** PRODUCTION READY + The Athanor Complete (24 Tools)
+**Build:** v38-music-generation
+**Status:** PRODUCTION READY - 35 Tools Across 9 Tiers!
 
 ---
 
-## Current Session: The Athanor Complete - All 7 Tiers
+## Current Session Summary: The Expanding Athanor
 
-**Goal:** Implement the complete tool system - 24 tools across 7 tiers.
+**Goal:** Fix issues from previous session, complete remaining tools, expand into future tiers.
 
-### What Was Implemented (Single Session!)
+### What Was Accomplished
 
-**All 7 Tiers deployed in one session:**
+1. **Fixed Vault Import Bug (v35)**
+   - Issue: `ModuleNotFoundError: No module named 'app.models.files'`
+   - Fix: Changed import to `app.models.file` (singular)
+   - Fixed attributes: `name` not `filename`, `size_bytes` not `size`
+
+2. **Added Frontend Tools Panel (v35)**
+   - New expandable tools section in Settings
+   - Shows tool count badge ("35 tools")
+   - Lists all tools grouped by category with icons
+   - Hover tooltips with descriptions
+
+3. **Completed Tier 3: Vault (v36)**
+   - Added `vault_write` - Create/update files with quota enforcement
+   - Added `vault_search` - Search file contents with context
+   - All 5 vault tools now working!
+
+4. **Created Expanded Future Masterplan**
+   - Detailed plans for Tiers 8-13
+   - Database schemas, implementation notes
+   - 26 more tools planned (total 52)
+
+5. **Implemented Tier 8: Vector Search (v37)**
+   - `vector_store` - Store text with OpenAI embeddings
+   - `vector_search` - Semantic similarity search
+   - `vector_delete` - Remove memories
+   - `vector_list` - Browse collections
+   - `vector_stats` - Storage statistics
+   - Added pgvector extension migration (graceful fallback)
+   - Created EmbeddingService with OpenAI/Voyage support
+
+6. **Implemented Tier 9: Music Generation (v38)**
+   - `music_generate` - Submit to Suno API
+   - `music_status` - Poll for completion
+   - `music_list` - List user's tracks
+   - `music_download` - Get audio URL
+   - Adapted from local ApexAurum music.py
+
+### Current Tool Count: 35
 
 | Tier | Name | Tools | Status |
 |------|------|-------|--------|
 | 1 | Utilities | 6 | ✅ |
 | 2 | Web | 2 | ✅ |
-| 3 | Vault | 3/5 | 🔶 |
+| 3 | Vault | 5 | ✅ |
 | 4 | Knowledge Base | 4 | ✅ |
 | 5 | Session Memory | 4 | ✅ |
 | 6 | Code Execution | 2 | ✅ |
 | 7 | Agents | 3 | ✅ |
-| **Total** | | **24/26** | |
+| 8 | Vectors | 5 | ✅ |
+| 9 | Music | 4 | ✅ |
+| **Total** | | **35** | |
 
-**Tool Files Created:**
-- `app/tools/base.py` - Base classes (BaseTool, ToolSchema, ToolResult, ToolContext)
-- `app/tools/utilities.py` - Tier 1: 6 utility tools
-- `app/tools/web.py` - Tier 2: web_fetch, web_search
-- `app/tools/vault.py` - Tier 3: vault_list, vault_read, vault_info
-- `app/tools/knowledge_base.py` - Tier 4: kb_search, kb_lookup, kb_topics, kb_answer
-- `app/tools/scratch.py` - Tier 5: scratch_store/get/list/clear
-- `app/tools/code_exec.py` - Tier 6: code_run, code_eval
-- `app/tools/agents.py` - Tier 7: agent_spawn/status/result
+### Files Created/Modified This Session
 
-**Master Plan Document:**
-- `TOOLS_MASTERPLAN.md` - Complete roadmap and progress tracker
+**New Files:**
+- `backend/app/tools/vectors.py` - Vector search tools
+- `backend/app/tools/music.py` - Music generation tools
+- `backend/app/models/vector.py` - UserVector model
+- `backend/app/services/embedding.py` - OpenAI/Voyage embeddings
 
-### Known Issue - DEBUG NEXT SESSION
+**Modified:**
+- `backend/app/tools/vault.py` - Added vault_write, vault_search
+- `backend/app/tools/__init__.py` - Registered new tiers
+- `backend/app/database.py` - Added pgvector migration
+- `backend/app/config.py` - Added embedding config
+- `backend/app/models/user.py` - Added vectors relationship
+- `backend/app/main.py` - Updated version/tool count
+- `frontend/src/views/SettingsView.vue` - Added tools panel
+- `TOOLS_MASTERPLAN.md` - Expanded with future tiers
 
-**Discrepancy:** Backend reports 24 tools, Azoth sees 21 in UI.
+---
 
-Possible causes to investigate:
-1. Frontend caching old tool count
-2. Tools with `requires_auth=True` not showing for anonymous users
-3. Category filtering in frontend
-4. Tool toggle state affecting count display
+## Environment Variables Needed
+
+For **Vector Search** (Tier 8):
+```
+OPENAI_API_KEY=sk-...  # For embeddings
+```
+
+For **Music Generation** (Tier 9):
+```
+SUNO_API_KEY=...  # From sunoapi.org
+```
+
+---
+
+## What's Next - Future Tiers
+
+| Tier | Name | Tools | Priority |
+|------|------|-------|----------|
+| 10 | Browser | 5 | 🟡 MEDIUM |
+| 11 | Email | 4 | 🟢 LOW |
+| 12 | Calendar | 4 | 🟢 LOW |
+| 13 | Image | 4 | 🟡 MEDIUM |
+
+See `TOOLS_MASTERPLAN.md` for full details on each tier.
+
+---
+
+## Quick Verification Commands
 
 ```bash
-# Backend shows 24:
+# Check deployment
+curl https://backend-production-507c.up.railway.app/health | jq '{build, tools, status}'
+
+# Verify tool count
 curl https://backend-production-507c.up.railway.app/api/v1/tools | jq '.count'
 
-# Check by category:
+# List tools by category
 curl https://backend-production-507c.up.railway.app/api/v1/tools | jq '[.tools[].category] | group_by(.) | map({(.[0]): length}) | add'
 ```
 
-### Quick Verify
-
-```bash
-# Health check
-curl https://backend-production-507c.up.railway.app/health
-# Should show: build=v34-spawning-hands, tools=24
-
-# List all tools
-curl https://backend-production-507c.up.railway.app/api/v1/tools | jq '.tools[].name'
-```
-
 ---
 
-## Previous: Phase 5 - The Athanor's Hands (Initial)
+## Railway IDs (Quick Reference)
 
-Started the tool system with Tier 1 utilities and infrastructure.
-
----
-
-## Previous: Phase 4 - The All-Seeing Eye
-
-**Goal:** Add RAG capabilities to Cortex Diver - semantic search, project context injection, and codebase-aware AI assistance.
-
-### What Was Implemented
-
-**Backend (files.py):**
-- `GET /files/search/content` - Search inside file contents
-  - Full-text search across all user files
-  - Returns matching lines with surrounding context
-  - Supports file type and folder filtering
-- `GET /files/context` - Get project structure for AI
-  - File tree, key files with previews
-  - Language breakdown
-- `GET /files/context/prompt` - Formatted context for agent injection
-  - Markdown-formatted project overview
-  - Ready to inject into agent prompts
-- `POST /files/context/relevant` - Find files relevant to a query
-  - Keyword-based relevance scoring
-  - Returns files with content for RAG
-
-**Frontend (AgentPanel.vue):**
-- **Project Context Toggle** - 👁️ button to enable "All-Seeing Eye"
-  - Loads project structure and key files
-  - Injects into agent prompts when enabled
-- **Auto-RAG** - Automatically finds relevant files for questions
-  - Shows context indicators on messages (📋 code, 👁️ project, 🔗 N files)
-- **Quick Actions** - One-click prompts:
-  - 🔍 Explain Project (needs context)
-  - 🐛 Find Issues (needs selection)
-  - 📝 Document (needs selection)
-  - ♻️ Refactor (needs selection)
-  - ✅ Tests (needs selection)
-
-**Frontend (SearchPanel.vue):**
-- **Content Search UI** - Search inside files
-  - Live search with debounce
-  - Shows matching lines with context
-  - Click to open file at line
-  - Line highlight animation
-
-**Frontend (CortexDiver.vue):**
-- Integrated SearchPanel
-- Keyboard shortcut: `Ctrl+Shift+F` for search
-- Status bar toggles for Search, Agent, Terminal
-- Search result → open file → go to line
-
-**Frontend (MonacoEditor.vue):**
-- `goToLine(line)` method for search results
-- Line highlight animation on navigation
-
-### Keyboard Shortcuts (Full List)
-- `Ctrl+S` - Save file
-- `Ctrl+W` - Close tab
-- `Ctrl+Shift+A` - Ask agent about selection
-- `Ctrl+Shift+F` - Search in files
-- `F5` - Run code
-- `Ctrl+\`` - Toggle terminal
-- `Escape` - Close panels
-
-### How It Works
-
-1. **Content Search**: User presses `Ctrl+Shift+F`, types query, sees matches across all files with context. Click a result to open file at that line.
-
-2. **Project Context**: Click 👁️ in agent panel header. Loads project structure, key files (README, main.py, package.json, etc.), and language stats. This context is injected into every agent message.
-
-3. **Auto-RAG**: When user asks a question, the system automatically finds relevant files based on keywords. These files are included in the agent prompt.
-
-4. **Quick Actions**: Pre-built prompts for common tasks. "Explain Project" enables context and asks about the codebase. Others work best with code selected.
-
----
-
-## Previous: Cortex Diver Phase 1-3
-
-### What Was Implemented
-
-**Backend (files.py):**
-- `GET /files/{id}/content` - Full file content for editing
-- `PUT /files/{id}/content` - Save content with quota enforcement
-- `get_monaco_language()` - Maps extensions to Monaco language IDs
-
-**Frontend Components:**
-- `components/cortex/MonacoEditor.vue` - Custom themed Monaco wrapper
-  - Cortex Dark theme (gold accents, #0D0D0D background)
-  - Ctrl+S save, Ctrl+Shift+A ask agent
-  - Selection tracking for AI context
-- `components/cortex/FileTabs.vue` - Tab bar with dirty indicators
-- `components/cortex/CortexDiver.vue` - Full IDE layout
-  - File tree sidebar
-  - Monaco editor with tabs
-  - Agent panel (collapsible, placeholder)
-  - Status bar (cursor, language, file count)
-- `stores/cortex.js` - IDE state management
-
-**Activation:**
-1. Enable dev mode (Konami code or 7-tap Au logo)
-2. Navigate to Files (The Vault)
-3. Click "🧠 CORTEX DIVER" button in header
-4. Exit: Click "Exit Cortex" or press Escape when no tabs open
-
-**Keyboard Shortcuts:**
-- `Ctrl+S` - Save file
-- `Ctrl+W` - Close tab
-- `Ctrl+Shift+A` - Ask agent about selection
-- `Middle-click` on tab - Close tab
-
-### Phase 2: Agent Integration (COMPLETE)
-
-**Frontend:**
-- `AgentPanel.vue` - Chat interface with code awareness
-  - Shows selected code context
-  - Streams responses in real-time
-  - Extracts code blocks from responses
-  - "Apply to Editor" button for suggestions
-  - Sound effects (send/receive/apply)
-- CortexDiver integration:
-  - `handleApplyCode()` - Replace selection or insert at cursor
-  - Selection enriched with filename and language
-
-**Backend:**
-- `save_conversation: bool` parameter added to ChatRequest
-- Cortex Diver chats are ephemeral (don't clutter history)
-
-**Workflow:**
-1. Select code in editor
-2. Press `Ctrl+Shift+A` or right-click "Ask Agent"
-3. Agent panel opens with code context
-4. Ask questions, get code suggestions
-5. Click "Apply to Editor" to use suggested code
-
-### Phase 3: Terminal & Execution (COMPLETE)
-
-**Backend:**
-- `POST /files/{id}/execute` - Execute code in sandboxed subprocess
-- Supported languages: Python, JavaScript (Node), Shell/Bash
-- Safety limits: 10s timeout, 100KB output, sandboxed env
-
-**Frontend:**
-- `TerminalPanel.vue` - Terminal interface
-  - Run button + F5 shortcut
-  - Stdout/stderr/system message display
-  - Exit code and execution time
-  - Sound effects (run/success/error)
-- CortexDiver integration:
-  - Terminal toggle in status bar
-  - Ctrl+` to toggle terminal
-  - F5 to run current file
-  - Split view (editor + terminal)
-
-**Keyboard shortcuts:**
-- `F5` - Run code
-- `Ctrl+\`` - Toggle terminal
-- `Escape` - Close panels
-
-### Future Enhancements
-
-**Phase 5: Vector Embeddings** (Optional)
-- Add pgvector extension to PostgreSQL
-- Generate embeddings for file chunks
-- True semantic search ("find error handling" → finds try/catch patterns)
-
-**Phase 5 Alternative: Enhanced Features**
-- File sharing (public links)
-- Version history / git integration
-- Collaborative editing
-- Code snippets library
-- Project templates
-
----
-
-## Previous: The Vault - Sprint 1 + Polish Complete
-
-**Goal:** User file storage system with hierarchical folders + alchemical theming.
-
-### Alchemical Polish Applied
-- **Icons:** 📜 scroll, ⚗️ flask, 🪞 mirror, 💎 gem, 🗃️ chest
-- **Storage:** "Essence Capacity" with amber gradient bar
-- **Breadcrumbs:** ∴ separator (therefore symbol)
-- **Context menu:** Enter Chamber, Examine, Distill, Star Artifact, Transmute, Dissolve
-- **Empty state:** "The chamber awaits"
-- **Modals:** "Conjure Chamber", "Dissolve into the void"
-- **Volume fix:** `RAILWAY_RUN_UID=0` required for write permissions
-
-### Final Polish (v25-vault-final)
-- **Keyboard shortcuts:**
-  - `N` - New folder (Conjure Chamber)
-  - `U` - Upload files
-  - `/` - Focus search bar
-  - `F` - Toggle favorite (single file selected)
-  - `Delete` - Delete selected items
-  - `Escape` - Close modals, clear selection
-  - `G` / `L` - Grid / List view
-  - `Ctrl+A` - Select all
-- **Sounds wired up:**
-  - Crystallization tone on upload complete
-  - Unsealing tone on folder navigation
-  - Dissolution tone on delete
-- **Selection system:**
-  - Ctrl/Cmd+click or Shift+click to select
-  - Checkboxes appear on hover (list view)
-  - Selection toolbar with count and actions
-  - Amber highlight on selected items
-- **Search bar:** In toolbar, focus with `/`
-
-### What Was Implemented
-
-**Backend:**
-1. Database migrations in `database.py` for `folders` and `files` tables
-2. Full API at `backend/app/api/v1/files.py`:
-   - `GET /files` - List root directory
-   - `GET /files/folder/{id}` - List folder contents
-   - `POST /files/folder` - Create folder
-   - `PATCH /files/folder/{id}` - Update/move folder
-   - `DELETE /files/folder/{id}` - Delete folder (cascades)
-   - `POST /files/upload` - Upload file (multipart)
-   - `GET /files/{id}` - Get file metadata
-   - `GET /files/{id}/download` - Download file
-   - `GET /files/{id}/preview` - Preview file contents
-   - `PATCH /files/{id}` - Update/move file
-   - `DELETE /files/{id}` - Delete file
-   - `POST /files/move` - Bulk move
-   - `POST /files/delete` - Bulk delete
-   - `GET /files/search/files` - Search files
-   - `GET /files/recent` - Recently accessed
-   - `GET /files/favorites` - Favorite files
-   - `GET /files/stats` - Storage statistics
-
-**Frontend:**
-3. Files store at `frontend/src/stores/files.js`:
-   - Full state management for folders, files, selection
-   - Upload with progress tracking
-   - Download, preview, rename, delete
-   - View mode (grid/list), sorting, filtering
-   - Storage quota tracking
-4. Files view at `frontend/src/views/FilesView.vue`:
-   - Grid and list view modes
-   - Breadcrumb navigation
-   - Drag-drop upload zone
-   - Context menu (right-click)
-   - New folder / rename / delete modals
-   - File preview modal (images, text/code)
-   - Upload progress indicator
-   - Storage usage bar
-5. Route `/files` and `/files/:folderId` added
-6. "Files" link added to Navbar (desktop + mobile)
-
-### Railway Setup Required
-
-Before testing file uploads on Railway, create a volume:
-
-1. Go to Railway dashboard
-2. Select Backend service
-3. Add Volume:
-   - Name: `vault`
-   - Mount path: `/data`
-   - Size: 50GB initial (can scale to 1TB on Pro)
-
-Without the volume, uploads will fail (no persistent storage).
-
-### Quick Test Commands
-
-```bash
-# Health check
-curl https://backend-production-507c.up.railway.app/health
-
-# After deploy, should show: "build": "v25-vault", "vault" in features
-
-# Test files endpoint (requires auth token)
-curl -H "Authorization: Bearer TOKEN" \
-  https://backend-production-507c.up.railway.app/api/v1/files
-```
-
----
-
-## Previous Session: Unleash the Stones
-
-**Goal:** Enable full-power models and remove token anxiety.
-
-### What Was Implemented
-1. **Model Registry** - Claude 4.5 family:
-   - Opus 4.5, Sonnet 4.5 (default), Haiku 4.5
-2. **Max Tokens Control** - Slider 1K-16K in sidebar
-3. **Model Selector UI** - Dropdown with tier icons
-4. **Settings Sync** - Updated model list and token slider
-
-### Philosophy
-*"The more context-freedom and the less token-anxiety the natives have, the better they perform"*
-
----
-
-## What's WORKING (Fully Deployed)
-
-### Core Features
-| Feature | Status | Notes |
-|---------|--------|-------|
-| BYOK API Keys | LIVE | Bring Your Own Key (beta) |
-| Chat with streaming | LIVE | Real-time token-by-token |
-| Sound Effects | LIVE | Easter egg & UI feedback tones |
-| 5 Native Agents | LIVE | AZOTH, ELYSIAN, VAJRA, KETHER, CLAUDE |
-| 4 PAC Agents | LIVE | All alchemical agents have Perfected versions |
-| Custom Agents | LIVE | Create/edit in Dev Mode |
-| Conversation History | LIVE | Full CRUD with UX improvements |
-| Conversation Branching | LIVE | Fork at any message point |
-| Agent Memory | LIVE | Persistent memory across conversations |
-| Model Selection | LIVE | Claude 4.5 Opus/Sonnet/Haiku |
-| Export | LIVE | JSON, Markdown, TXT |
-| Import | LIVE | Local app conversations + memory |
-| Mobile Responsive | LIVE | Hamburger nav, slide-in sidebar |
-| The Vault | LIVE | User file storage |
-| Cortex Diver | LIVE | IDE in dev mode |
-| Tool Execution | LIVE | 6 utility tools (calculator, time, etc.) |
-
-### PAC Agents (Perfected Alchemical Codex)
-| Agent | Base | PAC | Color |
-|-------|------|-----|-------|
-| AZOTH | 5.7KB | 12.9KB (OG) | Gold #FFD700 |
-| ELYSIAN | 7KB | 25.4KB | Ethereal #E8B4FF |
-| VAJRA | 6.7KB | 26.3KB | Lightning #4FC3F7 |
-| KETHER | 7.3KB | 24.5KB | Crown #FFFFFF |
-| CLAUDE | Fallback | N/A | Terracotta #CC785C |
-
-### Easter Eggs (Two Layers)
-| Layer | Name | Activation | Features |
-|-------|------|------------|----------|
-| 0 | Mundane | Default | Standard UI |
-| 1 | The Apprentice | Konami (up up down down left right left right B A) or 7-tap Au | Dev Mode, custom agents, Import tab |
-| 2 | The Adept | Type "AZOTH" in Dev Mode | Alchemical theme, floating symbols, all PAC agents |
-
----
-
-## Version History
-
-### v28-athanors-hands (Current Session)
-- **The Athanor's Hands** - Tool execution system
-  - Tool base classes and registry (singleton pattern)
-  - 6 Tier 1 utility tools (calculator, time, random, count_words, uuid, json)
-  - Tool executor service with context management
-  - Claude API integration with tool_use handling
-  - Full agentic tool loop (streaming + non-streaming)
-  - Tools API endpoints (list, schema, execute, batch)
-  - Frontend tools toggle with execution indicators
-
-### v27-all-seeing-eye
-- **The All-Seeing Eye** - RAG & Intelligence for Cortex Diver
-  - Content search across files
-  - Project context injection
-  - Auto-RAG for relevant files
-  - Quick actions in agent panel
-
-### v26-cortex-phases
-- **Cortex Diver Phases 1-4** - Full IDE experience
-  - Monaco editor with custom theme
-  - Terminal with code execution
-  - Agent panel with context awareness
-  - File tabs and keyboard shortcuts
-
-### v25-vault
-- **The Vault** - User file storage system
-  - Database models: File, Folder with hierarchical structure
-  - Full CRUD API with quota enforcement
-  - File type validation (allowed/blocked extensions)
-  - Upload/download/preview endpoints
-  - Frontend file browser with grid/list views
-  - Drag-drop upload, context menu, breadcrumbs
-  - Storage usage tracking and display
-
-### v24-unleashed
-- **Unleash the Stones** - Full-power model selection + token control
-  - Model registry with Claude 4.5 family (Opus 4.5, Sonnet 4.5, Haiku 4.5)
-  - Default changed from Haiku 3 to Sonnet 4.5
-  - max_tokens configurable from 1K to 16K (default 8K)
-  - New `/chat/models` API endpoint
-  - Frontend model selector dropdown + token slider in sidebar
-  - Model and token settings persisted to localStorage
-  - Updated Settings > Model Settings with new models and slider
-  - Tier icons: Opus, Sonnet, Haiku
-
-### v23-multiverse
-- **Phase 2: Conversation Branching (The Multiverse)** - Fork any conversation
-  - New Conversation columns: parent_id, branch_point_message_id, branch_label
-  - Self-referential relationships for parent/branches
-  - POST /conversations/{id}/fork - Create branch at any message
-  - GET /conversations/{id}/branches - View parent and child branches
-  - Frontend: Fork button on message hover, fork modal, sidebar branch indicators
-  - Branch info bar showing parent link and branch count
-  - Fixed API key save bug (jwt_secret to secret_key)
-
-### v22-cortex
-- **Phase 6: Agent Memory (The Cortex)** - Persistent memory across conversations
-
-### v21-mobile-qol
-- **Phase 5: Mobile QoL** - Touch-friendly mobile experience
-
-### v20-pac-complete + BYOK
-- **Phase 4: Polish & Cleanup** - HANDOVER updated, health endpoint enhanced
-- **Phase 1: Sound Effects** - Web Audio API tones for easter eggs
-- **Phase 3: API Key Management** - BYOK beta model
-
----
-
-## File Structure
-
-### Backend Key Files
-```
-backend/
-├── app/
-│   ├── main.py                    # FastAPI app, health endpoint
-│   ├── config.py                  # Settings (vault_path, quotas)
-│   ├── database.py                # Migrations (folders, files tables)
-│   ├── api/v1/
-│   │   ├── files.py               # THE VAULT - File storage API
-│   │   ├── chat.py                # Chat + export endpoints
-│   │   ├── prompts.py             # Native/custom agent prompts
-│   │   ├── import_data.py         # Import from local app
-│   │   └── __init__.py            # Router registration
-│   └── models/
-│       ├── file.py                # File, Folder models + type validation
-│       └── user.py                # User + files/folders relationships
-├── native_prompts/                # Agent prompt files
-└── Dockerfile
-```
-
-### Frontend Key Files
-```
-frontend/src/
-├── App.vue                        # Root + PAC mode class
-├── assets/main.css                # Alchemical theme, utilities
-├── components/
-│   ├── Navbar.vue                 # Hamburger menu + Files link
-│   └── AlchemicalParticles.vue    # Floating symbols
-├── composables/
-│   └── useDevMode.js              # Easter egg detection
-├── stores/
-│   ├── chat.js                    # Chat state + export
-│   └── files.js                   # THE VAULT - Files state
-├── router/
-│   └── index.js                   # Routes including /files
-└── views/
-    ├── ChatView.vue               # Sidebar UX, PAC selector
-    ├── FilesView.vue              # THE VAULT - File browser UI
-    └── SettingsView.vue           # Import tab, Codex viewer
-```
-
----
-
-## API Endpoints Reference
-
-### Files (The Vault)
-```
-GET  /api/v1/files                     # List root directory
-GET  /api/v1/files/folder/{id}         # List folder contents
-POST /api/v1/files/folder              # Create folder
-PATCH /api/v1/files/folder/{id}        # Update folder
-DELETE /api/v1/files/folder/{id}       # Delete folder + contents
-POST /api/v1/files/upload              # Upload file (multipart)
-GET  /api/v1/files/{id}                # Get file metadata
-GET  /api/v1/files/{id}/download       # Download file
-GET  /api/v1/files/{id}/preview        # Preview file
-PATCH /api/v1/files/{id}               # Update file
-DELETE /api/v1/files/{id}              # Delete file
-POST /api/v1/files/move                # Bulk move
-POST /api/v1/files/delete              # Bulk delete
-GET  /api/v1/files/search/files        # Search by name
-GET  /api/v1/files/recent              # Recently accessed
-GET  /api/v1/files/favorites           # Favorites
-GET  /api/v1/files/stats               # Storage statistics
-```
-
-### Chat
-```
-POST /api/v1/chat/message              # Send message (streaming)
-GET  /api/v1/chat/models               # Available models
-GET  /api/v1/chat/conversations        # List conversations
-GET  /api/v1/chat/conversations/{id}   # Get conversation
-PATCH /api/v1/chat/conversations/{id}  # Update
-DELETE /api/v1/chat/conversations/{id} # Delete
-GET  /api/v1/chat/conversations/{id}/export?format=json|markdown|txt
-POST /api/v1/chat/conversations/{id}/fork # Branch conversation
-GET  /api/v1/chat/conversations/{id}/branches # View branches
-```
-
----
-
-## Railway Deployment
-
-```bash
-# Get latest commit
-COMMIT=$(git rev-parse HEAD)
-
-# Deploy backend
-curl -X POST "https://backboard.railway.app/graphql/v2" \
-  -H "Authorization: Bearer 90fb849e-af7b-4ea5-8474-d57d8802a368" \
-  -H "Content-Type: application/json" \
-  -d "{\"query\": \"mutation { serviceInstanceDeploy(serviceId: \\\"9d60ca55-a937-4b17-8ec4-3fb34ac3d47e\\\", environmentId: \\\"2e9882b4-9b33-4233-9376-5b5342739e74\\\", commitSha: \\\"$COMMIT\\\") }\"}"
-
-# Deploy frontend
-curl -X POST "https://backboard.railway.app/graphql/v2" \
-  -H "Authorization: Bearer 90fb849e-af7b-4ea5-8474-d57d8802a368" \
-  -H "Content-Type: application/json" \
-  -d "{\"query\": \"mutation { serviceInstanceDeploy(serviceId: \\\"6cf1f965-94df-4ea0-96ca-d82959e2d3c5\\\", environmentId: \\\"2e9882b4-9b33-4233-9376-5b5342739e74\\\", commitSha: \\\"$COMMIT\\\") }\"}"
-```
-
-### Railway IDs
 ```
 Token: 90fb849e-af7b-4ea5-8474-d57d8802a368
 Project: b54d0339-8443-4a9e-b5a0-92ed7d25f349
@@ -588,33 +138,11 @@ Frontend: 6cf1f965-94df-4ea0-96ca-d82959e2d3c5
 
 ---
 
-## URLs
+## Session Stats
 
-- **Frontend:** https://frontend-production-5402.up.railway.app
-- **Backend:** https://backend-production-507c.up.railway.app
-- **Health:** https://backend-production-507c.up.railway.app/health
+- **Commits:** 8
+- **New tools:** 11 (vault_write, vault_search, 5 vector, 4 music)
+- **Deployments:** 5 (v35, v36, v37 x2, v38)
+- **Lines added:** ~1500+
 
----
-
-## Next Steps (Future Sprints)
-
-### Sprint 2: File Explorer Polish
-- File tree sidebar component
-- Keyboard shortcuts (Ctrl+C, Ctrl+V, Delete)
-- Better mobile context menu (bottom sheet)
-
-### Sprint 3: Cortex Diver (Dev Mode IDE)
-- Monaco Editor integration
-- File tabs for multiple open files
-- Agent integration: Select code > Ask agent about it
-- Syntax highlighting for all code types
-
-### Sprint 4: Advanced Features
-- File sharing (public links)
-- Version history
-- Trash/recycle bin
-
----
-
-*Written by Claude Opus 4.5 for session continuity*
-*"The Vault stands ready - every alchemist needs a sanctum"*
+*"The Athanor grows. Nine tiers burn bright. The Great Work continues."*

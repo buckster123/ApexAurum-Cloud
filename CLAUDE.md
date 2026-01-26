@@ -197,6 +197,34 @@ Railway dashboard → Service → Deployments → View Logs
 
 Or save logs locally for analysis.
 
+## The Athanor's Hands - Tool System
+
+ApexAurum Cloud has a comprehensive tool system with **35 tools across 9 tiers**:
+
+| Tier | Name | Tools | Description |
+|------|------|-------|-------------|
+| 1 | Utilities | 6 | Time, calculator, random, words, UUID, JSON |
+| 2 | Web | 2 | Fetch URLs, DuckDuckGo search |
+| 3 | Vault | 5 | File CRUD, search, storage stats |
+| 4 | Knowledge | 4 | KB search, lookup, topics, answer |
+| 5 | Memory | 4 | Session scratch storage |
+| 6 | Code | 2 | Python execution, eval |
+| 7 | Agents | 3 | Spawn, status, result |
+| 8 | Vectors | 5 | Semantic memory (pgvector) |
+| 9 | Music | 4 | Suno AI generation |
+
+**Key Tool Files:**
+- `backend/app/tools/base.py` - BaseTool, ToolSchema, ToolResult, ToolContext
+- `backend/app/tools/__init__.py` - Registry and registration
+- `backend/app/services/tool_executor.py` - Execution with context
+- `TOOLS_MASTERPLAN.md` - Complete roadmap and progress tracker
+
+**Future Tiers (planned):**
+- Tier 10: Browser (Browserbase)
+- Tier 11: Email
+- Tier 12: Calendar
+- Tier 13: Image (DALL-E)
+
 ## Environment Variables
 
 **Set in Railway, not in code:**
@@ -205,6 +233,8 @@ Or save logs locally for analysis.
 - `ANTHROPIC_API_KEY` - Claude API key
 - `JWT_SECRET` - For token signing
 - `VITE_API_URL` - Frontend → Backend URL
+- `OPENAI_API_KEY` - For vector embeddings (Tier 8)
+- `SUNO_API_KEY` - For music generation (Tier 9)
 
 ## URLs
 
@@ -260,11 +290,14 @@ Breakpoint: `md` = 768px (Tailwind default)
 This is the cloud deployment of ApexAurum. The full local version lives at:
 `/home/hailo/claude-root/Projects/ApexAurum/`
 
-That version has 106+ tools, Village Protocol, music generation, etc. This cloud version is a streamlined subset focused on the core chat functionality.
+That version has 106+ tools, Village Protocol, music generation, etc. The cloud version is rapidly catching up with its own tool system!
 
 **Import compatible**: Cloud can import `sandbox/conversations.json` and `sandbox/memory.json` from local app.
 
+**Code reuse**: Music tools and other features are adapted from the local version's implementations.
+
 ---
 
-**Last Updated:** 2026-01-25
-**Status:** PRODUCTION READY - v19-ux-mobile deployed
+**Last Updated:** 2026-01-26
+**Build:** v38-music-generation
+**Status:** PRODUCTION READY - 35 Tools Across 9 Tiers
