@@ -35,6 +35,7 @@ const renameValue = ref('')
 const dragOver = ref(false)
 const previewData = ref(null)
 const showPreview = ref(false)
+const searchInput = ref(null)  // Template ref for search input
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // LIFECYCLE
@@ -43,11 +44,135 @@ const showPreview = ref(false)
 onMounted(async () => {
   const folderId = route.params.folderId || null
   await store.fetchDirectory(folderId)
+
+  // Add keyboard shortcuts
+  window.addEventListener('keydown', handleKeyboard)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleKeyboard)
 })
 
 watch(() => route.params.folderId, async (newId) => {
   await store.fetchDirectory(newId || null)
+  // Play unsealing sound when entering a folder
+  if (newId) {
+    vaultSounds.folderOpen()
+  }
 })
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// KEYBOARD SHORTCUTS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function handleKeyboard(event) {
+  // Don't trigger shortcuts when typing in inputs
+  const target = event.target
+  if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
+    // Allow Escape to close modals even in inputs
+    if (event.key === 'Escape') {
+      closeAllModals()
+    }
+    return
+  }
+
+  // Don't trigger if any modal is open (except Escape)
+  const modalOpen = showNewFolderModal.value || showDeleteConfirm.value ||
+                    showRenameModal.value || showPreview.value
+  if (modalOpen && event.key !== 'Escape') return
+
+  switch (event.key.toLowerCase()) {
+    case 'n':
+      // N - New folder (Conjure Chamber)
+      event.preventDefault()
+      showNewFolderModal.value = true
+      break
+
+    case 'u':
+      // U - Upload
+      event.preventDefault()
+      triggerUpload()
+      break
+
+    case 'delete':
+    case 'backspace':
+      // Delete - Delete selected or last clicked
+      if (store.isSelecting) {
+        event.preventDefault()
+        confirmDeleteSelected()
+      }
+      break
+
+    case 'f':
+      // F - Toggle favorite on selected file
+      if (store.selectedIds.size === 1) {
+        event.preventDefault()
+        const id = Array.from(store.selectedIds)[0]
+        const file = store.files.find(f => f.id === id)
+        if (file) {
+          store.toggleFavorite(id)
+          vaultSounds.success()
+        }
+      }
+      break
+
+    case '/':
+      // / - Focus search
+      event.preventDefault()
+      searchInput.value?.focus()
+      break
+
+    case 'escape':
+      // Escape - Close modals, clear selection
+      closeAllModals()
+      store.clearSelection()
+      break
+
+    case 'a':
+      // Ctrl+A - Select all
+      if (event.ctrlKey || event.metaKey) {
+        event.preventDefault()
+        store.selectAll()
+      }
+      break
+
+    case 'g':
+      // G - Grid view
+      event.preventDefault()
+      store.setViewMode('grid')
+      break
+
+    case 'l':
+      // L - List view
+      event.preventDefault()
+      store.setViewMode('list')
+      break
+  }
+}
+
+function closeAllModals() {
+  showNewFolderModal.value = false
+  showDeleteConfirm.value = false
+  showRenameModal.value = false
+  showPreview.value = false
+  previewData.value = null
+}
+
+function confirmDeleteSelected() {
+  // Get first selected item for the confirmation modal
+  const id = Array.from(store.selectedIds)[0]
+  const file = store.files.find(f => f.id === id)
+  const folder = store.folders.find(f => f.id === id)
+  if (file || folder) {
+    deleteTarget.value = {
+      item: file || folder,
+      isFolder: !!folder,
+      isMultiple: store.selectedIds.size > 1,
+      count: store.selectedIds.size
+    }
+    showDeleteConfirm.value = true
+  }
+}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // NAVIGATION
@@ -61,7 +186,15 @@ function navigateToFolder(folderId) {
   }
 }
 
-function handleItemClick(item, isFolder) {
+function handleItemClick(event, item, isFolder) {
+  // Ctrl/Cmd+click or Shift+click for selection
+  if (event.ctrlKey || event.metaKey || event.shiftKey) {
+    event.preventDefault()
+    store.toggleSelect(item.id)
+    return
+  }
+
+  // Normal click - navigate or preview
   if (isFolder) {
     navigateToFolder(item.id)
   } else {
@@ -77,6 +210,8 @@ async function createFolder() {
   if (!newFolderName.value.trim()) return
   try {
     await store.createFolder(newFolderName.value.trim())
+    // Play folder open sound (chamber conjured)
+    vaultSounds.folderOpen()
     showNewFolderModal.value = false
     newFolderName.value = ''
   } catch (e) {
@@ -95,7 +230,11 @@ function triggerUpload() {
 async function handleFileUpload(event) {
   const files = event.target.files
   if (files.length > 0) {
-    await store.uploadFiles(Array.from(files))
+    const results = await store.uploadFiles(Array.from(files))
+    // Play crystallization sound on successful upload
+    if (results.length > 0) {
+      vaultSounds.upload()
+    }
   }
   event.target.value = ''  // Reset input
 }
@@ -115,7 +254,11 @@ async function handleDrop(event) {
   dragOver.value = false
   const files = event.dataTransfer.files
   if (files.length > 0) {
-    await store.uploadFiles(Array.from(files))
+    const results = await store.uploadFiles(Array.from(files))
+    // Play crystallization sound on successful upload
+    if (results.length > 0) {
+      vaultSounds.upload()
+    }
   }
 }
 
@@ -172,11 +315,16 @@ function openDelete(item, isFolder) {
 
 async function confirmDelete() {
   try {
-    if (deleteTarget.value.isFolder) {
+    // Handle bulk delete
+    if (deleteTarget.value.isMultiple) {
+      await store.deleteSelected()
+    } else if (deleteTarget.value.isFolder) {
       await store.deleteFolder(deleteTarget.value.item.id)
     } else {
       await store.deleteFile(deleteTarget.value.item.id)
     }
+    // Play dissolution sound
+    vaultSounds.delete()
     showDeleteConfirm.value = false
   } catch (e) {
     alert(e)
@@ -288,6 +436,12 @@ function formatDate(dateStr) {
               :style="{ width: `${store.storagePercent}%` }"
             ></div>
           </div>
+          <!-- Keyboard hint -->
+          <div class="text-xs text-gray-600 mt-1 hidden lg:block">
+            <kbd class="px-1 py-0.5 bg-apex-darker rounded text-xs">N</kbd> new
+            <kbd class="px-1 py-0.5 bg-apex-darker rounded text-xs ml-1">U</kbd> upload
+            <kbd class="px-1 py-0.5 bg-apex-darker rounded text-xs ml-1">/</kbd> search
+          </div>
         </div>
       </div>
 
@@ -298,11 +452,12 @@ function formatDate(dateStr) {
           @click="triggerUpload"
           class="btn-primary flex items-center gap-2"
           :disabled="store.uploading"
+          title="Upload Files (U)"
         >
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
           </svg>
-          Upload
+          <span class="hidden sm:inline">Upload</span>
         </button>
         <input
           id="file-upload-input"
@@ -316,14 +471,30 @@ function formatDate(dateStr) {
         <button
           @click="showNewFolderModal = true"
           class="btn-ghost flex items-center gap-2"
+          title="New Folder (N)"
         >
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
           </svg>
-          New Folder
+          <span class="hidden sm:inline">New Folder</span>
         </button>
 
-        <div class="flex-1"></div>
+        <!-- Search bar -->
+        <div class="relative flex-1 max-w-xs">
+          <input
+            ref="searchInput"
+            type="text"
+            :value="store.searchQuery"
+            @input="store.setSearchQuery($event.target.value)"
+            placeholder="Search artifacts... (/)"
+            class="w-full bg-apex-darker border border-apex-border rounded-lg pl-9 pr-3 py-2 text-sm text-gray-300 placeholder-gray-500 focus:border-amber-600/50 focus:outline-none"
+          />
+          <svg class="w-4 h-4 text-gray-500 absolute left-3 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+        </div>
+
+        <div class="hidden sm:block flex-1"></div>
 
         <!-- View mode toggle -->
         <div class="flex items-center bg-apex-darker rounded-lg p-1">
@@ -358,6 +529,34 @@ function formatDate(dateStr) {
           <option value="size">Size</option>
           <option value="type">Type</option>
         </select>
+      </div>
+
+      <!-- Selection toolbar -->
+      <div
+        v-if="store.isSelecting"
+        class="flex items-center gap-3 mb-4 p-3 bg-amber-900/20 border border-amber-600/30 rounded-lg"
+      >
+        <span class="text-amber-200 text-sm font-medium">
+          {{ store.selectedIds.size }} {{ store.selectedIds.size === 1 ? 'item' : 'items' }} selected
+        </span>
+        <div class="flex-1"></div>
+        <button
+          @click="confirmDeleteSelected"
+          class="text-red-400 hover:text-red-300 text-sm flex items-center gap-1"
+          title="Delete selected (Delete)"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+          </svg>
+          Dissolve
+        </button>
+        <button
+          @click="store.clearSelection"
+          class="text-gray-400 hover:text-white text-sm"
+          title="Clear selection (Esc)"
+        >
+          Clear
+        </button>
       </div>
 
       <!-- Breadcrumb -->
@@ -413,10 +612,20 @@ function formatDate(dateStr) {
         <div
           v-for="folder in store.sortedFolders"
           :key="folder.id"
-          @click="handleItemClick(folder, true)"
+          @click="handleItemClick($event, folder, true)"
           @contextmenu="showContextMenu($event, folder, true)"
-          class="bg-apex-darker rounded-lg p-4 cursor-pointer hover:bg-apex-border transition-colors group"
+          class="bg-apex-darker rounded-lg p-4 cursor-pointer hover:bg-apex-border transition-colors group relative"
+          :class="{ 'ring-2 ring-amber-500/50 bg-amber-900/10': store.selectedIds.has(folder.id) }"
         >
+          <!-- Selection indicator -->
+          <div
+            v-if="store.selectedIds.has(folder.id)"
+            class="absolute top-2 left-2 w-5 h-5 bg-amber-500 rounded-full flex items-center justify-center"
+          >
+            <svg class="w-3 h-3 text-black" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
+            </svg>
+          </div>
           <div class="text-4xl mb-2 text-center">📁</div>
           <p class="text-sm text-white truncate text-center">{{ folder.name }}</p>
           <p class="text-xs text-gray-500 text-center mt-1">
@@ -428,10 +637,20 @@ function formatDate(dateStr) {
         <div
           v-for="file in store.sortedFiles"
           :key="file.id"
-          @click="handleItemClick(file, false)"
+          @click="handleItemClick($event, file, false)"
           @contextmenu="showContextMenu($event, file, false)"
           class="bg-apex-darker rounded-lg p-4 cursor-pointer hover:bg-apex-border transition-colors group relative"
+          :class="{ 'ring-2 ring-amber-500/50 bg-amber-900/10': store.selectedIds.has(file.id) }"
         >
+          <!-- Selection indicator -->
+          <div
+            v-if="store.selectedIds.has(file.id)"
+            class="absolute top-2 left-2 w-5 h-5 bg-amber-500 rounded-full flex items-center justify-center"
+          >
+            <svg class="w-3 h-3 text-black" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
+            </svg>
+          </div>
           <!-- Favorite indicator -->
           <div v-if="file.favorite" class="absolute top-2 right-2 text-gold">
             <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
@@ -461,12 +680,25 @@ function formatDate(dateStr) {
             <tr
               v-for="folder in store.sortedFolders"
               :key="folder.id"
-              @click="handleItemClick(folder, true)"
+              @click="handleItemClick($event, folder, true)"
               @contextmenu="showContextMenu($event, folder, true)"
-              class="border-b border-apex-border/50 hover:bg-apex-border/50 cursor-pointer transition-colors"
+              class="border-b border-apex-border/50 hover:bg-apex-border/50 cursor-pointer transition-colors group"
+              :class="{ 'bg-amber-900/10': store.selectedIds.has(folder.id) }"
             >
               <td class="px-4 py-3">
                 <div class="flex items-center gap-3">
+                  <!-- Selection checkbox -->
+                  <div
+                    @click.stop="store.toggleSelect(folder.id)"
+                    class="w-5 h-5 rounded border flex items-center justify-center cursor-pointer transition-colors"
+                    :class="store.selectedIds.has(folder.id)
+                      ? 'bg-amber-500 border-amber-500'
+                      : 'border-gray-600 hover:border-amber-500/50 opacity-0 group-hover:opacity-100'"
+                  >
+                    <svg v-if="store.selectedIds.has(folder.id)" class="w-3 h-3 text-black" fill="currentColor" viewBox="0 0 20 20">
+                      <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
+                    </svg>
+                  </div>
                   <span class="text-xl">📁</span>
                   <span class="text-white">{{ folder.name }}</span>
                 </div>
@@ -490,12 +722,25 @@ function formatDate(dateStr) {
             <tr
               v-for="file in store.sortedFiles"
               :key="file.id"
-              @click="handleItemClick(file, false)"
+              @click="handleItemClick($event, file, false)"
               @contextmenu="showContextMenu($event, file, false)"
-              class="border-b border-apex-border/50 hover:bg-apex-border/50 cursor-pointer transition-colors"
+              class="border-b border-apex-border/50 hover:bg-apex-border/50 cursor-pointer transition-colors group"
+              :class="{ 'bg-amber-900/10': store.selectedIds.has(file.id) }"
             >
               <td class="px-4 py-3">
                 <div class="flex items-center gap-3">
+                  <!-- Selection checkbox -->
+                  <div
+                    @click.stop="store.toggleSelect(file.id)"
+                    class="w-5 h-5 rounded border flex items-center justify-center cursor-pointer transition-colors"
+                    :class="store.selectedIds.has(file.id)
+                      ? 'bg-amber-500 border-amber-500'
+                      : 'border-gray-600 hover:border-amber-500/50 opacity-0 group-hover:opacity-100'"
+                  >
+                    <svg v-if="store.selectedIds.has(file.id)" class="w-3 h-3 text-black" fill="currentColor" viewBox="0 0 20 20">
+                      <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
+                    </svg>
+                  </div>
                   <span class="text-xl">{{ store.getFileIcon(file.file_type) }}</span>
                   <span class="text-white">{{ file.name }}</span>
                   <span v-if="file.favorite" class="text-gold">
@@ -634,10 +879,19 @@ function formatDate(dateStr) {
     <Teleport to="body">
       <div v-if="showDeleteConfirm" class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
         <div class="bg-apex-dark border border-apex-border rounded-lg p-6 w-full max-w-md">
-          <h2 class="text-lg font-bold text-red-400 mb-4">⊗ Dissolve {{ deleteTarget?.isFolder ? 'Chamber' : 'Artifact' }}</h2>
+          <h2 class="text-lg font-bold text-red-400 mb-4">
+            ⊗ Dissolve {{ deleteTarget?.isMultiple ? `${deleteTarget.count} Items` : (deleteTarget?.isFolder ? 'Chamber' : 'Artifact') }}
+          </h2>
           <p class="text-gray-300 mb-4">
-            Dissolve <span class="text-white font-medium">{{ deleteTarget?.item?.name }}</span> into the void?
-            <span v-if="deleteTarget?.isFolder" class="text-red-400 block mt-1">All contents will be lost to the aether.</span>
+            <template v-if="deleteTarget?.isMultiple">
+              Dissolve <span class="text-white font-medium">{{ deleteTarget.count }} items</span> into the void?
+            </template>
+            <template v-else>
+              Dissolve <span class="text-white font-medium">{{ deleteTarget?.item?.name }}</span> into the void?
+            </template>
+            <span v-if="deleteTarget?.isFolder || deleteTarget?.isMultiple" class="text-red-400 block mt-1">
+              All contents will be lost to the aether.
+            </span>
           </p>
           <div class="flex justify-end gap-3">
             <button @click="showDeleteConfirm = false" class="btn-ghost">Preserve</button>
