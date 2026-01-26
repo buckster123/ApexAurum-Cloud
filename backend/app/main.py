@@ -120,7 +120,7 @@ async def health_check():
     return {
         "status": "healthy",
         "version": "0.1.0",
-        "build": "v43-village-gui",
+        "build": "v44-village-isometric",
         "agents": {
             "native": 5,
             "pac": 4,
@@ -148,6 +148,8 @@ async def health_check():
             "neural-space-3d",
             "village-websocket",
             "village-gui",
+            "village-isometric-3d",
+            "task-tickers",
         ],
     }
 

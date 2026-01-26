@@ -3,177 +3,295 @@
  * VillageGUIView - Village GUI Dashboard
  *
  * The main view for watching agents work in the village.
+ * Supports 2D Canvas and 3D Isometric views with task tickers.
+ *
  * "Where invisible computation becomes visible movement"
  */
 
-import { ref, computed } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useSound } from '@/composables/useSound'
 import VillageCanvas from '@/components/village/VillageCanvas.vue'
+import VillageIsometric from '@/components/village/VillageIsometric.vue'
+import TaskTickerBar from '@/components/village/TaskTickerBar.vue'
+import TaskDetailPanel from '@/components/village/TaskDetailPanel.vue'
 import { ZONES, AGENT_COLORS } from '@/composables/useVillage'
+import { ZONES_3D, AGENT_COLORS as AGENT_COLORS_3D } from '@/composables/useVillageIsometric'
 
 const { playTone } = useSound()
 
-const selectedZone = ref(null)
-const showLegend = ref(true)
+// View mode
+const viewMode = ref(localStorage.getItem('village-view-mode') || '2d')
+const showTaskPanel = ref(true)
 
-const zones = computed(() => Object.entries(ZONES))
-const agents = computed(() => Object.entries(AGENT_COLORS).filter(([k]) => k !== 'default'))
+// WebSocket connection
+const ws = ref(null)
+const status = reactive({
+  connection: 'disconnected',
+  eventCount: 0,
+  lastTool: null
+})
 
-function handleZoneClick({ name, zone }) {
-  selectedZone.value = { name, ...zone }
-  playTone(440, 0.05, 'sine', 0.1)
+// Event log
+const eventLog = ref([])
+
+// Task tracking
+const activeTasks = ref([])
+const completedTasks = ref([])
+
+// Zone configs based on view mode
+const zoneConfig = computed(() => viewMode.value === '3d' ? ZONES_3D : ZONES)
+const agentColors = computed(() => viewMode.value === '3d' ? AGENT_COLORS_3D : AGENT_COLORS)
+
+// Save view mode preference
+watch(viewMode, (mode) => {
+  localStorage.setItem('village-view-mode', mode)
+  playTone(mode === '3d' ? 660 : 440, 0.05, 'sine', 0.1)
+})
+
+// WebSocket connection
+function connectWebSocket() {
+  const apiUrl = import.meta.env.VITE_API_URL || ''
+  const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+
+  let wsUrl
+  if (apiUrl) {
+    wsUrl = apiUrl.replace(/^http/, 'ws') + '/ws/village'
+  } else {
+    wsUrl = `${wsProtocol}//${window.location.host}/ws/village`
+  }
+
+  console.log(`Village: Connecting to ${wsUrl}`)
+  ws.value = new WebSocket(wsUrl)
+
+  ws.value.onopen = () => {
+    console.log('Village: WebSocket connected')
+    status.connection = 'connected'
+    playTone(880, 0.05, 'sine', 0.1)
+  }
+
+  ws.value.onclose = () => {
+    console.log('Village: WebSocket disconnected')
+    status.connection = 'disconnected'
+    setTimeout(connectWebSocket, 3000)
+  }
+
+  ws.value.onerror = (error) => {
+    console.error('Village: WebSocket error:', error)
+    status.connection = 'error'
+  }
+
+  ws.value.onmessage = (event) => {
+    handleEvent(JSON.parse(event.data))
+  }
 }
 
-function closeZoneInfo() {
-  selectedZone.value = null
+function handleEvent(event) {
+  status.eventCount++
+
+  // Add to event log
+  eventLog.value.unshift({
+    ...event,
+    id: `${event.tool}-${Date.now()}`,
+    receivedAt: Date.now()
+  })
+  if (eventLog.value.length > 50) {
+    eventLog.value.pop()
+  }
+
+  // Handle task tracking
+  if (event.type === 'tool_start') {
+    const taskId = `${event.agent_id}-${event.tool}-${Date.now()}`
+    activeTasks.value.push({
+      id: taskId,
+      ...event,
+      startTime: Date.now(),
+      status: 'running'
+    })
+    status.lastTool = event.tool
+    playTone(440, 0.03, 'sine', 0.08)
+  }
+  else if (event.type === 'tool_complete' || event.type === 'tool_error') {
+    // Find and update task
+    const idx = activeTasks.value.findIndex(
+      t => t.agent_id === event.agent_id && t.tool === event.tool && t.status === 'running'
+    )
+    if (idx !== -1) {
+      const task = activeTasks.value[idx]
+      task.status = event.type === 'tool_complete' && event.success ? 'complete' : 'error'
+      task.endTime = Date.now()
+      task.duration_ms = event.duration_ms || (task.endTime - task.startTime)
+      task.result_preview = event.result_preview
+
+      // Move to completed
+      completedTasks.value.unshift(task)
+      if (completedTasks.value.length > 50) {
+        completedTasks.value.pop()
+      }
+
+      // Remove from active after animation delay
+      setTimeout(() => {
+        const removeIdx = activeTasks.value.findIndex(t => t.id === task.id)
+        if (removeIdx !== -1) {
+          activeTasks.value.splice(removeIdx, 1)
+        }
+      }, 1500)
+
+      playTone(event.success ? 880 : 220, 0.05, 'sine', 0.1)
+    }
+  }
 }
+
+function clearCompleted() {
+  completedTasks.value = []
+}
+
+function handleTaskClick(task) {
+  playTone(550, 0.03, 'sine', 0.05)
+  // Could focus on agent in view
+}
+
+onMounted(() => {
+  connectWebSocket()
+})
+
+onUnmounted(() => {
+  if (ws.value) {
+    ws.value.close()
+  }
+})
 </script>
 
 <template>
   <div class="village-gui-view h-screen flex flex-col bg-apex-dark overflow-hidden pt-16">
-    <!-- Header -->
+    <!-- Header with View Toggle -->
     <div class="h-12 bg-apex-dark/80 backdrop-blur border-b border-apex-border flex items-center justify-between px-4">
       <div class="flex items-center gap-3">
         <span class="text-lg">🏘️</span>
         <span class="font-medium text-white">Village GUI</span>
-        <span class="text-xs text-gray-500">Agent Activity Visualization</span>
+        <span class="text-xs text-gray-500 hidden sm:inline">Agent Activity Visualization</span>
       </div>
 
       <div class="flex items-center gap-4">
-        <!-- Legend Toggle -->
+        <!-- View Toggle -->
+        <div class="flex bg-white/5 rounded-lg p-0.5">
+          <button
+            @click="viewMode = '2d'"
+            class="px-3 py-1 text-xs rounded transition-colors"
+            :class="viewMode === '2d' ? 'bg-gold text-black' : 'text-gray-400 hover:text-white'"
+          >
+            2D
+          </button>
+          <button
+            @click="viewMode = '3d'"
+            class="px-3 py-1 text-xs rounded transition-colors"
+            :class="viewMode === '3d' ? 'bg-gold text-black' : 'text-gray-400 hover:text-white'"
+          >
+            3D
+          </button>
+        </div>
+
+        <!-- Task Panel Toggle -->
         <button
-          @click="showLegend = !showLegend"
-          class="text-xs text-gray-400 hover:text-white transition-colors"
+          @click="showTaskPanel = !showTaskPanel"
+          class="text-xs text-gray-400 hover:text-white transition-colors hidden md:block"
         >
-          {{ showLegend ? 'Hide' : 'Show' }} Legend
+          {{ showTaskPanel ? 'Hide' : 'Show' }} Tasks
         </button>
       </div>
     </div>
 
+    <!-- Task Ticker Bar -->
+    <TaskTickerBar
+      :active-tasks="activeTasks"
+      :agent-colors="agentColors"
+      @task-click="handleTaskClick"
+    />
+
     <!-- Main Content -->
     <div class="flex-1 flex overflow-hidden">
-      <!-- Canvas Area -->
-      <div class="flex-1 flex items-center justify-center p-4">
-        <div class="relative">
-          <VillageCanvas @zone-click="handleZoneClick" />
+      <!-- Village View -->
+      <div class="flex-1 relative">
+        <!-- 2D Canvas View -->
+        <div v-show="viewMode === '2d'" class="w-full h-full flex items-center justify-center">
+          <VillageCanvas
+            :events="eventLog"
+            :status="status"
+          />
+        </div>
 
-          <!-- Zone Info Popup -->
-          <div
-            v-if="selectedZone"
-            class="absolute top-4 left-4 bg-apex-dark/95 border border-apex-border rounded-lg p-4 w-64 z-10"
-          >
-            <div class="flex items-center justify-between mb-3">
-              <div class="flex items-center gap-2">
-                <span
-                  class="w-4 h-4 rounded"
-                  :style="{ backgroundColor: selectedZone.color }"
-                ></span>
-                <span class="font-medium text-white">{{ selectedZone.label }}</span>
-              </div>
-              <button
-                @click="closeZoneInfo"
-                class="text-gray-500 hover:text-white"
-              >
-                &times;
-              </button>
-            </div>
-            <p class="text-xs text-gray-400">
-              <template v-if="selectedZone.name === 'dj_booth'">
-                Music generation and audio tools. Suno AI integration.
-              </template>
-              <template v-else-if="selectedZone.name === 'memory_garden'">
-                Vector memory, Neo-Cortex, and scratch storage.
-              </template>
-              <template v-else-if="selectedZone.name === 'file_shed'">
-                The Vault - file uploads, downloads, and management.
-              </template>
-              <template v-else-if="selectedZone.name === 'workshop'">
-                Python code execution and evaluation.
-              </template>
-              <template v-else-if="selectedZone.name === 'bridge_portal'">
-                Agent spawning and multi-agent coordination.
-              </template>
-              <template v-else-if="selectedZone.name === 'library'">
-                Knowledge base search and RAG tools.
-              </template>
-              <template v-else-if="selectedZone.name === 'watchtower'">
-                Web fetching, search, and Steel Browser.
-              </template>
-              <template v-else>
-                Default zone for utility tools.
-              </template>
-            </p>
-          </div>
+        <!-- 3D Isometric View -->
+        <div v-show="viewMode === '3d'" class="w-full h-full">
+          <VillageIsometric
+            :events="eventLog"
+            :status="status"
+          />
         </div>
       </div>
 
-      <!-- Right Sidebar: Legend -->
-      <div
-        v-if="showLegend"
-        class="w-64 bg-apex-dark border-l border-apex-border p-4 overflow-auto"
-      >
-        <!-- Zone Legend -->
-        <div class="mb-6">
-          <h3 class="text-xs text-gray-500 uppercase tracking-wider mb-3">Zones</h3>
-          <div class="space-y-2">
-            <div
-              v-for="[name, zone] in zones"
-              :key="name"
-              class="flex items-center gap-2 text-sm"
-            >
-              <span
-                class="w-3 h-3 rounded"
-                :style="{ backgroundColor: zone.color }"
-              ></span>
-              <span class="text-gray-300">{{ zone.label }}</span>
-            </div>
-          </div>
+      <!-- Right Sidebar: Task Detail Panel -->
+      <transition name="slide-right">
+        <div v-if="showTaskPanel" class="w-80 flex-shrink-0 hidden md:block">
+          <TaskDetailPanel
+            :active-tasks="activeTasks"
+            :completed-tasks="completedTasks"
+            :agent-colors="agentColors"
+            :zone-config="zoneConfig"
+            @task-click="handleTaskClick"
+            @clear-completed="clearCompleted"
+          />
         </div>
-
-        <!-- Agent Legend -->
-        <div class="mb-6">
-          <h3 class="text-xs text-gray-500 uppercase tracking-wider mb-3">Agents</h3>
-          <div class="space-y-2">
-            <div
-              v-for="[name, color] in agents"
-              :key="name"
-              class="flex items-center gap-2 text-sm"
-            >
-              <span
-                class="w-3 h-3 rounded-full"
-                :style="{ backgroundColor: color }"
-              ></span>
-              <span class="text-gray-300">{{ name }}</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Instructions -->
-        <div>
-          <h3 class="text-xs text-gray-500 uppercase tracking-wider mb-3">How it Works</h3>
-          <ul class="text-xs text-gray-400 space-y-2">
-            <li>Agents move to zones when executing tools</li>
-            <li>Glowing agent = currently working</li>
-            <li>Click zones for details</li>
-            <li>Activity log shows recent events</li>
-          </ul>
-        </div>
-
-        <!-- Stats -->
-        <div class="mt-6 pt-4 border-t border-apex-border">
-          <h3 class="text-xs text-gray-500 uppercase tracking-wider mb-3">Stats</h3>
-          <div class="text-xs text-gray-400 space-y-1">
-            <div>Total Zones: {{ zones.length }}</div>
-            <div>Agent Types: {{ agents.length }}</div>
-          </div>
-        </div>
-      </div>
+      </transition>
     </div>
+
+    <!-- Mobile Task Panel Toggle -->
+    <button
+      @click="showTaskPanel = !showTaskPanel"
+      class="md:hidden fixed bottom-4 right-4 w-12 h-12 bg-gold text-black rounded-full shadow-lg flex items-center justify-center z-20"
+    >
+      <span class="text-lg">{{ showTaskPanel ? '×' : '📋' }}</span>
+    </button>
+
+    <!-- Mobile Task Panel Overlay -->
+    <transition name="slide-up">
+      <div
+        v-if="showTaskPanel"
+        class="md:hidden fixed inset-x-0 bottom-0 h-2/3 bg-apex-dark border-t border-apex-border z-10"
+      >
+        <TaskDetailPanel
+          :active-tasks="activeTasks"
+          :completed-tasks="completedTasks"
+          :agent-colors="agentColors"
+          :zone-config="zoneConfig"
+          @task-click="handleTaskClick"
+          @clear-completed="clearCompleted"
+        />
+      </div>
+    </transition>
   </div>
 </template>
 
 <style scoped>
 .village-gui-view {
   background: radial-gradient(ellipse at center, #1a1a2e 0%, #0f0f1a 100%);
+}
+
+.slide-right-enter-active,
+.slide-right-leave-active {
+  transition: transform 0.3s ease;
+}
+
+.slide-right-enter-from,
+.slide-right-leave-to {
+  transform: translateX(100%);
+}
+
+.slide-up-enter-active,
+.slide-up-leave-active {
+  transition: transform 0.3s ease;
+}
+
+.slide-up-enter-from,
+.slide-up-leave-to {
+  transform: translateY(100%);
 }
 </style>
