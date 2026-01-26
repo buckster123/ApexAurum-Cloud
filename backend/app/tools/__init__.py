@@ -165,10 +165,10 @@ def register_all_tools():
     from . import utilities  # noqa: F401
     from . import web  # noqa: F401
     from . import vault  # noqa: F401
+    from . import knowledge_base  # noqa: F401
 
     # Future: Import more tool categories
     # from . import memory  # noqa: F401
-    # from . import knowledge_base  # noqa: F401
 
     logger.info(f"Tool registry initialized with {registry.tool_count} tools")
 

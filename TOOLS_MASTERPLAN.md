@@ -14,11 +14,11 @@ Each tool gives Claude's agents the ability to interact with the world.
 | 1 | Utilities | 6 | ✅ COMPLETE |
 | 2 | Web | 2 | ✅ COMPLETE |
 | 3 | Vault | 3/5 | 🔶 PARTIAL |
-| 4 | Knowledge Base | 4 | ⬜ Planned |
+| 4 | Knowledge Base | 4 | ✅ COMPLETE |
 | 5 | Session Memory | 4 | ⬜ Planned |
 | 6 | Code Execution | 2 | ⬜ Planned |
 | 7 | Agents | 3 | ⬜ Planned |
-| **Total** | | **26** | **11/26** |
+| **Total** | | **26** | **15/26** |
 
 ---
 
@@ -92,18 +92,18 @@ File operations mapped to existing Vault API. User-scoped, quota-enforced.
 
 ---
 
-## Tier 4: Knowledge Base (The Knowing Hands) ⬜
+## Tier 4: Knowledge Base (The Knowing Hands) ✅
 
-**Status:** PLANNED
+**Status:** COMPLETE - Deployed v31
 
-Bridge the MCP Knowledge Base to tool format. Semantic search over docs.
+Bridge to MCP Knowledge Base or external KB service. Semantic search over docs.
 
 | Tool | Description | MCP Equivalent | Status |
 |------|-------------|----------------|--------|
-| `kb_search` | Semantic search across KB | `kb_search` | ⬜ |
-| `kb_lookup` | Quick term/concept lookup | `kb_quick_lookup` | ⬜ |
-| `kb_get_doc` | Get full document | `kb_get_document` | ⬜ |
-| `kb_topics` | List available topics | `kb_list_topics` | ⬜ |
+| `kb_search` | Semantic search across KB | `kb_search` | ✅ |
+| `kb_lookup` | Quick term/concept lookup | `kb_quick_lookup` | ✅ |
+| `kb_topics` | List available topics | `kb_list_topics` | ✅ |
+| `kb_answer` | Get context to answer questions | `kb_answer` | ✅ |
 
 **Implementation Notes:**
 - MCP server already running at localhost
@@ -284,6 +284,15 @@ Each tier has a poetic name reflecting its nature:
 ---
 
 ## Changelog
+
+### 2026-01-26 - v31-knowing-hands
+- Completed Tier 4: Knowledge Base Tools (4 tools)
+- `kb_search` - Semantic search with topic filtering
+- `kb_lookup` - Quick term/concept lookup
+- `kb_topics` - List available documentation topics
+- `kb_answer` - Get context for answering questions
+- Graceful fallback when KB server not configured
+- Total tools: 15/26
 
 ### 2026-01-26 - v30-crafting-hands
 - Completed Tier 3 partial: Vault Tools (3/5)
