@@ -62,6 +62,10 @@ async def get_db() -> AsyncSession:
 
 async def init_db():
     """Initialize database (create tables and run migrations)."""
+    # Import all models to ensure they're registered with SQLAlchemy
+    # This must happen before any queries or Base.metadata operations
+    from app import models  # noqa: F401
+
     engine = get_engine()
     async with engine.begin() as conn:
         # Create tables if they don't exist
