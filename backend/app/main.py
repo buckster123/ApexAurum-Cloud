@@ -17,6 +17,34 @@ from app.api.v1 import router as api_v1_router
 settings = get_settings()
 
 
+def init_vault():
+    """Initialize The Vault storage directory."""
+    from pathlib import Path
+    import os
+
+    vault_path = Path(settings.vault_path)
+    users_path = vault_path / "users"
+
+    print(f"Initializing Vault at: {vault_path}")
+    print(f"  - Path exists: {vault_path.exists()}")
+    print(f"  - Is writable: {os.access(vault_path, os.W_OK) if vault_path.exists() else 'N/A'}")
+
+    try:
+        users_path.mkdir(parents=True, exist_ok=True)
+        print(f"  - Users directory ready: {users_path}")
+
+        # Test write permission
+        test_file = users_path / ".vault_test"
+        test_file.write_text("ok")
+        test_file.unlink()
+        print("  - Write test: PASSED")
+    except PermissionError as e:
+        print(f"  - ERROR: Permission denied - {e}")
+        print("  - TIP: Set RAILWAY_RUN_UID=0 in Railway env vars")
+    except Exception as e:
+        print(f"  - ERROR: {e}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan manager."""
@@ -25,7 +53,10 @@ async def lifespan(app: FastAPI):
     print("ApexAurum Cloud v25 - The Vault")
     print("=" * 50)
     await init_db()
-    print("Database initialized - FRESH BUILD")
+    print("Database initialized")
+
+    # Initialize Vault storage
+    init_vault()
 
     yield
 
@@ -77,7 +108,7 @@ async def health_check():
     return {
         "status": "healthy",
         "version": "0.1.0",
-        "build": "v25-vault",
+        "build": "v25-vault-fix1",
         "agents": {
             "native": 5,
             "pac": 4,

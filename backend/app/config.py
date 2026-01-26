@@ -58,7 +58,8 @@ class Settings(BaseSettings):
     rate_limit_window_seconds: int = 60
 
     # The Vault - File Storage
-    vault_path: str = "/data/vault"
+    # Mount path is /data on Railway volume - use directly to avoid permission issues
+    vault_path: str = "/data"
     max_file_size_bytes: int = 104_857_600  # 100MB
     default_quota_bytes: int = 5_368_709_120  # 5GB per user
 
