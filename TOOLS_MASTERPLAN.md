@@ -16,9 +16,9 @@ Each tool gives Claude's agents the ability to interact with the world.
 | 3 | Vault | 3/5 | 🔶 PARTIAL |
 | 4 | Knowledge Base | 4 | ✅ COMPLETE |
 | 5 | Session Memory | 4 | ✅ COMPLETE |
-| 6 | Code Execution | 2 | ⬜ Planned |
+| 6 | Code Execution | 2 | ✅ COMPLETE |
 | 7 | Agents | 3 | ⬜ Planned |
-| **Total** | | **26** | **19/26** |
+| **Total** | | **26** | **21/26** |
 
 ---
 
@@ -141,16 +141,16 @@ Per-conversation scratchpad for multi-step reasoning.
 
 ---
 
-## Tier 6: Code Execution (The Making Hands) ⬜
+## Tier 6: Code Execution (The Making Hands) ✅
 
-**Status:** PLANNED
+**Status:** COMPLETE - Deployed v33
 
-Execute code safely. Already have backend in Cortex Diver.
+Execute Python code in sandboxed environment.
 
 | Tool | Description | Status |
 |------|-------------|--------|
-| `code_run` | Execute Python/JS/Shell | ⬜ |
-| `code_result` | Get execution result | ⬜ |
+| `code_run` | Execute Python code with output capture | ✅ |
+| `code_eval` | Evaluate single expression | ✅ |
 
 **Implementation Notes:**
 - Map to existing `POST /files/{id}/execute`
@@ -284,6 +284,15 @@ Each tier has a poetic name reflecting its nature:
 ---
 
 ## Changelog
+
+### 2026-01-26 - v33-making-hands
+- Completed Tier 6: Code Execution Tools (2 tools)
+- `code_run` - Execute Python with stdout/stderr capture
+- `code_eval` - Evaluate single expressions
+- Sandboxed with safe builtins only
+- Available modules: math, random, datetime, json, re, etc.
+- Limits: 10s timeout, 100KB output
+- Total tools: 21/26
 
 ### 2026-01-26 - v32-remembering-hands
 - Completed Tier 5: Session Memory Tools (4 tools)
