@@ -1,8 +1,8 @@
 # ApexAurum-Cloud Handover Document
 
 **Date:** 2026-01-26
-**Build:** v26-cortex-phase2
-**Status:** PRODUCTION READY + The Vault + Cortex Diver Phase 2 (Agent Integration)
+**Build:** v26-cortex-phase3
+**Status:** PRODUCTION READY + The Vault + Cortex Diver Phase 3 (Terminal & Execution)
 
 ---
 
@@ -66,15 +66,36 @@
 4. Ask questions, get code suggestions
 5. Click "Apply to Editor" to use suggested code
 
-### Next Phases
+### Phase 3: Terminal & Execution (COMPLETE)
 
-**Phase 3: Terminal & Execution**
-- Sandboxed backend execution
-- Terminal output panel
+**Backend:**
+- `POST /files/{id}/execute` - Execute code in sandboxed subprocess
+- Supported languages: Python, JavaScript (Node), Shell/Bash
+- Safety limits: 10s timeout, 100KB output, sandboxed env
+
+**Frontend:**
+- `TerminalPanel.vue` - Terminal interface
+  - Run button + F5 shortcut
+  - Stdout/stderr/system message display
+  - Exit code and execution time
+  - Sound effects (run/success/error)
+- CortexDiver integration:
+  - Terminal toggle in status bar
+  - Ctrl+` to toggle terminal
+  - F5 to run current file
+  - Split view (editor + terminal)
+
+**Keyboard shortcuts:**
+- `F5` - Run code
+- `Ctrl+\`` - Toggle terminal
+- `Escape` - Close panels
+
+### Next Phase
 
 **Phase 4: RAG & Intelligence**
 - Index user files for semantic search
 - Codebase-aware conversations
+- "Explain this project" queries
 
 ---
 

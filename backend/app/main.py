@@ -108,7 +108,7 @@ async def health_check():
     return {
         "status": "healthy",
         "version": "0.1.0",
-        "build": "v26-cortex-p2",
+        "build": "v26-cortex-p3",
         "agents": {
             "native": 5,
             "pac": 4,
@@ -124,6 +124,7 @@ async def health_check():
             "model-selection",
             "vault",
             "cortex-diver",
+            "code-execution",
         ],
     }
 
