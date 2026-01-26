@@ -74,6 +74,12 @@ const router = createRouter({
       component: () => import('@/views/NeuralView.vue'),
       meta: { requiresAuth: true }
     },
+    {
+      path: '/village-gui',
+      name: 'village-gui',
+      component: () => import('@/views/VillageGUIView.vue'),
+      meta: { requiresAuth: true }
+    },
   ]
 })
 

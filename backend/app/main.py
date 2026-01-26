@@ -51,7 +51,7 @@ async def lifespan(app: FastAPI):
     """Application lifespan manager."""
     # Startup
     print("=" * 50)
-    print("ApexAurum Cloud v42 - Village WebSocket")
+    print("ApexAurum Cloud v43 - Village GUI")
     print("=" * 50)
 
     # Import all models before database init to ensure SQLAlchemy
@@ -120,7 +120,7 @@ async def health_check():
     return {
         "status": "healthy",
         "version": "0.1.0",
-        "build": "v42-village-ws",
+        "build": "v43-village-gui",
         "agents": {
             "native": 5,
             "pac": 4,
@@ -147,6 +147,7 @@ async def health_check():
             "neo-cortex",
             "neural-space-3d",
             "village-websocket",
+            "village-gui",
         ],
     }
 
