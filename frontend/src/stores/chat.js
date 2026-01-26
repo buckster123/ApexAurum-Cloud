@@ -16,6 +16,7 @@ export const useChatStore = defineStore('chat', () => {
   const availableModels = ref([])
   const defaultModel = ref('claude-sonnet-4-5-20250929')
   const selectedModel = ref(localStorage.getItem('apexaurum_selected_model') || 'claude-sonnet-4-5-20250929')
+  const maxTokens = ref(parseInt(localStorage.getItem('apexaurum_max_tokens')) || 8192)
 
   // Getters
   const sortedConversations = computed(() => {
@@ -51,6 +52,11 @@ export const useChatStore = defineStore('chat', () => {
   function setSelectedModel(modelId) {
     selectedModel.value = modelId
     localStorage.setItem('apexaurum_selected_model', modelId)
+  }
+
+  function setMaxTokens(tokens) {
+    maxTokens.value = tokens
+    localStorage.setItem('apexaurum_max_tokens', tokens.toString())
   }
 
   // Actions
@@ -121,7 +127,8 @@ export const useChatStore = defineStore('chat', () => {
           model: useModel,
           agent,
           stream: true,
-          use_pac: usePac
+          use_pac: usePac,
+          max_tokens: maxTokens.value,
         })
       })
 
@@ -295,8 +302,10 @@ export const useChatStore = defineStore('chat', () => {
     availableModels,
     defaultModel,
     selectedModel,
+    maxTokens,
     fetchModels,
     setSelectedModel,
+    setMaxTokens,
     // Core actions
     fetchConversations,
     loadConversation,

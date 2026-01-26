@@ -545,6 +545,26 @@ function renderMarkdown(content) {
         <p class="text-xs text-gray-500 mt-1">
           {{ chat.availableModels.find(m => m.id === chat.selectedModel)?.description || 'Loading...' }}
         </p>
+
+        <!-- Max Tokens Slider -->
+        <div class="mt-3">
+          <label class="block text-xs mb-1" :class="pacMode ? 'text-purple-300/60' : 'text-gray-500'">
+            Max Tokens: {{ chat.maxTokens.toLocaleString() }}
+          </label>
+          <input
+            type="range"
+            :value="chat.maxTokens"
+            @input="chat.setMaxTokens(parseInt($event.target.value))"
+            min="1024"
+            max="16384"
+            step="1024"
+            class="w-full h-1 bg-apex-border rounded-lg appearance-none cursor-pointer"
+          />
+          <div class="flex justify-between text-xs text-gray-600 mt-0.5">
+            <span>1K</span>
+            <span>16K</span>
+          </div>
+        </div>
       </div>
 
       <!-- Agent Selector -->

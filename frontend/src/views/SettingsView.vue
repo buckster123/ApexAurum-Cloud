@@ -26,13 +26,13 @@ const saved = ref(false)
 
 // Preferences
 const preferences = ref({
-  default_model: 'claude-3-haiku-20240307',
+  default_model: 'claude-sonnet-4-5-20250929',
   cache_strategy: 'balanced',
   context_strategy: 'adaptive',
   theme: 'dark',
   default_agent: 'AZOTH',
   streaming: true,
-  max_tokens: 4096,
+  max_tokens: 8192,
   temperature: 0.7,
 })
 
@@ -80,9 +80,9 @@ const memoryExtractionMode = ref('manual')
 const pacAgents = computed(() => nativeAgents.value.filter(a => a.has_pac))
 
 const models = [
-  { id: 'claude-3-haiku-20240307', name: 'Haiku (Fast)' },
-  { id: 'claude-sonnet-4-20250514', name: 'Sonnet 4' },
-  { id: 'claude-opus-4-20250514', name: 'Opus 4' },
+  { id: 'claude-haiku-4-5-20251001', name: '◇ Haiku 4.5 (Fast)', tier: 'haiku' },
+  { id: 'claude-sonnet-4-5-20250929', name: '✦ Sonnet 4.5 (Balanced)', tier: 'sonnet' },
+  { id: 'claude-opus-4-5-20251101', name: '⚜️ Opus 4.5 (Powerful)', tier: 'opus' },
 ]
 
 const cacheStrategies = [
@@ -1188,16 +1188,24 @@ function getAgentSymbol(agentId) {
 
           <div>
             <label class="block text-sm text-gray-400 mb-2">
-              Max Tokens: {{ preferences.max_tokens }}
+              Max Tokens: {{ preferences.max_tokens.toLocaleString() }}
+              <span class="text-xs text-gray-500 ml-2">
+                ({{ preferences.max_tokens >= 16384 ? 'Maximum' : preferences.max_tokens >= 8192 ? 'High' : 'Normal' }})
+              </span>
             </label>
             <input
               type="range"
               v-model.number="preferences.max_tokens"
-              min="256"
-              max="8192"
-              step="256"
+              min="1024"
+              max="16384"
+              step="1024"
               class="w-full"
             />
+            <div class="flex justify-between text-xs text-gray-500 mt-1">
+              <span>1K</span>
+              <span>8K</span>
+              <span>16K</span>
+            </div>
           </div>
 
           <div>

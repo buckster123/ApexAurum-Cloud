@@ -214,10 +214,11 @@ async def get_agent_prompt_with_memory(
 class ChatRequest(BaseModel):
     message: str
     conversation_id: Optional[UUID] = None
-    model: str = "claude-3-haiku-20240307"
+    model: str = DEFAULT_MODEL
     agent: str = "CLAUDE"
     stream: bool = True
     use_pac: bool = False  # Load PAC (Perfected Alchemical Codex) version of prompt
+    max_tokens: int = DEFAULT_MAX_TOKENS  # Output token limit (up to 16384 for Opus/Sonnet 4.5)
 
 
 class ConversationUpdate(BaseModel):
@@ -416,6 +417,7 @@ async def send_message(
                     messages=messages,
                     model=request.model,
                     system=system_prompt,
+                    max_tokens=request.max_tokens,
                 ):
                     yield f"data: {json.dumps(event)}\n\n"
                     if event.get("type") == "token":
@@ -443,6 +445,7 @@ async def send_message(
                 messages=messages,
                 model=request.model,
                 system=system_prompt,
+                max_tokens=request.max_tokens,
             )
 
             # Extract text from response
