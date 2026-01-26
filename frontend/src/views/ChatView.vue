@@ -13,7 +13,7 @@ import api from '@/services/api'
 const route = useRoute()
 const router = useRouter()
 const chat = useChatStore()
-const { pacMode } = useDevMode()
+const { devMode, pacMode } = useDevMode()
 const { sounds } = useSound()
 const { haptics } = useHaptic()
 const swipe = useSwipe()
@@ -146,7 +146,8 @@ function handleResize() {
 // Load conversation if ID in route
 onMounted(async () => {
   await checkApiKeyStatus()
-  await chat.fetchModels()  // Fetch available models
+  await chat.fetchProviders()  // Fetch available LLM providers (dev mode feature)
+  await chat.fetchModels()  // Fetch available models for current provider
   await chat.fetchConversations()
   await fetchCustomAgents()
 
@@ -517,8 +518,35 @@ function renderMarkdown(content) {
         </div>
       </div>
 
+      <!-- Provider Selector (The Many Flames - Dev Mode Only) -->
+      <div v-if="devMode" class="p-4 border-t border-apex-border" :class="{ 'border-purple-500/30': pacMode }">
+        <label class="block text-xs mb-2 flex items-center gap-2" :class="pacMode ? 'text-purple-300/60' : 'text-gray-500'">
+          <span>Provider</span>
+          <span class="text-gold">🔧</span>
+        </label>
+        <select
+          :value="chat.selectedProvider"
+          @change="chat.setProvider($event.target.value)"
+          class="w-full bg-apex-darker border border-apex-border rounded-lg px-3 py-2 text-sm focus:ring-1 focus:ring-gold focus:border-gold transition-all cursor-pointer"
+          :class="pacMode ? 'border-purple-500/30' : ''"
+        >
+          <option
+            v-for="provider in chat.availableProviders"
+            :key="provider.id"
+            :value="provider.id"
+            :disabled="!provider.available"
+            class="bg-apex-darker"
+          >
+            {{ provider.name }}{{ !provider.available ? ' (no key)' : '' }}
+          </option>
+        </select>
+        <p class="text-xs text-gray-600 mt-1">
+          {{ chat.selectedProvider === 'anthropic' ? 'Uses your BYOK key' : 'Uses platform API key' }}
+        </p>
+      </div>
+
       <!-- Model Selector (Unleash the Stones) -->
-      <div class="p-4 border-t border-apex-border" :class="{ 'border-purple-500/30': pacMode }">
+      <div class="p-4 border-t border-apex-border" :class="{ 'border-purple-500/30': pacMode, 'border-t-0': devMode }">
         <label class="block text-xs mb-2 flex items-center gap-2" :class="pacMode ? 'text-purple-300/60' : 'text-gray-500'">
           <span>Model</span>
           <span v-if="chat.availableModels.length === 0" class="text-xs text-gray-600">(loading...)</span>

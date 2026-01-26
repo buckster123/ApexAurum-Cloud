@@ -6,6 +6,7 @@ Core chat functionality with streaming responses and tool execution.
 
 import json
 import logging
+import os
 from pathlib import Path
 from typing import Optional
 from uuid import UUID, uuid4
@@ -27,6 +28,15 @@ from app.services.claude import (
     AVAILABLE_MODELS,
     DEFAULT_MODEL,
     DEFAULT_MAX_TOKENS,
+)
+from app.services.llm_provider import (
+    PROVIDERS,
+    PROVIDER_MODELS,
+    get_available_providers,
+    get_provider_models,
+    get_default_model,
+    create_llm_service,
+    MultiProviderLLM,
 )
 from app.services.memory import MemoryService
 from app.services.tool_executor import create_tool_executor
@@ -216,7 +226,8 @@ async def get_agent_prompt_with_memory(
 class ChatRequest(BaseModel):
     message: str
     conversation_id: Optional[UUID] = None
-    model: str = DEFAULT_MODEL
+    provider: str = "anthropic"  # LLM provider (anthropic, deepseek, groq, together, qwen)
+    model: Optional[str] = None  # Model ID - uses provider default if not specified
     agent: str = "CLAUDE"
     stream: bool = True
     use_pac: bool = False  # Load PAC (Perfected Alchemical Codex) version of prompt
@@ -306,25 +317,109 @@ class ModelsResponse(BaseModel):
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# PROVIDERS ENDPOINT - Multi-provider LLM support (dev mode feature)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class ProviderInfo(BaseModel):
+    """Information about an LLM provider."""
+    id: str
+    name: str
+    available: bool
+    default_model: str
+
+
+class ProvidersResponse(BaseModel):
+    """Response with available providers."""
+    providers: list[ProviderInfo]
+    default: str
+
+
+@router.get("/providers", response_model=ProvidersResponse)
+async def list_providers():
+    """
+    List available LLM providers.
+
+    Returns providers with their availability status (based on API key presence).
+    This is a dev mode feature - the UI selector is hidden for normal users.
+    """
+    providers = [
+        ProviderInfo(**p) for p in get_available_providers()
+    ]
+    return ProvidersResponse(
+        providers=providers,
+        default="anthropic",
+    )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # MODELS ENDPOINT - Expose available models to frontend
 # ═══════════════════════════════════════════════════════════════════════════════
 
-@router.get("/models", response_model=ModelsResponse)
-async def get_available_models():
-    """
-    Get list of available Claude models.
+class ProviderModelInfo(BaseModel):
+    """Information about a model from any provider."""
+    id: str
+    name: str
+    tier: str
+    max_tokens: int
 
-    Returns model IDs, names, descriptions, and capabilities.
+
+class ProviderModelsResponse(BaseModel):
+    """Response with models for a specific provider."""
+    models: list[ProviderModelInfo]
+    default: str
+    provider: str
+
+
+@router.get("/models", response_model=ModelsResponse)
+async def get_available_models(provider: str = "anthropic"):
+    """
+    Get list of available models for a provider.
+
+    Args:
+        provider: Provider ID (anthropic, deepseek, groq, together, qwen)
+
+    Returns model IDs, names, and capabilities.
     Use these model IDs when sending messages.
     """
+    # For backwards compatibility, return Claude models in original format for anthropic
+    if provider == "anthropic":
+        models = [
+            ModelInfo(id=model_id, **model_info)
+            for model_id, model_info in AVAILABLE_MODELS.items()
+        ]
+        return ModelsResponse(
+            models=models,
+            default=DEFAULT_MODEL,
+            default_max_tokens=DEFAULT_MAX_TOKENS,
+        )
+
+    # For other providers, get from provider registry
+    provider_models = get_provider_models(provider)
+    if not provider_models:
+        # Unknown provider, return empty
+        return ModelsResponse(
+            models=[],
+            default="",
+            default_max_tokens=8192,
+        )
+
+    # Convert to ModelInfo format (with placeholder descriptions)
     models = [
-        ModelInfo(id=model_id, **model_info)
-        for model_id, model_info in AVAILABLE_MODELS.items()
+        ModelInfo(
+            id=m["id"],
+            name=m["name"],
+            description=f"{m['name']} - {m['tier']} tier",
+            tier=m["tier"],
+            max_output_tokens=m.get("max_tokens", 8192),
+            context_window=128000,  # Most models have ~128k context
+        )
+        for m in provider_models
     ]
+
     return ModelsResponse(
         models=models,
-        default=DEFAULT_MODEL,
-        default_max_tokens=DEFAULT_MAX_TOKENS,
+        default=get_default_model(provider),
+        default_max_tokens=8192,
     )
 
 
@@ -336,12 +431,14 @@ async def send_message(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Send a message and get a response from Claude.
+    Send a message and get a response from an LLM.
+
+    Supports multiple providers:
+    - anthropic (default): Uses user's BYOK API key
+    - deepseek, groq, together, qwen: Uses platform API keys
 
     If stream=True, returns Server-Sent Events (SSE) stream.
     If stream=False, returns complete response as JSON.
-
-    Beta Mode: Requires user to have their own API key configured.
     """
     # Beta: Require authentication
     if not user:
@@ -350,26 +447,50 @@ async def send_message(
             detail="Please log in to chat with the Agents."
         )
 
-    # Beta: Require user's own API key (BYOK)
-    user_api_key = get_user_api_key(user)
-    if not user_api_key:
+    # Determine which provider to use
+    provider = request.provider or "anthropic"
+    model = request.model or get_default_model(provider)
+
+    # For Anthropic, use user's BYOK key
+    # For other providers, use platform keys (env vars)
+    if provider == "anthropic":
+        user_api_key = get_user_api_key(user)
+        if not user_api_key:
+            raise HTTPException(
+                status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                detail={
+                    "error": "api_key_required",
+                    "message": "Please add your Anthropic API key in Settings to start chatting.",
+                    "action": "setup_api_key"
+                }
+            )
+        api_key = user_api_key
+    else:
+        # Other providers use platform API keys from environment
+        api_key = None  # Let the service get from env
+
+    # Check if provider is available (has API key configured)
+    provider_config = PROVIDERS.get(provider)
+    if not provider_config:
         raise HTTPException(
-            status_code=status.HTTP_402_PAYMENT_REQUIRED,
-            detail={
-                "error": "api_key_required",
-                "message": "Please add your Anthropic API key in Settings to start chatting.",
-                "action": "setup_api_key"
-            }
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unknown provider: {provider}"
         )
 
-    # Create Claude service with user's API key
-    try:
-        claude = create_claude_service(user_api_key)
-    except ValueError as e:
-        logger.error(f"Claude service initialization failed: {e}")
+    if provider != "anthropic" and not os.getenv(provider_config["key_env"]):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Could not initialize AI service. Please check your API key."
+            detail=f"Provider {provider_config['name']} is not configured. API key not set."
+        )
+
+    # Create multi-provider LLM service
+    try:
+        llm = create_llm_service(provider=provider, api_key=api_key)
+    except ValueError as e:
+        logger.error(f"LLM service initialization failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Could not initialize {provider_config['name']} service. Please check configuration."
         )
 
     # Get or create conversation (skip if ephemeral chat)
@@ -443,9 +564,9 @@ async def send_message(
                     turn += 1
                     pending_tool_uses = []
 
-                    async for event in claude.chat_stream(
+                    async for event in llm.chat_stream(
                         messages=current_messages,
-                        model=request.model,
+                        model=model,
                         system=system_prompt,
                         max_tokens=request.max_tokens,
                         tools=tools,
@@ -541,9 +662,9 @@ async def send_message(
             while turn < max_tool_turns:
                 turn += 1
 
-                response = await claude.chat(
+                response = await llm.chat(
                     messages=current_messages,
-                    model=request.model,
+                    model=model,
                     system=system_prompt,
                     max_tokens=request.max_tokens,
                     tools=tools,
@@ -620,7 +741,8 @@ async def send_message(
             return {
                 "conversation_id": str(conversation.id) if conversation else None,
                 "message": assistant_content,
-                "model": response.get("model", request.model),
+                "provider": provider,
+                "model": response.get("model", model),
                 "usage": response.get("usage"),
                 "tool_calls": tool_calls if tool_calls else None,
                 "tool_results": tool_results if tool_results else None,

@@ -11,6 +11,12 @@ export const useChatStore = defineStore('chat', () => {
   const streamingContent = ref('')
 
   // ═══════════════════════════════════════════════════════════════════════════════
+  // PROVIDER SELECTION - The Many Flames (Dev Mode Feature)
+  // ═══════════════════════════════════════════════════════════════════════════════
+  const availableProviders = ref([])
+  const selectedProvider = ref(localStorage.getItem('apexaurum_provider') || 'anthropic')
+
+  // ═══════════════════════════════════════════════════════════════════════════════
   // MODEL SELECTION - Unleash the Stones
   // ═══════════════════════════════════════════════════════════════════════════════
   const availableModels = ref([])
@@ -34,12 +40,41 @@ export const useChatStore = defineStore('chat', () => {
   })
 
   // ═══════════════════════════════════════════════════════════════════════════════
+  // PROVIDER ACTIONS - The Many Flames
+  // ═══════════════════════════════════════════════════════════════════════════════
+
+  async function fetchProviders() {
+    try {
+      const response = await api.get('/api/v1/chat/providers')
+      availableProviders.value = response.data.providers || []
+
+      // If selected provider is not available, reset to anthropic
+      const providerIds = availableProviders.value.map(p => p.id)
+      if (!providerIds.includes(selectedProvider.value)) {
+        selectedProvider.value = 'anthropic'
+        localStorage.setItem('apexaurum_provider', 'anthropic')
+      }
+    } catch (e) {
+      console.error('Failed to fetch providers:', e)
+      // Keep defaults
+    }
+  }
+
+  async function setProvider(providerId) {
+    selectedProvider.value = providerId
+    localStorage.setItem('apexaurum_provider', providerId)
+    // Refresh models for the new provider
+    await fetchModels()
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════════
   // MODEL ACTIONS
   // ═══════════════════════════════════════════════════════════════════════════════
 
   async function fetchModels() {
     try {
-      const response = await api.get('/api/v1/chat/models')
+      // Fetch models for the selected provider
+      const response = await api.get(`/api/v1/chat/models?provider=${selectedProvider.value}`)
       availableModels.value = response.data.models || []
       defaultModel.value = response.data.default || 'claude-sonnet-4-5-20250929'
 
@@ -135,6 +170,7 @@ export const useChatStore = defineStore('chat', () => {
         body: JSON.stringify({
           message: content,
           conversation_id: currentConversation.value?.id,
+          provider: selectedProvider.value,
           model: useModel,
           agent,
           stream: true,
@@ -331,6 +367,11 @@ export const useChatStore = defineStore('chat', () => {
     isStreaming,
     streamingContent,
     sortedConversations,
+    // Provider selection (The Many Flames - Dev Mode)
+    availableProviders,
+    selectedProvider,
+    fetchProviders,
+    setProvider,
     // Model selection (Unleash the Stones)
     availableModels,
     defaultModel,

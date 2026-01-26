@@ -120,7 +120,7 @@ async def health_check():
     return {
         "status": "healthy",
         "version": "0.1.0",
-        "build": "v45-village-polish",
+        "build": "v46-multi-provider-llm",
         "agents": {
             "native": 5,
             "pac": 4,
@@ -152,6 +152,7 @@ async def health_check():
             "task-tickers",
             "village-particles",
             "village-click-select",
+            "multi-provider-llm",
         ],
     }
 

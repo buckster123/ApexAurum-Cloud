@@ -1,137 +1,87 @@
 # ApexAurum-Cloud Handover Document
 
 **Date:** 2026-01-26
-**Build:** v45-village-polish
-**Status:** PRODUCTION - Village GUI with WebGL Fallback
+**Build:** v46-multi-provider-llm
+**Status:** PRODUCTION - Multi-Provider LLM Support (Dev Mode)
 
 ---
 
-## Session Summary: Village GUI Evolution
+## Session Summary: Multi-Provider LLM Implementation
 
 ### What Was Accomplished
 
-1. **Village Phase 0: WebSocket Infrastructure**
-   - `VillageEventBroadcaster` service for real-time tool events
-   - WebSocket endpoint at `/ws/village`
-   - Tool-to-zone mapping for 46 tools across 8 zones
-   - Hooks in tool registry to broadcast start/complete/error
+Implemented the full multi-provider LLM system as planned in `.claude/plans/rippling-whistling-chipmunk.md`:
 
-2. **Village Phase 1: 2D Canvas GUI**
-   - Canvas-based visualization with 8 zones
-   - Agent circles with movement and glow effects
-   - Real-time tool execution visualization
+1. **Backend Provider Registry & Service** (`llm_provider.py`)
+   - `PROVIDERS` dict with 5 providers: Anthropic, DeepSeek, Groq, Together AI, Qwen
+   - `PROVIDER_MODELS` dict with models per provider
+   - `MultiProviderLLM` class with unified `chat()` and `chat_stream()` methods
+   - Tool format conversion between Anthropic and OpenAI formats
+   - Anthropic uses native SDK, others use OpenAI SDK with different base URLs
 
-3. **Village Isometric 3D + Task Tickers**
-   - Three.js OrthographicCamera isometric view
-   - 8 zone "buildings" with shadows and glow
-   - Agent spheres with smooth movement + pulse
-   - Task Ticker top bar (compact progress)
-   - Task Detail sidebar (full task cards)
-   - 2D/3D view toggle with shared WebSocket
-   - Mobile responsive with slide-up panel
+2. **Backend API Endpoints** (modified `chat.py`)
+   - `GET /api/v1/chat/providers` - List available providers with status
+   - `GET /api/v1/chat/models?provider=X` - Get models for a provider
+   - Modified `ChatRequest` to accept `provider` field
+   - Modified `send_message` to use `MultiProviderLLM`
 
-4. **Village Phase 5: Polish**
-   - Particle effects on tool completion (green=success, red=error)
-   - Click detection for agents (raycasting)
-   - Agent detail popup on click
-   - Hover tooltips for agents and zones
-   - Speech bubble system (approval/input/error)
-   - Cursor changes on hover
+3. **Frontend Provider State** (modified `chat.js`)
+   - `selectedProvider` ref with localStorage persistence
+   - `availableProviders` ref
+   - `fetchProviders()` action
+   - `setProvider()` action that refreshes models
+   - `sendMessage()` now includes provider
 
-5. **Bug Fixes This Session**
-   - Fixed agent spawn `max_tokens` error (Haiku 3 = 4096, not 8192)
-   - Fixed 3D not rendering (v-show → v-if for proper mounting)
-   - Added WebGL error detection + auto-fallback to 2D
-   - Added roundRect polyfill for older browsers
+4. **Frontend Provider Selector UI** (modified `ChatView.vue`)
+   - Provider dropdown appears in sidebar when `devMode` is active
+   - Shows provider availability (no key = disabled)
+   - Displays "Uses your BYOK key" for Anthropic, "Uses platform API key" for others
 
-### Tool Count: 46 + 23 Features
+### Provider Details
 
-| Tier | Name | Tools |
-|------|------|-------|
-| 1-10 | Previous | 40 |
-| 11 | Neo-Cortex | 6 |
-| **Total** | | **46** |
+| Provider | Base URL | Env Var |
+|----------|----------|---------|
+| Anthropic | native SDK | `ANTHROPIC_API_KEY` (BYOK) |
+| DeepSeek | `https://api.deepseek.com` | `DEEPSEEK_API_KEY` |
+| Groq | `https://api.groq.com/openai/v1` | `GROQ_API_KEY` |
+| Together | `https://api.together.xyz/v1` | `TOGETHER_API_KEY` |
+| Qwen | `https://dashscope-intl.aliyuncs.com/compatible-mode/v1` | `DASHSCOPE_API_KEY` |
 
----
-
-## Village GUI Architecture
-
-```
-VillageGUIView.vue
-├── TaskTickerBar.vue (top - compact)
-├── VillageCanvas.vue (2D mode)
-├── VillageIsometric.vue (3D mode)
-└── TaskDetailPanel.vue (right sidebar)
-
-Composables:
-├── useVillage.js (2D Canvas + WebSocket - legacy)
-└── useVillageIsometric.js (Three.js isometric)
-
-Backend:
-├── services/village_events.py (EventBroadcaster)
-└── api/v1/village_ws.py (WebSocket route)
-```
-
-### Zone Layout (Isometric 3D)
-
-```
-         [Library]          [Bridge Portal]
-              \                  /
-   [DJ Booth] ─── [VILLAGE SQUARE] ─── [File Shed]
-              /         🤖         \
-      [Watchtower]  [Memory Garden]  [Workshop]
-```
-
----
-
-## Files Created This Session
+### Files Created/Modified
 
 **Backend:**
-- `app/services/village_events.py` - Event broadcaster
-- `app/api/v1/village_ws.py` - WebSocket route
+- `app/services/llm_provider.py` - NEW: Multi-provider LLM service
+- `app/api/v1/chat.py` - MODIFIED: Added provider endpoints
+- `app/main.py` - MODIFIED: Updated build version
 
 **Frontend:**
-- `src/composables/useVillageIsometric.js` - Three.js isometric scene
-- `src/components/village/VillageIsometric.vue` - 3D view
-- `src/components/village/TaskTickerBar.vue` - Top bar ticker
-- `src/components/village/TaskDetailPanel.vue` - Right sidebar
-- `src/components/village/VillageCanvas.vue` - Updated 2D view
-- `src/views/VillageGUIView.vue` - Integrated dashboard
+- `src/stores/chat.js` - MODIFIED: Added provider state
+- `src/views/ChatView.vue` - MODIFIED: Added provider selector
 
 ---
 
-## Phase 5 Polish Status
+## Feature Status: 46 Tools + 24 Features
 
-- [x] Particle effects on tool completion (success=green, error=red)
-- [x] Floating labels above zones in 3D (already in place)
-- [x] Speech bubbles system (approval/input/error types)
-- [x] Click agent to show details popup
-- [x] Hover tooltips for agents and zones
-- [x] Raycasting click detection
-
-### Future Enhancements
-- [ ] Zone info popup on zone click
-- [ ] Camera pan/zoom controls
-- [ ] Agent path visualization during movement
+| Feature | Status |
+|---------|--------|
+| Multi-Provider LLM | Dev Mode Only |
+| Village GUI | Production |
+| Neo-Cortex | Production |
+| Tool System | Production |
 
 ---
 
-## Next Session: Open-Source LLM Providers (Dev Mode)
+## How to Enable Providers
 
-**Plan Ready:** `.claude/plans/rippling-whistling-chipmunk.md`
-
-Add multi-provider LLM support hidden in dev mode:
-- DeepSeek, Groq, Together AI, Qwen (all OpenAI-compatible)
-- Provider dropdown in sidebar (dev mode only)
-- Models refresh per provider
-
-**Key Files:**
-- CREATE: `backend/app/services/llm_provider.py`
-- MODIFY: `backend/app/api/v1/chat.py` (add /providers endpoint)
-- MODIFY: `frontend/src/stores/chat.js` (provider state)
-- MODIFY: `frontend/src/views/ChatView.vue` (provider selector)
-
-**Knowledge base:** `claude-root/knowledge-base/open-source-llms/` (6 API docs)
+1. **Dev Mode**: Activate via Konami code (↑↑↓↓←→←→BA) or 7-tap on Au logo
+2. **Provider dropdown** appears in sidebar above model selector
+3. **Add API keys** to Railway environment for other providers:
+   ```
+   DEEPSEEK_API_KEY=sk-...
+   GROQ_API_KEY=gsk_...
+   TOGETHER_API_KEY=...
+   DASHSCOPE_API_KEY=sk-...
+   ```
 
 ---
 
@@ -139,13 +89,16 @@ Add multi-provider LLM support hidden in dev mode:
 
 ```bash
 # Backend health
-curl https://backend-production-507c.up.railway.app/health | jq '{build, features: .features[-4:]}'
+curl https://backend-production-507c.up.railway.app/health | jq '{build, features: .features[-5:]}'
 
-# WebSocket status
-curl https://backend-production-507c.up.railway.app/ws/village/status
+# List providers
+curl https://backend-production-507c.up.railway.app/api/v1/chat/providers | jq
+
+# List models for a provider
+curl "https://backend-production-507c.up.railway.app/api/v1/chat/models?provider=groq" | jq
 
 # Frontend
-open https://frontend-production-5402.up.railway.app/village-gui
+open https://frontend-production-5402.up.railway.app
 ```
 
 ---
@@ -161,25 +114,42 @@ open https://frontend-production-5402.up.railway.app/village-gui
 
 ---
 
-## Related Projects
+## Architecture Summary
 
-- **buckster123/NeoCortex** - Standalone memory system (GitHub)
-- **ApexAurum-Village/** - Original Village GUI specs (local)
-- **neo-cortex/** - Unified memory with pgvector backend
+```
+Frontend (ChatView.vue)
+├── Provider Selector (devMode only)
+├── Model Selector (per provider)
+└── sends { provider, model, message }
+
+Backend (chat.py)
+├── GET /providers → list with availability
+├── GET /models?provider= → models for provider
+└── POST /message → uses MultiProviderLLM
+
+MultiProviderLLM (llm_provider.py)
+├── anthropic → Anthropic SDK (native)
+└── others → OpenAI SDK (different base_url)
+```
 
 ---
 
-## Key Commits This Session
+## Previous Session: Village GUI
+
+The Village GUI with isometric 3D, WebGL fallback, and polish features remains fully functional. See previous commits for details.
+
+---
+
+## Key Commits
 
 ```
+[PENDING] Multi-Provider LLM Support (dev mode feature)
 85ae6b0 Add WebGL error handling with auto-fallback to 2D
 b4fb4ed Fix 3D rendering + agent max_tokens errors
-6c808db Village Phase 5: Particles + Click Selection
-4e60e5b Village Isometric 3D + Task Tickers
 2f97418 Village Phase 1: Canvas-Based GUI Visualization
 8af71ea Village Phase 0: WebSocket Infrastructure
 ```
 
 ---
 
-*"The Village awakens in isometric splendor. Agents walk between buildings. Tasks flow like a living dashboard."*
+*"The Athanor accepts many flames. Each provider, a different path to transmutation."*
