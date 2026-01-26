@@ -12,9 +12,46 @@ const chatStore = useChatStore()
 
 // Tools (The Athanor's Hands)
 const toolsEnabled = ref(chatStore.toolsEnabled)
+const availableTools = ref([])
+const toolsCount = ref(0)
+const loadingTools = ref(false)
+const showToolsList = ref(false)
 
 function toggleTools() {
   chatStore.setToolsEnabled(toolsEnabled.value)
+}
+
+async function fetchTools() {
+  loadingTools.value = true
+  try {
+    const response = await api.get('/api/v1/tools')
+    availableTools.value = response.data.tools || []
+    toolsCount.value = response.data.count || 0
+  } catch (e) {
+    console.error('Failed to fetch tools:', e)
+  } finally {
+    loadingTools.value = false
+  }
+}
+
+// Group tools by category
+const toolsByCategory = computed(() => {
+  const grouped = {}
+  for (const tool of availableTools.value) {
+    const cat = tool.category || 'other'
+    if (!grouped[cat]) grouped[cat] = []
+    grouped[cat].push(tool)
+  }
+  return grouped
+})
+
+const categoryLabels = {
+  utility: '🔧 Utilities',
+  web: '🌐 Web',
+  files: '📁 Vault',
+  memory: '🧠 Memory',
+  knowledge: '📚 Knowledge',
+  agent: '🤖 Agents',
 }
 const { devMode, pacMode, handleTap, tapCount, alchemyLayer, layerName } = useDevMode()
 const { soundEnabled, toggleSound, sounds } = useSound()
@@ -119,6 +156,7 @@ onMounted(async () => {
   await fetchPreferences()
   await fetchUsage()
   await fetchApiKeyStatus()
+  await fetchTools()
 
   if (devMode.value) {
     await fetchNativeAgents()
@@ -641,18 +679,58 @@ function getAgentSymbol(agentId) {
             </label>
           </div>
 
-          <div class="flex items-center gap-3">
-            <input
-              type="checkbox"
-              id="tools"
-              v-model="toolsEnabled"
-              @change="toggleTools"
-              class="w-4 h-4 rounded border-gray-600 text-gold focus:ring-gold"
-            />
-            <label for="tools" class="text-sm text-gray-300">
-              Enable tool calling
-              <span class="text-xs text-gray-500">(calculator, time, etc.)</span>
-            </label>
+          <!-- Tools (The Athanor's Hands) -->
+          <div class="border border-apex-border rounded-lg p-4 space-y-3">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  id="tools"
+                  v-model="toolsEnabled"
+                  @change="toggleTools"
+                  class="w-4 h-4 rounded border-gray-600 text-gold focus:ring-gold"
+                />
+                <label for="tools" class="text-sm text-gray-300">
+                  Enable tool calling
+                </label>
+              </div>
+              <span class="text-xs px-2 py-1 rounded bg-gold/20 text-gold">
+                {{ toolsCount }} tools
+              </span>
+            </div>
+
+            <button
+              @click="showToolsList = !showToolsList"
+              class="text-xs text-gray-400 hover:text-gold flex items-center gap-1"
+            >
+              <span>{{ showToolsList ? 'Hide' : 'Show' }} available tools</span>
+              <svg
+                class="w-3 h-3 transition-transform"
+                :class="{ 'rotate-180': showToolsList }"
+                fill="none" stroke="currentColor" viewBox="0 0 24 24"
+              >
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+
+            <div v-if="showToolsList" class="space-y-3 pt-2 border-t border-apex-border">
+              <div v-if="loadingTools" class="text-sm text-gray-500">Loading tools...</div>
+              <div v-else v-for="(tools, category) in toolsByCategory" :key="category" class="space-y-1">
+                <div class="text-xs font-medium text-gold/80">
+                  {{ categoryLabels[category] || category }}
+                </div>
+                <div class="grid grid-cols-2 gap-1">
+                  <div
+                    v-for="tool in tools"
+                    :key="tool.name"
+                    class="text-xs text-gray-400 px-2 py-1 bg-apex-bg rounded truncate"
+                    :title="tool.description"
+                  >
+                    {{ tool.name }}
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
 
           <button
