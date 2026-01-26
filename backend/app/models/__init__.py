@@ -10,6 +10,7 @@ from app.models.memory import Memory
 from app.models.music import MusicTask
 from app.models.agent_memory import AgentMemory
 from app.models.file import File, Folder
+from app.models.vector import UserVector
 
 __all__ = [
     "User",
@@ -22,4 +23,5 @@ __all__ = [
     "AgentMemory",
     "File",
     "Folder",
+    "UserVector",
 ]
