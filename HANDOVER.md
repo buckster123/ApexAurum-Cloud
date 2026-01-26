@@ -1,86 +1,77 @@
 # ApexAurum-Cloud Handover Document
 
 **Date:** 2026-01-26
-**Build:** v28-athanors-hands
-**Status:** PRODUCTION READY + Phase 5 (Tool System)
+**Build:** v34-spawning-hands
+**Status:** PRODUCTION READY + The Athanor Complete (24 Tools)
 
 ---
 
-## Current Session: Phase 5 - The Athanor's Hands
+## Current Session: The Athanor Complete - All 7 Tiers
 
-**Goal:** Give Claude agents the ability to use tools - calculators, time, random numbers, and more. "Hands for the mind."
+**Goal:** Implement the complete tool system - 24 tools across 7 tiers.
 
-### What Was Implemented
+### What Was Implemented (Single Session!)
 
-**Backend (tools/):**
-- `app/tools/base.py` - Tool base classes
-  - `BaseTool` - Abstract base with schema and execute
-  - `SyncTool` - For synchronous tools
-  - `ToolSchema` - Name, description, input_schema for Claude API
-  - `ToolResult` - Success/failure with result/error
-  - `ToolContext` - User, conversation, agent context
-- `app/tools/__init__.py` - Singleton tool registry
-  - `register_all_tools()` - Called at startup
-  - `get_claude_tools()` - Returns Claude API format
-  - `execute()` - Route to tool with validation
-- `app/tools/utilities.py` - 6 Tier 1 utility tools:
-  - `get_current_time` - Current date/time in various formats
-  - `calculator` - Safe math expression evaluation
-  - `random_number` - Random integers or floats
-  - `count_words` - Text analysis (words, chars, sentences)
-  - `uuid_generate` - UUID v1/v4 generation
-  - `json_format` - Parse, validate, pretty-print JSON
+**All 7 Tiers deployed in one session:**
 
-**Backend (services/):**
-- `app/services/tool_executor.py` - Safe tool execution
-  - Context-aware execution
-  - `execute_tool_use()` - Handle Claude's tool_use blocks
-  - `execute_multiple()` - Batch execution
+| Tier | Name | Tools | Status |
+|------|------|-------|--------|
+| 1 | Utilities | 6 | ✅ |
+| 2 | Web | 2 | ✅ |
+| 3 | Vault | 3/5 | 🔶 |
+| 4 | Knowledge Base | 4 | ✅ |
+| 5 | Session Memory | 4 | ✅ |
+| 6 | Code Execution | 2 | ✅ |
+| 7 | Agents | 3 | ✅ |
+| **Total** | | **24/26** | |
 
-**Backend (claude.py):**
-- `tools` parameter added to `chat()` and `chat_stream()`
-- Stream handling for `tool_use` content blocks
-- Accumulates partial JSON for tool inputs
+**Tool Files Created:**
+- `app/tools/base.py` - Base classes (BaseTool, ToolSchema, ToolResult, ToolContext)
+- `app/tools/utilities.py` - Tier 1: 6 utility tools
+- `app/tools/web.py` - Tier 2: web_fetch, web_search
+- `app/tools/vault.py` - Tier 3: vault_list, vault_read, vault_info
+- `app/tools/knowledge_base.py` - Tier 4: kb_search, kb_lookup, kb_topics, kb_answer
+- `app/tools/scratch.py` - Tier 5: scratch_store/get/list/clear
+- `app/tools/code_exec.py` - Tier 6: code_run, code_eval
+- `app/tools/agents.py` - Tier 7: agent_spawn/status/result
 
-**Backend (chat.py):**
-- Full agentic tool loop (max 5 turns)
-- Streaming: yields tool_start, tool_executing, tool_result events
-- Non-streaming: loops until no more tool_use blocks
-- Saves tool_calls and tool_results to message metadata
+**Master Plan Document:**
+- `TOOLS_MASTERPLAN.md` - Complete roadmap and progress tracker
 
-**Backend (tools.py API):**
-- `GET /api/v1/tools` - List all tools
-- `GET /api/v1/tools/categories` - List categories
-- `GET /api/v1/tools/claude-format` - Tools in Claude API format
-- `GET /api/v1/tools/{name}` - Get tool schema
-- `POST /api/v1/tools/{name}/execute` - Execute tool directly
-- `POST /api/v1/tools/batch/execute` - Execute multiple tools
+### Known Issue - DEBUG NEXT SESSION
 
-**Frontend (chat.js):**
-- `toolsEnabled` state with localStorage persistence
-- `currentToolExecution` for UI indicator
-- SSE handling for tool events
+**Discrepancy:** Backend reports 24 tools, Azoth sees 21 in UI.
 
-**Frontend (ChatView.vue):**
-- Tools toggle in sidebar with count indicator
-- Tool execution indicator during streaming
-- Tool results shown inline in messages
-
-**Frontend (SettingsView.vue):**
-- Tools toggle checkbox in preferences
-
-### Quick Test
+Possible causes to investigate:
+1. Frontend caching old tool count
+2. Tools with `requires_auth=True` not showing for anonymous users
+3. Category filtering in frontend
+4. Tool toggle state affecting count display
 
 ```bash
-# Verify tools are live
-curl https://backend-production-507c.up.railway.app/api/v1/tools
+# Backend shows 24:
+curl https://backend-production-507c.up.railway.app/api/v1/tools | jq '.count'
 
-# Test Claude format
-curl https://backend-production-507c.up.railway.app/api/v1/tools/claude-format
-
-# Check health
-curl https://backend-production-507c.up.railway.app/health
+# Check by category:
+curl https://backend-production-507c.up.railway.app/api/v1/tools | jq '[.tools[].category] | group_by(.) | map({(.[0]): length}) | add'
 ```
+
+### Quick Verify
+
+```bash
+# Health check
+curl https://backend-production-507c.up.railway.app/health
+# Should show: build=v34-spawning-hands, tools=24
+
+# List all tools
+curl https://backend-production-507c.up.railway.app/api/v1/tools | jq '.tools[].name'
+```
+
+---
+
+## Previous: Phase 5 - The Athanor's Hands (Initial)
+
+Started the tool system with Tier 1 utilities and infrastructure.
 
 ---
 
