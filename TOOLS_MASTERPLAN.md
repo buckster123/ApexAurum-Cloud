@@ -13,12 +13,12 @@ Each tool gives Claude's agents the ability to interact with the world.
 |------|------|-------|--------|
 | 1 | Utilities | 6 | ✅ COMPLETE |
 | 2 | Web | 2 | ✅ COMPLETE |
-| 3 | Vault | 3/5 | 🔶 PARTIAL |
+| 3 | Vault | 5 | ✅ COMPLETE |
 | 4 | Knowledge Base | 4 | ✅ COMPLETE |
 | 5 | Session Memory | 4 | ✅ COMPLETE |
 | 6 | Code Execution | 2 | ✅ COMPLETE |
 | 7 | Agents | 3 | ✅ COMPLETE |
-| **Total** | | **26** | **24/26** |
+| **Total** | | **26** | **26/26 ✅** |
 
 ---
 
@@ -67,9 +67,9 @@ Fetch content and search the web. Pure HTTP - no API keys needed.
 
 ---
 
-## Tier 3: Vault Tools (The Crafting Hands) 🔶
+## Tier 3: Vault Tools (The Crafting Hands) ✅
 
-**Status:** PARTIAL - 3/5 tools deployed v30
+**Status:** COMPLETE - All 5 tools deployed v36
 
 File operations mapped to existing Vault API. User-scoped, quota-enforced.
 
@@ -77,8 +77,8 @@ File operations mapped to existing Vault API. User-scoped, quota-enforced.
 |------|-------------|---------|--------|
 | `vault_list` | List files in a folder | SQLAlchemy direct | ✅ |
 | `vault_read` | Read file content | SQLAlchemy + filesystem | ✅ |
-| `vault_write` | Write/update file | Needs service layer | ⬜ |
-| `vault_search` | Search file contents | Needs service layer | ⬜ |
+| `vault_write` | Write/update file | SQLAlchemy + filesystem | ✅ |
+| `vault_search` | Search file contents | SQLAlchemy + filesystem | ✅ |
 | `vault_info` | Get storage stats | SQLAlchemy direct | ✅ |
 
 **Implementation Notes:**
@@ -284,6 +284,19 @@ Each tier has a poetic name reflecting its nature:
 ---
 
 ## Changelog
+
+### 2026-01-26 - v36-vault-complete
+- Completed Tier 3: All 5 Vault tools now working!
+- `vault_write` - Create new files or update existing
+  - Quota enforcement
+  - Safe filename handling
+  - 1MB content limit per write
+  - Requires confirmation
+- `vault_search` - Search file contents
+  - Case-insensitive pattern matching
+  - Context lines (before/after)
+  - Max 5 matches per file, 50 files total
+- **ALL 26 TOOLS COMPLETE!**
 
 ### 2026-01-26 - v35-vault-fix
 - Fixed vault tools import error (`app.models.file` not `files`)

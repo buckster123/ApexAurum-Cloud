@@ -51,7 +51,7 @@ async def lifespan(app: FastAPI):
     """Application lifespan manager."""
     # Startup
     print("=" * 50)
-    print("ApexAurum Cloud v35 - Fixed Vault Imports")
+    print("ApexAurum Cloud v36 - Vault Complete")
     print("=" * 50)
     await init_db()
     print("Database initialized")
@@ -114,12 +114,12 @@ async def health_check():
     return {
         "status": "healthy",
         "version": "0.1.0",
-        "build": "v35-vault-fix",
+        "build": "v36-vault-complete",
         "agents": {
             "native": 5,
             "pac": 4,
         },
-        "tools": 24,  # All 7 Tiers complete!
+        "tools": 26,  # All 7 Tiers complete! All tools implemented!
         "features": [
             "streaming",
             "pac-mode",
