@@ -2,7 +2,85 @@
 
 **Date:** 2026-01-26
 **Build:** v47-billing-system
-**Status:** PRODUCTION - Billing & Monetization System
+**Status:** DEPLOYED - Billing System Ready for Stripe Configuration
+
+---
+
+## Next Session: Testing & Debug
+
+### Immediate TODO
+
+1. **Configure Stripe in Railway** (required before testing)
+   ```bash
+   # Add these environment variables to Railway backend service:
+   STRIPE_SECRET_KEY=sk_test_...        # From Stripe Dashboard > Developers > API keys
+   STRIPE_PUBLISHABLE_KEY=pk_test_...   # Same place
+   STRIPE_WEBHOOK_SECRET=whsec_...      # After creating webhook endpoint
+   ```
+
+2. **Create Stripe Products & Prices**
+   - Go to Stripe Dashboard > Products
+   - Create "ApexAurum Pro" - $9.99/month recurring
+   - Create "ApexAurum Opus" - $29.99/month recurring
+   - Create "Credits 500" - $5.00 one-time
+   - Create "Credits 2500" - $20.00 one-time
+   - Copy price IDs (price_xxx) to Railway:
+     ```
+     STRIPE_PRICE_PRO_MONTHLY=price_...
+     STRIPE_PRICE_OPUS_MONTHLY=price_...
+     STRIPE_PRICE_CREDITS_500=price_...
+     STRIPE_PRICE_CREDITS_2500=price_...
+     ```
+
+3. **Create Stripe Webhook**
+   - Stripe Dashboard > Developers > Webhooks
+   - Add endpoint: `https://backend-production-507c.up.railway.app/api/v1/webhooks/stripe`
+   - Select events: `checkout.session.completed`, `customer.subscription.*`, `invoice.*`
+   - Copy signing secret to `STRIPE_WEBHOOK_SECRET`
+
+4. **Run Database Migration**
+   ```bash
+   # In Railway backend console or via SSH:
+   alembic upgrade head
+   ```
+
+### Test Checklist
+
+- [ ] `/api/v1/billing/pricing` returns tier info (no auth needed)
+- [ ] `/api/v1/billing/status` returns free tier for new users
+- [ ] Subscription checkout redirects to Stripe
+- [ ] Credit purchase redirects to Stripe
+- [ ] Webhook processes `checkout.session.completed`
+- [ ] Usage counter increments on chat
+- [ ] Model restrictions work (free tier = Haiku only)
+- [ ] Tool restrictions work (free tier = no tools)
+- [ ] Credits deduct when subscription limit reached
+
+### Test Cards (Stripe Test Mode)
+```
+4242424242424242 - Success
+4000000000003220 - 3D Secure required
+4000000000009995 - Insufficient funds
+```
+
+### Quick Verification Commands
+```bash
+# Health check
+curl https://backend-production-507c.up.railway.app/health | jq '{build, features: .features[-3:]}'
+
+# Pricing (public)
+curl https://backend-production-507c.up.railway.app/api/v1/billing/pricing | jq
+
+# Billing status (requires auth)
+curl -H "Authorization: Bearer $TOKEN" \
+  https://backend-production-507c.up.railway.app/api/v1/billing/status | jq
+```
+
+### Known Issues / Notes
+
+- `metadata` column renamed to `extra_data` (SQLAlchemy reserved word)
+- Billing checks only active when `STRIPE_SECRET_KEY` is set
+- Without Stripe config, all users get unlimited access (BYOK mode)
 
 ---
 
