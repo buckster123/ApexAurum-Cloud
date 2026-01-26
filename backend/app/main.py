@@ -51,7 +51,7 @@ async def lifespan(app: FastAPI):
     """Application lifespan manager."""
     # Startup
     print("=" * 50)
-    print("ApexAurum Cloud v39 - Steel Browser")
+    print("ApexAurum Cloud v40 - Neo-Cortex")
     print("=" * 50)
 
     # Import all models before database init to ensure SQLAlchemy
@@ -120,12 +120,12 @@ async def health_check():
     return {
         "status": "healthy",
         "version": "0.1.0",
-        "build": "v39-steel-browser",
+        "build": "v40-neo-cortex",
         "agents": {
             "native": 5,
             "pac": 4,
         },
-        "tools": 40,  # 10 Tiers! Steel Browser online!
+        "tools": 46,  # 11 Tiers! Neo-Cortex unified memory!
         "features": [
             "streaming",
             "pac-mode",
@@ -144,6 +144,7 @@ async def health_check():
             "tool-registry",
             "tool-execution",
             "steel-browser",
+            "neo-cortex",
         ],
     }
 
