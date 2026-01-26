@@ -13,6 +13,7 @@ from fastapi.responses import JSONResponse
 from app.config import get_settings
 from app.database import init_db, close_db
 from app.api.v1 import router as api_v1_router
+from app.tools import register_all_tools
 
 settings = get_settings()
 
@@ -50,10 +51,15 @@ async def lifespan(app: FastAPI):
     """Application lifespan manager."""
     # Startup
     print("=" * 50)
-    print("ApexAurum Cloud v27 - The All-Seeing Eye")
+    print("ApexAurum Cloud v28 - The Athanor's Hands")
     print("=" * 50)
     await init_db()
     print("Database initialized")
+
+    # Initialize Tool Registry
+    register_all_tools()
+    from app.tools import registry
+    print(f"Tool registry: {registry.tool_count} tools registered")
 
     # Initialize Vault storage
     init_vault()
@@ -108,11 +114,12 @@ async def health_check():
     return {
         "status": "healthy",
         "version": "0.1.0",
-        "build": "v27-all-seeing-eye",
+        "build": "v28-athanors-hands",
         "agents": {
             "native": 5,
             "pac": 4,
         },
+        "tools": 6,  # Tier 1 utility tools
         "features": [
             "streaming",
             "pac-mode",
@@ -128,6 +135,8 @@ async def health_check():
             "content-search",
             "project-context",
             "rag-injection",
+            "tool-registry",
+            "tool-execution",
         ],
     }
 

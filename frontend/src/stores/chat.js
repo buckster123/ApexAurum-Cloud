@@ -18,6 +18,12 @@ export const useChatStore = defineStore('chat', () => {
   const selectedModel = ref(localStorage.getItem('apexaurum_selected_model') || 'claude-sonnet-4-5-20250929')
   const maxTokens = ref(parseInt(localStorage.getItem('apexaurum_max_tokens')) || 8192)
 
+  // ═══════════════════════════════════════════════════════════════════════════════
+  // TOOLS - The Athanor's Hands
+  // ═══════════════════════════════════════════════════════════════════════════════
+  const toolsEnabled = ref(localStorage.getItem('apexaurum_tools_enabled') === 'true')
+  const currentToolExecution = ref(null)  // Track currently executing tool
+
   // Getters
   const sortedConversations = computed(() => {
     const convs = conversations.value || []
@@ -57,6 +63,11 @@ export const useChatStore = defineStore('chat', () => {
   function setMaxTokens(tokens) {
     maxTokens.value = tokens
     localStorage.setItem('apexaurum_max_tokens', tokens.toString())
+  }
+
+  function setToolsEnabled(enabled) {
+    toolsEnabled.value = enabled
+    localStorage.setItem('apexaurum_tools_enabled', enabled.toString())
   }
 
   // Actions
@@ -129,6 +140,7 @@ export const useChatStore = defineStore('chat', () => {
           stream: true,
           use_pac: usePac,
           max_tokens: maxTokens.value,
+          use_tools: toolsEnabled.value,
         })
       })
 
@@ -167,6 +179,27 @@ export const useChatStore = defineStore('chat', () => {
               if (!currentConversation.value) {
                 currentConversation.value = { id: data.conversation_id }
               }
+            } else if (data.type === 'tool_start') {
+              // Tool use starting
+              currentToolExecution.value = { name: data.tool_name, id: data.tool_id }
+              const msg = messages.value.find(m => m.id === assistantMsgId)
+              if (msg) {
+                msg.content += `\n\n🔧 **Using tool: ${data.tool_name}...**\n`
+              }
+            } else if (data.type === 'tool_executing') {
+              // Tool execution in progress
+              currentToolExecution.value = { name: data.name, status: 'executing' }
+            } else if (data.type === 'tool_result') {
+              // Tool result received
+              const msg = messages.value.find(m => m.id === assistantMsgId)
+              if (msg) {
+                const status = data.is_error ? '❌' : '✅'
+                const resultPreview = typeof data.result === 'string'
+                  ? data.result.slice(0, 500)
+                  : JSON.stringify(data.result, null, 2).slice(0, 500)
+                msg.content += `${status} **${data.name}** result:\n\`\`\`\n${resultPreview}\n\`\`\`\n\n`
+              }
+              currentToolExecution.value = null
             } else if (data.type === 'error') {
               throw new Error(data.message || 'Stream error')
             }
@@ -306,6 +339,10 @@ export const useChatStore = defineStore('chat', () => {
     fetchModels,
     setSelectedModel,
     setMaxTokens,
+    // Tools (The Athanor's Hands)
+    toolsEnabled,
+    currentToolExecution,
+    setToolsEnabled,
     // Core actions
     fetchConversations,
     loadConversation,

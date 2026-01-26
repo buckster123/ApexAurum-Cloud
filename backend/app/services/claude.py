@@ -100,6 +100,7 @@ class ClaudeService:
         Send a chat message and get a response.
 
         Non-streaming version for simple requests.
+        Properly handles tool_use responses.
         """
         kwargs = {
             "model": model,
@@ -115,13 +116,26 @@ class ClaudeService:
 
         response = await self.client.messages.create(**kwargs)
 
+        # Parse content blocks properly
+        content_blocks = []
+        for block in response.content:
+            if block.type == "text":
+                content_blocks.append({
+                    "type": "text",
+                    "text": block.text,
+                })
+            elif block.type == "tool_use":
+                content_blocks.append({
+                    "type": "tool_use",
+                    "id": block.id,
+                    "name": block.name,
+                    "input": block.input,
+                })
+
         return {
             "id": response.id,
             "role": response.role,
-            "content": [
-                {"type": block.type, "text": getattr(block, "text", None)}
-                for block in response.content
-            ],
+            "content": content_blocks,
             "model": response.model,
             "stop_reason": response.stop_reason,
             "usage": {
@@ -142,6 +156,7 @@ class ClaudeService:
         Send a chat message and stream the response.
 
         Yields events as they arrive.
+        Properly handles tool_use blocks by accumulating input JSON.
         """
         kwargs = {
             "model": model,
@@ -155,6 +170,10 @@ class ClaudeService:
         if tools:
             kwargs["tools"] = tools
 
+        # Track current tool_use block being built
+        current_tool = None
+        tool_input_json = ""
+
         try:
             async with self.client.messages.stream(**kwargs) as stream:
                 async for event in stream:
@@ -164,6 +183,9 @@ class ClaudeService:
                                 "type": "token",
                                 "content": event.delta.text,
                             }
+                        elif hasattr(event.delta, "partial_json"):
+                            # Accumulate tool input JSON
+                            tool_input_json += event.delta.partial_json
                     elif event.type == "message_start":
                         yield {
                             "type": "start",
@@ -175,11 +197,32 @@ class ClaudeService:
                         }
                     elif event.type == "content_block_start":
                         if event.content_block.type == "tool_use":
+                            current_tool = {
+                                "id": event.content_block.id,
+                                "name": event.content_block.name,
+                            }
+                            tool_input_json = ""
                             yield {
                                 "type": "tool_start",
                                 "tool_name": event.content_block.name,
                                 "tool_id": event.content_block.id,
                             }
+                    elif event.type == "content_block_stop":
+                        if current_tool:
+                            # Parse accumulated JSON and emit complete tool_use
+                            import json
+                            try:
+                                tool_input = json.loads(tool_input_json) if tool_input_json else {}
+                            except json.JSONDecodeError:
+                                tool_input = {}
+                            yield {
+                                "type": "tool_use",
+                                "id": current_tool["id"],
+                                "name": current_tool["name"],
+                                "input": tool_input,
+                            }
+                            current_tool = None
+                            tool_input_json = ""
         except anthropic.AuthenticationError:
             logger.warning("API key authentication failed during stream")
             yield {

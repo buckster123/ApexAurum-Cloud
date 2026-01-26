@@ -1,12 +1,21 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue'
 import { useAuthStore } from '@/stores/auth'
+import { useChatStore } from '@/stores/chat'
 import { useDevMode } from '@/composables/useDevMode'
 import { useSound } from '@/composables/useSound'
 import { useHaptic } from '@/composables/useHaptic'
 import api from '@/services/api'
 
 const auth = useAuthStore()
+const chatStore = useChatStore()
+
+// Tools (The Athanor's Hands)
+const toolsEnabled = ref(chatStore.toolsEnabled)
+
+function toggleTools() {
+  chatStore.setToolsEnabled(toolsEnabled.value)
+}
 const { devMode, pacMode, handleTap, tapCount, alchemyLayer, layerName } = useDevMode()
 const { soundEnabled, toggleSound, sounds } = useSound()
 const { hapticEnabled, setEnabled: setHapticEnabled, haptics, isSupported: hapticSupported } = useHaptic()
@@ -629,6 +638,20 @@ function getAgentSymbol(agentId) {
             />
             <label for="streaming" class="text-sm text-gray-300">
               Enable streaming responses
+            </label>
+          </div>
+
+          <div class="flex items-center gap-3">
+            <input
+              type="checkbox"
+              id="tools"
+              v-model="toolsEnabled"
+              @change="toggleTools"
+              class="w-4 h-4 rounded border-gray-600 text-gold focus:ring-gold"
+            />
+            <label for="tools" class="text-sm text-gray-300">
+              Enable tool calling
+              <span class="text-xs text-gray-500">(calculator, time, etc.)</span>
             </label>
           </div>
 

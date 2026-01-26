@@ -29,6 +29,8 @@ from app.services.claude import (
     DEFAULT_MAX_TOKENS,
 )
 from app.services.memory import MemoryService
+from app.services.tool_executor import create_tool_executor
+from app.tools import registry as tool_registry, ToolContext, ToolCategory
 from app.api.v1.user import get_user_api_key
 
 logger = logging.getLogger(__name__)
@@ -220,6 +222,8 @@ class ChatRequest(BaseModel):
     use_pac: bool = False  # Load PAC (Perfected Alchemical Codex) version of prompt
     max_tokens: int = DEFAULT_MAX_TOKENS  # Output token limit (up to 16384 for Opus/Sonnet 4.5)
     save_conversation: bool = True  # Set to False for ephemeral chats (Cortex Diver code assist)
+    use_tools: bool = False  # Enable tool calling (The Athanor's Hands)
+    tool_categories: Optional[list[str]] = None  # Filter tools by category
 
 
 class ConversationUpdate(BaseModel):
@@ -408,24 +412,109 @@ async def send_message(
         request.agent, user, use_pac=request.use_pac, db=db
     )
 
+    # Get tools if enabled (The Athanor's Hands)
+    tools = None
+    tool_executor = None
+    if request.use_tools:
+        tool_executor = create_tool_executor(
+            user_id=user.id if user else None,
+            conversation_id=conversation.id if conversation else None,
+            agent_id=request.agent,
+        )
+        tools = tool_executor.get_available_tools()
+        logger.info(f"Tools enabled: {len(tools)} tools available")
+
     if request.stream:
         async def stream_response():
             full_response = ""
+            tool_calls = []  # Track tool calls made
+            tool_results = []  # Track tool results
+            current_messages = messages.copy()
+
             try:
-                conv_id = str(conversation.id)
+                conv_id = str(conversation.id) if conversation else None
                 yield f"data: {json.dumps({'type': 'start', 'conversation_id': conv_id})}\n\n"
 
-                async for event in claude.chat_stream(
-                    messages=messages,
-                    model=request.model,
-                    system=system_prompt,
-                    max_tokens=request.max_tokens,
-                ):
-                    yield f"data: {json.dumps(event)}\n\n"
-                    if event.get("type") == "token":
-                        full_response += event.get("content", "")
+                # Tool loop - may need multiple turns if Claude uses tools
+                max_tool_turns = 5  # Prevent infinite loops
+                turn = 0
 
-                yield f"data: {json.dumps({'type': 'end'})}\n\n"
+                while turn < max_tool_turns:
+                    turn += 1
+                    pending_tool_uses = []
+
+                    async for event in claude.chat_stream(
+                        messages=current_messages,
+                        model=request.model,
+                        system=system_prompt,
+                        max_tokens=request.max_tokens,
+                        tools=tools,
+                    ):
+                        yield f"data: {json.dumps(event)}\n\n"
+
+                        if event.get("type") == "token":
+                            full_response += event.get("content", "")
+                        elif event.get("type") == "tool_use":
+                            # Claude wants to use a tool
+                            pending_tool_uses.append(event)
+                            tool_calls.append({
+                                "id": event.get("id"),
+                                "name": event.get("name"),
+                                "input": event.get("input"),
+                            })
+
+                    # If no tools were called, we're done
+                    if not pending_tool_uses:
+                        break
+
+                    # Execute tools and continue conversation
+                    if tool_executor and pending_tool_uses:
+                        # Build assistant message with tool_use blocks
+                        assistant_content = []
+                        if full_response:
+                            assistant_content.append({"type": "text", "text": full_response})
+                        for tool_use in pending_tool_uses:
+                            assistant_content.append({
+                                "type": "tool_use",
+                                "id": tool_use.get("id"),
+                                "name": tool_use.get("name"),
+                                "input": tool_use.get("input"),
+                            })
+
+                        # Add assistant message to conversation
+                        current_messages.append({
+                            "role": "assistant",
+                            "content": assistant_content,
+                        })
+
+                        # Execute each tool and collect results
+                        user_content = []
+                        for tool_use in pending_tool_uses:
+                            # Notify client that we're executing a tool
+                            yield f"data: {json.dumps({'type': 'tool_executing', 'name': tool_use.get('name')})}\n\n"
+
+                            result = await tool_executor.execute_tool_use(tool_use)
+                            tool_results.append({
+                                "tool_use_id": result.get("tool_use_id"),
+                                "result": result.get("content"),
+                                "is_error": result.get("is_error", False),
+                            })
+
+                            # Send tool result to client
+                            yield f"data: {json.dumps({'type': 'tool_result', 'name': tool_use.get('name'), 'result': result.get('content'), 'is_error': result.get('is_error', False)})}\n\n"
+
+                            user_content.append(result)
+
+                        # Add tool results as user message
+                        current_messages.append({
+                            "role": "user",
+                            "content": user_content,
+                        })
+
+                        # Reset for next turn
+                        full_response = ""
+
+                yield f"data: {json.dumps({'type': 'end', 'tool_calls': len(tool_calls)})}\n\n"
 
             except Exception as e:
                 logger.error(f"Streaming error: {e}")
@@ -441,19 +530,78 @@ async def send_message(
             }
         )
     else:
-        # Non-streaming response
+        # Non-streaming response with tool support
         try:
-            response = await claude.chat(
-                messages=messages,
-                model=request.model,
-                system=system_prompt,
-                max_tokens=request.max_tokens,
-            )
+            current_messages = messages.copy()
+            tool_calls = []
+            tool_results = []
+            max_tool_turns = 5
+            turn = 0
 
-            # Extract text from response
+            while turn < max_tool_turns:
+                turn += 1
+
+                response = await claude.chat(
+                    messages=current_messages,
+                    model=request.model,
+                    system=system_prompt,
+                    max_tokens=request.max_tokens,
+                    tools=tools,
+                )
+
+                # Check if Claude wants to use tools
+                has_tool_use = any(
+                    block.get("type") == "tool_use"
+                    for block in response.get("content", [])
+                )
+
+                if not has_tool_use or not tool_executor:
+                    # No tools, extract final response
+                    break
+
+                # Process tool uses
+                assistant_content = []
+                pending_tool_uses = []
+
+                for block in response.get("content", []):
+                    if block.get("type") == "text":
+                        assistant_content.append(block)
+                    elif block.get("type") == "tool_use":
+                        assistant_content.append(block)
+                        pending_tool_uses.append(block)
+                        tool_calls.append({
+                            "id": block.get("id"),
+                            "name": block.get("name"),
+                            "input": block.get("input"),
+                        })
+
+                # Add assistant message with tool uses
+                current_messages.append({
+                    "role": "assistant",
+                    "content": assistant_content,
+                })
+
+                # Execute tools
+                user_content = []
+                for tool_use in pending_tool_uses:
+                    result = await tool_executor.execute_tool_use(tool_use)
+                    tool_results.append({
+                        "tool_use_id": result.get("tool_use_id"),
+                        "result": result.get("content"),
+                        "is_error": result.get("is_error", False),
+                    })
+                    user_content.append(result)
+
+                # Add tool results as user message
+                current_messages.append({
+                    "role": "user",
+                    "content": user_content,
+                })
+
+            # Extract final text from response
             assistant_content = ""
             for block in response.get("content", []):
-                if block.get("text"):
+                if block.get("type") == "text" and block.get("text"):
                     assistant_content += block["text"]
 
             # Save assistant message (only if saving conversation)
@@ -463,6 +611,8 @@ async def send_message(
                     conversation_id=conversation.id,
                     role="assistant",
                     content=assistant_content,
+                    tool_calls=tool_calls if tool_calls else None,
+                    tool_results=tool_results if tool_results else None,
                 )
                 db.add(assistant_msg)
                 await db.commit()
@@ -472,6 +622,8 @@ async def send_message(
                 "message": assistant_content,
                 "model": response.get("model", request.model),
                 "usage": response.get("usage"),
+                "tool_calls": tool_calls if tool_calls else None,
+                "tool_results": tool_results if tool_results else None,
             }
 
         except Exception as e:

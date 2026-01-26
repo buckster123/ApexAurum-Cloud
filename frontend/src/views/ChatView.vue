@@ -565,6 +565,26 @@ function renderMarkdown(content) {
             <span>16K</span>
           </div>
         </div>
+
+        <!-- Tools Toggle (The Athanor's Hands) -->
+        <div class="mt-3 flex items-center justify-between">
+          <label class="text-xs" :class="pacMode ? 'text-purple-300/60' : 'text-gray-500'">
+            <span class="flex items-center gap-1">
+              🔧 Tools
+              <span class="text-gray-600">(6)</span>
+            </span>
+          </label>
+          <button
+            @click="chat.setToolsEnabled(!chat.toolsEnabled)"
+            class="relative w-10 h-5 rounded-full transition-colors"
+            :class="chat.toolsEnabled ? 'bg-gold/60' : 'bg-apex-border'"
+          >
+            <span
+              class="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform"
+              :class="chat.toolsEnabled ? 'translate-x-5' : ''"
+            ></span>
+          </button>
+        </div>
       </div>
 
       <!-- Agent Selector -->
@@ -814,12 +834,20 @@ function renderMarkdown(content) {
             </div>
             <div :class="isUsingPacAgent ? 'pac-message' : 'bg-apex-card'" class="rounded-2xl px-4 py-3">
               <div class="flex items-center gap-2" :class="isUsingPacAgent ? 'text-purple-300' : 'text-gray-400'">
-                <div class="flex gap-1">
-                  <span class="w-2 h-2 rounded-full animate-bounce" :class="isUsingPacAgent ? 'bg-purple-400' : 'bg-gold'" style="animation-delay: 0ms"></span>
-                  <span class="w-2 h-2 rounded-full animate-bounce" :class="isUsingPacAgent ? 'bg-purple-400' : 'bg-gold'" style="animation-delay: 150ms"></span>
-                  <span class="w-2 h-2 rounded-full animate-bounce" :class="isUsingPacAgent ? 'bg-purple-400' : 'bg-gold'" style="animation-delay: 300ms"></span>
-                </div>
-                <span class="text-sm">Thinking...</span>
+                <!-- Tool execution indicator -->
+                <template v-if="chat.currentToolExecution">
+                  <span class="text-gold">🔧</span>
+                  <span class="text-sm">Using {{ chat.currentToolExecution.name }}...</span>
+                </template>
+                <!-- Regular thinking indicator -->
+                <template v-else>
+                  <div class="flex gap-1">
+                    <span class="w-2 h-2 rounded-full animate-bounce" :class="isUsingPacAgent ? 'bg-purple-400' : 'bg-gold'" style="animation-delay: 0ms"></span>
+                    <span class="w-2 h-2 rounded-full animate-bounce" :class="isUsingPacAgent ? 'bg-purple-400' : 'bg-gold'" style="animation-delay: 150ms"></span>
+                    <span class="w-2 h-2 rounded-full animate-bounce" :class="isUsingPacAgent ? 'bg-purple-400' : 'bg-gold'" style="animation-delay: 300ms"></span>
+                  </div>
+                  <span class="text-sm">Thinking...</span>
+                </template>
               </div>
             </div>
           </div>
@@ -867,10 +895,12 @@ function renderMarkdown(content) {
             <template v-if="isUsingPacAgent">
               <span class="text-gold">∴ {{ actualAgentId }}-Ω ∴</span> ·
               <span class="text-purple-300/80">{{ chat.availableModels.find(m => m.id === chat.selectedModel)?.name || 'Sonnet 4' }}</span>
+              <span v-if="chat.toolsEnabled" class="text-gold"> · 🔧</span>
             </template>
             <template v-else>
               <span class="text-gold">{{ selectedAgent }}</span> ·
               <span class="text-gray-400">{{ chat.availableModels.find(m => m.id === chat.selectedModel)?.name || 'Sonnet 4' }}</span>
+              <span v-if="chat.toolsEnabled" class="text-gold"> · 🔧 Tools</span>
             </template>
           </p>
         </form>
