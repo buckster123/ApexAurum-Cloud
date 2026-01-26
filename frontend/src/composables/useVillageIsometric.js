@@ -15,6 +15,21 @@
 import { ref, shallowRef, onMounted, onUnmounted } from 'vue'
 import * as THREE from 'three'
 
+// Polyfill for roundRect (not available in all browsers)
+if (typeof CanvasRenderingContext2D !== 'undefined' && !CanvasRenderingContext2D.prototype.roundRect) {
+  CanvasRenderingContext2D.prototype.roundRect = function(x, y, w, h, r) {
+    if (w < 2 * r) r = w / 2
+    if (h < 2 * r) r = h / 2
+    this.moveTo(x + r, y)
+    this.arcTo(x + w, y, x + w, y + h, r)
+    this.arcTo(x + w, y + h, x, y + h, r)
+    this.arcTo(x, y + h, x, y, r)
+    this.arcTo(x, y, x + w, y, r)
+    this.closePath()
+    return this
+  }
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // CONSTANTS
 // ═══════════════════════════════════════════════════════════════════════════
@@ -484,6 +499,12 @@ export function useVillageIsometric(containerRef, options = {}) {
 
     const width = containerRef.value.clientWidth
     const height = containerRef.value.clientHeight
+
+    // Guard against zero dimensions (can happen if container is hidden)
+    if (width === 0 || height === 0) {
+      console.warn('Village3D: Container has zero dimensions, skipping init')
+      return false
+    }
 
     // Scene
     scene = new THREE.Scene()

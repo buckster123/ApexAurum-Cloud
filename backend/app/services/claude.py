@@ -56,6 +56,26 @@ DEFAULT_MODEL = "claude-sonnet-4-5-20250929"
 # Maximum output tokens for Tier 3 accounts
 DEFAULT_MAX_TOKENS = 8192
 
+# Model-specific max tokens (legacy models have lower limits)
+MODEL_MAX_TOKENS = {
+    # Claude 4.5 family
+    "claude-opus-4-5-20251101": 16384,
+    "claude-sonnet-4-5-20250929": 16384,
+    "claude-haiku-4-5-20251001": 8192,
+    # Claude 3.5 family
+    "claude-3-5-sonnet-20241022": 8192,
+    "claude-3-5-sonnet-20240620": 8192,
+    "claude-3-5-haiku-20241022": 8192,
+    # Claude 3 family (legacy - lower limits)
+    "claude-3-opus-20240229": 4096,
+    "claude-3-sonnet-20240229": 4096,
+    "claude-3-haiku-20240307": 4096,
+}
+
+def get_model_max_tokens(model: str) -> int:
+    """Get the maximum output tokens for a model."""
+    return MODEL_MAX_TOKENS.get(model, DEFAULT_MAX_TOKENS)
+
 
 class ClaudeService:
     """
@@ -102,9 +122,13 @@ class ClaudeService:
         Non-streaming version for simple requests.
         Properly handles tool_use responses.
         """
+        # Cap max_tokens to model's limit
+        model_limit = get_model_max_tokens(model)
+        effective_max_tokens = min(max_tokens, model_limit)
+
         kwargs = {
             "model": model,
-            "max_tokens": max_tokens,
+            "max_tokens": effective_max_tokens,
             "messages": messages,
         }
 
@@ -158,9 +182,13 @@ class ClaudeService:
         Yields events as they arrive.
         Properly handles tool_use blocks by accumulating input JSON.
         """
+        # Cap max_tokens to model's limit
+        model_limit = get_model_max_tokens(model)
+        effective_max_tokens = min(max_tokens, model_limit)
+
         kwargs = {
             "model": model,
-            "max_tokens": max_tokens,
+            "max_tokens": effective_max_tokens,
             "messages": messages,
         }
 

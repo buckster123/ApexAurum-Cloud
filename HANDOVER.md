@@ -147,7 +147,7 @@ open https://frontend-production-5402.up.railway.app/village-gui
 ## Key Commits This Session
 
 ```
-(pending) Village Phase 5: Particles + Click Selection
+6c808db Village Phase 5: Particles + Click Selection
 4e60e5b Village Isometric 3D + Task Tickers
 2f97418 Village Phase 1: Canvas-Based GUI Visualization
 8af71ea Village Phase 0: WebSocket Infrastructure

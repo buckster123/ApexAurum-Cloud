@@ -212,7 +212,7 @@ onUnmounted(() => {
       <!-- Village View -->
       <div class="flex-1 relative">
         <!-- 2D Canvas View -->
-        <div v-show="viewMode === '2d'" class="w-full h-full flex items-center justify-center">
+        <div v-if="viewMode === '2d'" class="w-full h-full flex items-center justify-center">
           <VillageCanvas
             :events="eventLog"
             :status="status"
@@ -220,7 +220,7 @@ onUnmounted(() => {
         </div>
 
         <!-- 3D Isometric View -->
-        <div v-show="viewMode === '3d'" class="w-full h-full">
+        <div v-if="viewMode === '3d'" class="w-full h-full">
           <VillageIsometric
             :events="eventLog"
             :status="status"
