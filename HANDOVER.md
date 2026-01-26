@@ -2,7 +2,7 @@
 
 **Date:** 2026-01-26
 **Build:** v45-village-polish
-**Status:** PRODUCTION - Village GUI with Particles + Click Selection
+**Status:** PRODUCTION - Village GUI with WebGL Fallback
 
 ---
 
@@ -37,6 +37,12 @@
    - Hover tooltips for agents and zones
    - Speech bubble system (approval/input/error)
    - Cursor changes on hover
+
+5. **Bug Fixes This Session**
+   - Fixed agent spawn `max_tokens` error (Haiku 3 = 4096, not 8192)
+   - Fixed 3D not rendering (v-show → v-if for proper mounting)
+   - Added WebGL error detection + auto-fallback to 2D
+   - Added roundRect polyfill for older browsers
 
 ### Tool Count: 46 + 23 Features
 
@@ -147,12 +153,12 @@ open https://frontend-production-5402.up.railway.app/village-gui
 ## Key Commits This Session
 
 ```
+85ae6b0 Add WebGL error handling with auto-fallback to 2D
+b4fb4ed Fix 3D rendering + agent max_tokens errors
 6c808db Village Phase 5: Particles + Click Selection
 4e60e5b Village Isometric 3D + Task Tickers
 2f97418 Village Phase 1: Canvas-Based GUI Visualization
 8af71ea Village Phase 0: WebSocket Infrastructure
-49e8a27 Fix cortex.py import path for auth deps
-8d1c0f8 Neural Space: 3D Memory Visualization Dashboard
 ```
 
 ---
