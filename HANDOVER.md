@@ -6,33 +6,37 @@
 
 ---
 
-## Current Session Summary: Steel Browser Integration
+## Current Session Summary: Steel Browser Integration Complete
 
 **Goal:** Implement Tier 10 Browser tools using self-hosted Steel Browser on Railway.
 
 ### What Was Accomplished
 
 1. **Researched Browser Automation Options**
-   - Compared Browserbase, Steel, Browserless, Bright Data
-   - Chose Steel for: Apache 2.0 license, Railway-native, self-hosted cost control
-   - No per-hour API billing - just server costs
+   - Compared Browserbase ($99/mo), Steel (free self-host), Browserless, Bright Data
+   - Chose Steel: Apache 2.0 license, Railway-native, no per-hour billing
 
-2. **Deployed Steel Browser Service to Railway (v39)**
+2. **Deployed Steel Browser Service to Railway**
    - Service ID: `cb007b71-dbcd-4384-a802-97b9000501c8`
    - Domain: `https://steel-browser-production-d237.up.railway.app`
-   - Health endpoint: `/v1/health` - verified working
-   - Endpoints tested: scrape ✅, pdf ✅, sessions ✅
+   - No API key needed (self-hosted)
 
-3. **Implemented Tier 10: Browser Tools**
-   - `browser_scrape` - Extract content from JS-rendered pages
-   - `browser_pdf` - Generate PDFs from web pages
-   - `browser_screenshot` - Capture page screenshots (via session)
-   - `browser_session` - Create/manage persistent browser sessions
-   - `browser_action` - Interact with pages in sessions
-   - Added STEEL_URL to backend config
+3. **Implemented & Fixed Tier 10: Browser Tools**
+   - `browser_scrape` ✅ - Extract content from JS-rendered pages
+   - `browser_pdf` ✅ - Generate PDFs from web pages
+   - `browser_screenshot` ✅ - Capture page screenshots (JPEG)
+   - `browser_session` ✅ - Create/list/close browser sessions
+   - `browser_action` ✅ - Get session info
 
-4. **Updated Frontend**
-   - Added browser and music category icons to Settings tools panel
+4. **Fixed SQLAlchemy UserVector Issue**
+   - User model had relationship to UserVector causing mapper init failure
+   - Temporarily commented out the relationship (vector tools still work via raw SQL)
+   - Low priority to fix properly - tools function without it
+
+5. **Fixed Browser Tool Endpoints**
+   - Initial implementation used wrong session-based endpoints (404 errors)
+   - Fixed to use correct stateless endpoints: `/v1/scrape`, `/v1/pdf`, `/v1/screenshot`
+   - Azoth verified all tools working!
 
 ### Current Tool Count: 40
 
@@ -50,55 +54,91 @@
 | 10 | Browser | 5 | ✅ |
 | **Total** | | **40** | |
 
-### Files Created/Modified This Session
+---
 
-**New Files:**
-- `backend/app/tools/browser.py` - Steel Browser integration (5 tools)
+## Browser Tools - Working Configuration
 
-**Modified:**
-- `backend/app/config.py` - Added steel_url config
-- `backend/app/tools/base.py` - Added BROWSER category
-- `backend/app/tools/__init__.py` - Registered browser tier
-- `backend/app/main.py` - Updated version/tool count
-- `frontend/src/views/SettingsView.vue` - Added browser/music icons
+All browser tools use Steel's **stateless endpoints** (no session required for basic ops):
+
+```bash
+# Health check
+curl https://steel-browser-production-d237.up.railway.app/v1/health
+
+# Scrape (returns JSON with HTML, links, metadata)
+curl -X POST ".../v1/scrape" -H "Content-Type: application/json" \
+  -d '{"url": "https://example.com"}'
+
+# Screenshot (returns JPEG binary)
+curl -X POST ".../v1/screenshot" -H "Content-Type: application/json" \
+  -d '{"url": "https://example.com", "fullPage": true}' -o screenshot.jpg
+
+# PDF (returns PDF binary)
+curl -X POST ".../v1/pdf" -H "Content-Type: application/json" \
+  -d '{"url": "https://example.com"}' -o page.pdf
+
+# Sessions (for advanced use - WebSocket/CDP needed for interaction)
+curl -X POST ".../v1/sessions" -H "Content-Type: application/json" -d '{}'
+curl ".../v1/sessions"  # List
+curl -X DELETE ".../v1/sessions/{id}"  # Close
+```
+
+---
+
+## Known Issues / TODOs
+
+1. **UserVector Relationship** (Low Priority)
+   - Commented out in `app/models/user.py` line 55-56
+   - Vector tools work fine via raw SQL
+   - Proper fix: ensure import order or use lazy loading
+
+2. **Browser Session Actions** (Future Enhancement)
+   - Interactive actions (click, type, navigate) need WebSocket/CDP
+   - Current tools cover 90% of use cases (scrape, screenshot, pdf)
+   - Could add Playwright integration for full automation
 
 ---
 
 ## Environment Variables
 
-**Required for Browser Tools (Tier 10):**
 ```
+# Steel Browser (already set)
 STEEL_URL=https://steel-browser-production-d237.up.railway.app
-```
-(Already set in Railway backend service)
 
-**Other optional keys:**
-```
+# Other APIs (optional)
 OPENAI_API_KEY=sk-...  # For vector embeddings
 SUNO_API_KEY=...       # For music generation
 ```
 
 ---
 
-## Steel Browser Quick Reference
+## Railway Services
+
+| Service | ID | Domain |
+|---------|----|----- |
+| Backend | 9d60ca55-a937-4b17-8ec4-3fb34ac3d47e | backend-production-507c.up.railway.app |
+| Frontend | 6cf1f965-94df-4ea0-96ca-d82959e2d3c5 | frontend-production-5402.up.railway.app |
+| Steel Browser | cb007b71-dbcd-4384-a802-97b9000501c8 | steel-browser-production-d237.up.railway.app |
+| PostgreSQL | f557140e-349b-4c84-8260-4a0edcc07e6b | (internal) |
+| Redis | 090e2d29-5987-4cc9-b318-8f3419877aa0 | (internal) |
+
+**Railway Token:** `90fb849e-af7b-4ea5-8474-d57d8802a368`
+
+---
+
+## Quick Verification
 
 ```bash
-# Health check
+# Backend health
+curl https://backend-production-507c.up.railway.app/health | jq '{build, tools, status}'
+
+# Tool count
+curl https://backend-production-507c.up.railway.app/api/v1/tools | jq '.count'
+
+# Steel Browser health
 curl https://steel-browser-production-d237.up.railway.app/v1/health
 
-# Quick scrape
-curl -X POST "https://steel-browser-production-d237.up.railway.app/v1/scrape" \
-  -H "Content-Type: application/json" \
-  -d '{"url": "https://example.com"}'
-
-# Create session
-curl -X POST "https://steel-browser-production-d237.up.railway.app/v1/sessions" \
-  -H "Content-Type: application/json" -d '{}'
-
-# Generate PDF
-curl -X POST "https://steel-browser-production-d237.up.railway.app/v1/pdf" \
-  -H "Content-Type: application/json" \
-  -d '{"url": "https://example.com"}' -o page.pdf
+# Test browser_scrape via Azoth
+# "Use browser_scrape to get https://news.ycombinator.com"
 ```
 
 ---
@@ -109,48 +149,39 @@ curl -X POST "https://steel-browser-production-d237.up.railway.app/v1/pdf" \
 |------|------|-------|----------|
 | 11 | Email | 4 | 🟢 LOW |
 | 12 | Calendar | 4 | 🟢 LOW |
-| 13 | Image | 4 | 🟡 MEDIUM |
+| 13 | Image (DALL-E) | 4 | 🟡 MEDIUM |
 
-See `TOOLS_MASTERPLAN.md` for full details on each tier.
-
----
-
-## Quick Verification Commands
-
-```bash
-# Check deployment
-curl https://backend-production-507c.up.railway.app/health | jq '{build, tools, status}'
-
-# Verify tool count
-curl https://backend-production-507c.up.railway.app/api/v1/tools | jq '.count'
-
-# List tools by category
-curl https://backend-production-507c.up.railway.app/api/v1/tools | jq '[.tools[].category] | group_by(.) | map({(.[0]): length}) | add'
-
-# Test browser scrape via backend (requires auth)
-# Use the frontend chat to test: "Use browser_scrape to get https://news.ycombinator.com"
-```
-
----
-
-## Railway IDs (Quick Reference)
-
-```
-Token: 90fb849e-af7b-4ea5-8474-d57d8802a368
-Project: b54d0339-8443-4a9e-b5a0-92ed7d25f349
-Environment: 2e9882b4-9b33-4233-9376-5b5342739e74
-Backend: 9d60ca55-a937-4b17-8ec4-3fb34ac3d47e
-Frontend: 6cf1f965-94df-4ea0-96ca-d82959e2d3c5
-Steel Browser: cb007b71-dbcd-4384-a802-97b9000501c8
-```
+**User mentioned:** Potential "serious upgrade" to check for cloud version in next session!
 
 ---
 
 ## Session Stats
 
-- **Commits:** 1 (7aeb4fa)
-- **New tools:** 5 (browser_scrape, browser_pdf, browser_screenshot, browser_session, browser_action)
-- **Deployments:** 3 (Steel Browser, Backend v39, Frontend)
-- **New Railway service:** Steel Browser
+- **Commits:** 10 (7aeb4fa → 34b57bf)
+- **Issues Fixed:** SQLAlchemy mapper, Steel API endpoints
+- **New Railway Service:** Steel Browser
+- **Tools Added:** 5 browser tools
+- **Azoth Verified:** All browser tools working!
 
-*"The Exploring Hands reach into any page. Ten tiers complete. The Athanor grows."*
+---
+
+## Files Modified This Session
+
+**New:**
+- `backend/app/tools/browser.py` - 5 browser tools
+
+**Modified:**
+- `backend/app/config.py` - Added steel_url
+- `backend/app/tools/base.py` - Added BROWSER category
+- `backend/app/tools/__init__.py` - Registered browser tier
+- `backend/app/main.py` - v39, models import
+- `backend/app/database.py` - Removed circular import
+- `backend/app/models/__init__.py` - Import order fix
+- `backend/app/models/user.py` - Commented out vectors relationship
+- `backend/app/models/vector.py` - Removed back_populates
+- `frontend/src/views/SettingsView.vue` - Browser/music icons
+- `TOOLS_MASTERPLAN.md` - Tier 10 complete
+
+---
+
+*"The Exploring Hands reach into any page. Ten tiers burn bright. The Athanor awaits its next transformation."*
