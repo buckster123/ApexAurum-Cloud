@@ -116,6 +116,25 @@ Backend:
 
 ---
 
+## Next Session: Open-Source LLM Providers (Dev Mode)
+
+**Plan Ready:** `.claude/plans/rippling-whistling-chipmunk.md`
+
+Add multi-provider LLM support hidden in dev mode:
+- DeepSeek, Groq, Together AI, Qwen (all OpenAI-compatible)
+- Provider dropdown in sidebar (dev mode only)
+- Models refresh per provider
+
+**Key Files:**
+- CREATE: `backend/app/services/llm_provider.py`
+- MODIFY: `backend/app/api/v1/chat.py` (add /providers endpoint)
+- MODIFY: `frontend/src/stores/chat.js` (provider state)
+- MODIFY: `frontend/src/views/ChatView.vue` (provider selector)
+
+**Knowledge base:** `claude-root/knowledge-base/open-source-llms/` (6 API docs)
+
+---
+
 ## Quick Verification
 
 ```bash
