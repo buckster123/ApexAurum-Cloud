@@ -1,14 +1,23 @@
 # ApexAurum-Cloud Handover Document
 
 **Date:** 2026-01-26
-**Build:** v25-vault
-**Status:** PRODUCTION READY + The Vault Complete (Backend + Frontend)
+**Build:** v25-vault-polished
+**Status:** PRODUCTION READY + The Vault Complete + Alchemical Polish
 
 ---
 
-## Current Session: The Vault - Sprint 1 Complete
+## Current Session: The Vault - Sprint 1 + Polish Complete
 
-**Goal:** User file storage system with hierarchical folders.
+**Goal:** User file storage system with hierarchical folders + alchemical theming.
+
+### Alchemical Polish Applied
+- **Icons:** 📜 scroll, ⚗️ flask, 🪞 mirror, 💎 gem, 🗃️ chest
+- **Storage:** "Essence Capacity" with amber gradient bar
+- **Breadcrumbs:** ∴ separator (therefore symbol)
+- **Context menu:** Enter Chamber, Examine, Distill, Star Artifact, Transmute, Dissolve
+- **Empty state:** "The chamber awaits"
+- **Modals:** "Conjure Chamber", "Dissolve into the void"
+- **Volume fix:** `RAILWAY_RUN_UID=0` required for write permissions
 
 ### What Was Implemented
 
