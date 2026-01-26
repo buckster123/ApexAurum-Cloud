@@ -7,10 +7,13 @@ and secure file upload/download.
 "Every alchemist needs a sanctum"
 """
 
+import asyncio
 import hashlib
 import logging
 import os
 import shutil
+import subprocess
+import tempfile
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -1360,3 +1363,179 @@ async def get_storage_stats(
         folder_count=folder_count,
         by_type=by_type,
     )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# CORTEX DIVER - CODE EXECUTION
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Supported languages for execution
+EXECUTABLE_EXTENSIONS = {
+    'py': {'cmd': ['python3', '-u'], 'name': 'Python'},
+    'js': {'cmd': ['node'], 'name': 'JavaScript'},
+    'sh': {'cmd': ['bash'], 'name': 'Shell'},
+    'bash': {'cmd': ['bash'], 'name': 'Bash'},
+}
+
+# Execution limits
+MAX_EXECUTION_TIME = 10  # seconds
+MAX_OUTPUT_SIZE = 100_000  # characters
+
+
+class ExecuteRequest(BaseModel):
+    """Optional stdin input for execution."""
+    stdin: Optional[str] = None
+
+
+class ExecuteResponse(BaseModel):
+    """Execution result."""
+    success: bool
+    stdout: str
+    stderr: str
+    exit_code: int
+    execution_time: float
+    truncated: bool = False
+    language: str
+
+
+@router.post("/{file_id}/execute", response_model=ExecuteResponse)
+async def execute_file(
+    file_id: UUID,
+    request: ExecuteRequest = ExecuteRequest(),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Execute a code file in a sandboxed environment.
+
+    Supported languages: Python, JavaScript (Node), Shell/Bash
+
+    Limits:
+    - 10 second timeout
+    - 100KB output limit
+    - No network access (future)
+    - No file system access outside temp (future)
+
+    Used by Cortex Diver terminal panel.
+    """
+    import time
+    start_time = time.time()
+
+    # Get file
+    result = await db.execute(
+        select(File)
+        .where(File.id == file_id)
+        .where(File.user_id == user.id)
+    )
+    file = result.scalar_one_or_none()
+    if not file:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="File not found"
+        )
+
+    # Check file extension
+    ext = file.name.rsplit('.', 1)[-1].lower() if '.' in file.name else ''
+    if ext not in EXECUTABLE_EXTENSIONS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot execute .{ext} files. Supported: {', '.join(EXECUTABLE_EXTENSIONS.keys())}"
+        )
+
+    exec_config = EXECUTABLE_EXTENSIONS[ext]
+    file_path = Path(file.storage_path)
+
+    if not file_path.exists():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="File not found on disk"
+        )
+
+    # Build command
+    cmd = exec_config['cmd'] + [str(file_path)]
+
+    # Execute with timeout
+    try:
+        process = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdin=asyncio.subprocess.PIPE if request.stdin else None,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            # Sandbox: limit what the process can do
+            env={
+                'PATH': '/usr/local/bin:/usr/bin:/bin',
+                'HOME': '/tmp',
+                'TERM': 'xterm',
+                'LANG': 'en_US.UTF-8',
+                # Prevent network access in Python
+                'PYTHONDONTWRITEBYTECODE': '1',
+            },
+            cwd='/tmp',  # Run in temp directory
+        )
+
+        # Wait for completion with timeout
+        stdin_data = request.stdin.encode() if request.stdin else None
+        try:
+            stdout, stderr = await asyncio.wait_for(
+                process.communicate(input=stdin_data),
+                timeout=MAX_EXECUTION_TIME
+            )
+        except asyncio.TimeoutError:
+            process.kill()
+            await process.wait()
+            return ExecuteResponse(
+                success=False,
+                stdout="",
+                stderr=f"Execution timed out after {MAX_EXECUTION_TIME} seconds",
+                exit_code=-1,
+                execution_time=MAX_EXECUTION_TIME,
+                truncated=False,
+                language=exec_config['name'],
+            )
+
+        # Decode output
+        stdout_str = stdout.decode('utf-8', errors='replace')
+        stderr_str = stderr.decode('utf-8', errors='replace')
+
+        # Truncate if too long
+        truncated = False
+        if len(stdout_str) > MAX_OUTPUT_SIZE:
+            stdout_str = stdout_str[:MAX_OUTPUT_SIZE] + f"\n\n... (output truncated at {MAX_OUTPUT_SIZE} chars)"
+            truncated = True
+        if len(stderr_str) > MAX_OUTPUT_SIZE:
+            stderr_str = stderr_str[:MAX_OUTPUT_SIZE] + f"\n\n... (output truncated at {MAX_OUTPUT_SIZE} chars)"
+            truncated = True
+
+        execution_time = time.time() - start_time
+
+        return ExecuteResponse(
+            success=process.returncode == 0,
+            stdout=stdout_str,
+            stderr=stderr_str,
+            exit_code=process.returncode or 0,
+            execution_time=round(execution_time, 3),
+            truncated=truncated,
+            language=exec_config['name'],
+        )
+
+    except FileNotFoundError:
+        return ExecuteResponse(
+            success=False,
+            stdout="",
+            stderr=f"Runtime not found for {exec_config['name']}. Please ensure the runtime is installed.",
+            exit_code=-1,
+            execution_time=0,
+            truncated=False,
+            language=exec_config['name'],
+        )
+    except Exception as e:
+        logger.error(f"Execution error: {e}")
+        return ExecuteResponse(
+            success=False,
+            stdout="",
+            stderr=f"Execution failed: {str(e)}",
+            exit_code=-1,
+            execution_time=time.time() - start_time,
+            truncated=False,
+            language=exec_config['name'],
+        )

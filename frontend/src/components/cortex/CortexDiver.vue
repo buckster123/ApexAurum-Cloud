@@ -13,6 +13,7 @@ import { useSound } from '@/composables/useSound'
 import FileTabs from './FileTabs.vue'
 import MonacoEditor from './MonacoEditor.vue'
 import AgentPanel from './AgentPanel.vue'
+import TerminalPanel from './TerminalPanel.vue'
 
 const props = defineProps({
   folderId: {
@@ -31,7 +32,9 @@ const { playTone } = useSound()
 const editorRef = ref(null)
 const sidebarWidth = ref(240)
 const agentPanelWidth = ref(320)
+const terminalHeight = ref(200)
 const showAgentPanel = ref(false)
+const showTerminal = ref(false)
 const statusMessage = ref('')
 
 // Computed
@@ -179,9 +182,34 @@ function handleKeyboard(event) {
     return
   }
 
-  // Escape - Exit cortex (if no tabs open)
-  if (event.key === 'Escape' && cortex.openTabs.length === 0) {
-    emit('exit-cortex')
+  // F5 - Run code
+  if (event.key === 'F5') {
+    event.preventDefault()
+    showTerminal.value = true
+    // The terminal component will handle the actual execution
+    return
+  }
+
+  // Ctrl+` - Toggle terminal
+  if ((event.ctrlKey || event.metaKey) && event.key === '`') {
+    event.preventDefault()
+    showTerminal.value = !showTerminal.value
+    return
+  }
+
+  // Escape - Close panels or exit cortex
+  if (event.key === 'Escape') {
+    if (showAgentPanel.value) {
+      showAgentPanel.value = false
+      return
+    }
+    if (showTerminal.value) {
+      showTerminal.value = false
+      return
+    }
+    if (cortex.openTabs.length === 0) {
+      emit('exit-cortex')
+    }
     return
   }
 }
@@ -324,35 +352,46 @@ watch(() => props.folderId, async (folderId) => {
           @close-all="closeAllTabs"
         />
 
-        <!-- Editor -->
-        <div class="flex-1 relative">
-          <MonacoEditor
-            v-if="activeTab"
-            ref="editorRef"
-            :model-value="activeContent"
-            :language="activeLanguage"
-            :filename="activeTab?.name"
-            @update:model-value="handleContentChange"
-            @save="saveFile"
-            @selection-change="handleSelectionChange"
-            @cursor-change="handleCursorChange"
-          />
+        <!-- Editor + Terminal split -->
+        <div class="flex-1 flex flex-col min-h-0">
+          <!-- Editor -->
+          <div class="flex-1 relative min-h-0">
+            <MonacoEditor
+              v-if="activeTab"
+              ref="editorRef"
+              :model-value="activeContent"
+              :language="activeLanguage"
+              :filename="activeTab?.name"
+              @update:model-value="handleContentChange"
+              @save="saveFile"
+              @selection-change="handleSelectionChange"
+              @cursor-change="handleCursorChange"
+            />
 
-          <!-- No file open state -->
-          <div
-            v-else
-            class="absolute inset-0 flex flex-col items-center justify-center text-gray-500"
-          >
-            <div class="text-6xl mb-4 opacity-30">⚗️</div>
-            <p class="text-lg">Select a file to begin</p>
-            <p class="text-sm mt-2">
-              <kbd class="px-1.5 py-0.5 bg-apex-darker rounded text-xs">Ctrl+S</kbd> save
-              <span class="mx-2">·</span>
-              <kbd class="px-1.5 py-0.5 bg-apex-darker rounded text-xs">Ctrl+W</kbd> close
-              <span class="mx-2">·</span>
-              <kbd class="px-1.5 py-0.5 bg-apex-darker rounded text-xs">Ctrl+Shift+A</kbd> ask agent
-            </p>
+            <!-- No file open state -->
+            <div
+              v-else
+              class="absolute inset-0 flex flex-col items-center justify-center text-gray-500"
+            >
+              <div class="text-6xl mb-4 opacity-30">⚗️</div>
+              <p class="text-lg">Select a file to begin</p>
+              <p class="text-sm mt-2">
+                <kbd class="px-1.5 py-0.5 bg-apex-darker rounded text-xs">Ctrl+S</kbd> save
+                <span class="mx-2">·</span>
+                <kbd class="px-1.5 py-0.5 bg-apex-darker rounded text-xs">F5</kbd> run
+                <span class="mx-2">·</span>
+                <kbd class="px-1.5 py-0.5 bg-apex-darker rounded text-xs">Ctrl+Shift+A</kbd> agent
+              </p>
+            </div>
           </div>
+
+          <!-- Terminal panel (below editor) -->
+          <TerminalPanel
+            v-if="showTerminal"
+            :active-file="activeTab"
+            :style="{ height: `${terminalHeight}px` }"
+            @close="showTerminal = false"
+          />
         </div>
       </div>
 
@@ -371,12 +410,26 @@ watch(() => props.folderId, async (folderId) => {
     <!-- Status bar -->
     <div class="flex items-center justify-between px-4 py-1 bg-apex-darker border-t border-apex-border text-xs text-gray-500">
       <div class="flex items-center gap-4">
+        <!-- Terminal toggle -->
+        <button
+          @click="showTerminal = !showTerminal"
+          class="flex items-center gap-1 hover:text-gray-300 transition-colors"
+          :class="{ 'text-green-400': showTerminal }"
+          title="Toggle terminal (Ctrl+`)"
+        >
+          <span class="font-mono">$</span>
+          <span>Terminal</span>
+        </button>
+        <span class="text-gray-600">|</span>
         <span v-if="activeTab">{{ activeLanguage }}</span>
         <span v-if="activeTab">{{ activeTab.isDirty ? 'Modified' : 'Saved' }}</span>
       </div>
       <div class="flex items-center gap-4">
+        <span v-if="cortex.cursor" class="font-mono">
+          Ln {{ cortex.cursor.line }}, Col {{ cortex.cursor.column }}
+        </span>
         <span>UTF-8</span>
-        <span>{{ cortex.openTabs.length }} file(s) open</span>
+        <span>{{ cortex.openTabs.length }} file(s)</span>
       </div>
     </div>
   </div>
