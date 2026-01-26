@@ -7,7 +7,7 @@ models that reference them.
 """
 
 # Import models that are referenced by others FIRST
-from app.models.vector import UserVector
+# from app.models.vector import UserVector  # Temp disabled
 from app.models.file import File, Folder
 from app.models.conversation import Conversation, Message
 from app.models.agent import Agent
@@ -30,5 +30,5 @@ __all__ = [
     "AgentMemory",
     "File",
     "Folder",
-    "UserVector",
+    # "UserVector",  # Temp disabled
 ]
