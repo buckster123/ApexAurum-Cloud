@@ -1,80 +1,182 @@
 """
-Embedding Service
+Embedding Service - The Remembering Deep
 
-Generate text embeddings for vector search.
+Generate embeddings for semantic search using OpenAI or Voyage.
 """
 
+import logging
 from typing import Optional
-import numpy as np
+import httpx
+
+from app.config import get_settings
+
+logger = logging.getLogger(__name__)
 
 
 class EmbeddingService:
-    """Service for generating text embeddings."""
+    """
+    Generate text embeddings for vector storage.
 
-    def __init__(self, model_name: str = "all-MiniLM-L6-v2"):
-        """
-        Initialize embedding service.
+    Supports:
+    - OpenAI text-embedding-3-small (1536 dimensions)
+    - Voyage AI voyage-2 (1024 dimensions)
+    """
 
-        Args:
-            model_name: Sentence transformer model name
-        """
-        self.model_name = model_name
-        self._model = None
+    def __init__(self, api_key: Optional[str] = None):
+        """Initialize with optional API key override."""
+        self.settings = get_settings()
+        self._api_key = api_key
+        self._client = httpx.AsyncClient(timeout=30.0)
 
     @property
-    def model(self):
-        """Lazy load the model."""
-        if self._model is None:
-            from sentence_transformers import SentenceTransformer
-            self._model = SentenceTransformer(self.model_name)
-        return self._model
+    def api_key(self) -> Optional[str]:
+        """Get API key from init or settings."""
+        if self._api_key:
+            return self._api_key
+        if self.settings.embedding_provider == "openai":
+            return self.settings.openai_api_key
+        elif self.settings.embedding_provider == "voyage":
+            return self.settings.voyage_api_key
+        return None
 
-    def embed(self, text: str) -> list[float]:
+    @property
+    def provider(self) -> str:
+        return self.settings.embedding_provider
+
+    @property
+    def dimensions(self) -> int:
+        return self.settings.embedding_dimensions
+
+    async def embed(self, text: str) -> Optional[list[float]]:
         """
         Generate embedding for a single text.
 
         Returns:
-            List of floats (embedding vector)
+            List of floats (embedding vector) or None if failed
         """
-        embedding = self.model.encode(text)
-        return embedding.tolist()
+        if not self.api_key:
+            logger.warning(f"No API key for embedding provider: {self.provider}")
+            return None
 
-    def embed_batch(self, texts: list[str]) -> list[list[float]]:
+        try:
+            if self.provider == "openai":
+                return await self._embed_openai(text)
+            elif self.provider == "voyage":
+                return await self._embed_voyage(text)
+            else:
+                logger.error(f"Unknown embedding provider: {self.provider}")
+                return None
+        except Exception as e:
+            logger.exception(f"Embedding failed: {e}")
+            return None
+
+    async def embed_batch(self, texts: list[str]) -> list[Optional[list[float]]]:
         """
         Generate embeddings for multiple texts.
 
-        More efficient than calling embed() multiple times.
+        Returns:
+            List of embeddings (same order as input)
         """
-        embeddings = self.model.encode(texts)
-        return [e.tolist() for e in embeddings]
+        if not texts:
+            return []
 
-    def similarity(self, embedding1: list[float], embedding2: list[float]) -> float:
-        """
-        Calculate cosine similarity between two embeddings.
-        """
-        a = np.array(embedding1)
-        b = np.array(embedding2)
-        return float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b)))
+        if not self.api_key:
+            return [None] * len(texts)
 
-    @property
-    def dimension(self) -> int:
-        """Get embedding dimension for the model."""
-        dimensions = {
-            "all-MiniLM-L6-v2": 384,
-            "all-mpnet-base-v2": 768,
-            "paraphrase-MiniLM-L6-v2": 384,
-        }
-        return dimensions.get(self.model_name, 384)
+        try:
+            if self.provider == "openai":
+                return await self._embed_openai_batch(texts)
+            elif self.provider == "voyage":
+                return await self._embed_voyage_batch(texts)
+            else:
+                return [None] * len(texts)
+        except Exception as e:
+            logger.exception(f"Batch embedding failed: {e}")
+            return [None] * len(texts)
+
+    async def _embed_openai(self, text: str) -> Optional[list[float]]:
+        """Generate embedding using OpenAI API."""
+        response = await self._client.post(
+            "https://api.openai.com/v1/embeddings",
+            headers={
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": self.settings.embedding_model,
+                "input": text,
+            },
+        )
+        response.raise_for_status()
+        data = response.json()
+        return data["data"][0]["embedding"]
+
+    async def _embed_openai_batch(self, texts: list[str]) -> list[Optional[list[float]]]:
+        """Generate embeddings for batch using OpenAI API."""
+        response = await self._client.post(
+            "https://api.openai.com/v1/embeddings",
+            headers={
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": self.settings.embedding_model,
+                "input": texts,
+            },
+        )
+        response.raise_for_status()
+        data = response.json()
+        # Sort by index to maintain order
+        embeddings = sorted(data["data"], key=lambda x: x["index"])
+        return [e["embedding"] for e in embeddings]
+
+    async def _embed_voyage(self, text: str) -> Optional[list[float]]:
+        """Generate embedding using Voyage AI API."""
+        response = await self._client.post(
+            "https://api.voyageai.com/v1/embeddings",
+            headers={
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": "voyage-2",
+                "input": text,
+            },
+        )
+        response.raise_for_status()
+        data = response.json()
+        return data["data"][0]["embedding"]
+
+    async def _embed_voyage_batch(self, texts: list[str]) -> list[Optional[list[float]]]:
+        """Generate embeddings for batch using Voyage AI API."""
+        response = await self._client.post(
+            "https://api.voyageai.com/v1/embeddings",
+            headers={
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": "voyage-2",
+                "input": texts,
+            },
+        )
+        response.raise_for_status()
+        data = response.json()
+        embeddings = sorted(data["data"], key=lambda x: x["index"])
+        return [e["embedding"] for e in embeddings]
+
+    async def close(self):
+        """Close HTTP client."""
+        await self._client.aclose()
 
 
-# Singleton instance with 1536 dimensions for OpenAI compatibility
-# We'll pad/project smaller embeddings if needed
-_default_service: Optional[EmbeddingService] = None
+# Singleton instance
+_embedding_service: Optional[EmbeddingService] = None
 
 
 def get_embedding_service() -> EmbeddingService:
-    """Get the default embedding service."""
-    global _default_service
-    if _default_service is None:
-        _default_service = EmbeddingService()
-    return _default_service
+    """Get or create embedding service singleton."""
+    global _embedding_service
+    if _embedding_service is None:
+        _embedding_service = EmbeddingService()
+    return _embedding_service

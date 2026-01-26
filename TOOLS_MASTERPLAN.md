@@ -197,7 +197,7 @@ Multi-agent capabilities - spawn sub-agents for complex tasks.
 
 | Tier | Name | Tools | Status | Priority |
 |------|------|-------|--------|----------|
-| 8 | Vector Search | 5 | ⬜ PLANNED | 🔴 HIGH |
+| 8 | Vector Search | 5 | ✅ COMPLETE | 🔴 HIGH |
 | 9 | Music | 4 | ⬜ PLANNED | 🟡 MEDIUM |
 | 10 | Browser | 5 | ⬜ PLANNED | 🟡 MEDIUM |
 | 11 | Email | 4 | ⬜ PLANNED | 🟢 LOW |
@@ -207,20 +207,20 @@ Multi-agent capabilities - spawn sub-agents for complex tasks.
 
 ---
 
-## Tier 8: Vector Search (The Remembering Deep) ⬜
+## Tier 8: Vector Search (The Remembering Deep) ✅
 
-**Priority:** 🔴 HIGH - Foundation for semantic memory and RAG
-**Requires:** pgvector extension (Railway PostgreSQL supports it)
+**Status:** COMPLETE - Deployed v37-vector-search
+**Requires:** pgvector extension + OpenAI API key for embeddings
 
 Semantic search over user content. Enables "remember this" and intelligent retrieval.
 
 | Tool | Description | Status |
 |------|-------------|--------|
-| `vector_store` | Store text with embedding | ⬜ |
-| `vector_search` | Semantic similarity search | ⬜ |
-| `vector_delete` | Remove vectors by ID | ⬜ |
-| `vector_list` | List stored vectors | ⬜ |
-| `vector_stats` | Collection statistics | ⬜ |
+| `vector_store` | Store text with embedding | ✅ |
+| `vector_search` | Semantic similarity search | ✅ |
+| `vector_delete` | Remove vectors by ID | ✅ |
+| `vector_list` | List stored vectors | ✅ |
+| `vector_stats` | Collection statistics | ✅ |
 
 **Implementation Notes:**
 - Use pgvector extension for PostgreSQL
@@ -541,6 +541,17 @@ Each tier has a poetic name reflecting its nature:
 ---
 
 ## Changelog
+
+### 2026-01-26 - v37-vector-search
+- Completed Tier 8: Vector Search (5 tools) - FIRST FUTURE TIER DONE!
+- `vector_store` - Store text with semantic embedding
+- `vector_search` - Find similar content by meaning
+- `vector_delete` - Remove memories
+- `vector_list` - Browse collections
+- `vector_stats` - Storage statistics
+- Added pgvector extension to database migrations
+- Created EmbeddingService with OpenAI/Voyage support
+- Total tools: 31 (26 core + 5 vectors)
 
 ### 2026-01-26 - v36-vault-complete
 - Completed Tier 3: All 5 Vault tools now working!

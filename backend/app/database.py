@@ -170,6 +170,44 @@ async def init_db():
                 END IF;
             END $$;
             """,
+            # ═══════════════════════════════════════════════════════════════════════
+            # TIER 8: VECTOR SEARCH - The Remembering Deep
+            # Semantic memory using pgvector extension
+            # ═══════════════════════════════════════════════════════════════════════
+            """
+            CREATE EXTENSION IF NOT EXISTS vector;
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS user_vectors (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                collection VARCHAR(100) DEFAULT 'default',
+                content TEXT NOT NULL,
+                metadata JSONB DEFAULT '{}',
+                embedding vector(1536),
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+            );
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS idx_vectors_user ON user_vectors(user_id);
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS idx_vectors_collection ON user_vectors(user_id, collection);
+            """,
+            # Note: IVFFlat index requires data to exist first, so we create it conditionally
+            """
+            DO $$
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_vectors_embedding')
+                THEN
+                    CREATE INDEX idx_vectors_embedding ON user_vectors
+                    USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
+                END IF;
+            EXCEPTION WHEN OTHERS THEN
+                -- Index creation may fail if not enough data, that's OK
+                NULL;
+            END $$;
+            """,
         ]
 
         from sqlalchemy import text

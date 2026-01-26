@@ -169,8 +169,9 @@ def register_all_tools():
     from . import scratch  # noqa: F401
     from . import code_exec  # noqa: F401
     from . import agents  # noqa: F401
+    from . import vectors  # noqa: F401
 
-    # All 7 tiers loaded!
+    # All 8 tiers loaded!
 
     logger.info(f"Tool registry initialized with {registry.tool_count} tools")
 

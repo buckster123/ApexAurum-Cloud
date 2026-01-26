@@ -51,5 +51,8 @@ class User(Base):
     folders = relationship("Folder", back_populates="user", cascade="all, delete-orphan")
     files = relationship("File", back_populates="user", cascade="all, delete-orphan")
 
+    # The Remembering Deep - Vector Storage
+    vectors = relationship("UserVector", back_populates="user", cascade="all, delete-orphan")
+
     def __repr__(self):
         return f"<User {self.email}>"

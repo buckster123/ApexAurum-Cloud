@@ -47,6 +47,12 @@ class Settings(BaseSettings):
     # Optional APIs
     voyage_api_key: Optional[str] = None
     suno_api_key: Optional[str] = None
+    openai_api_key: Optional[str] = None
+
+    # Embedding config (for vector search)
+    embedding_provider: str = "openai"  # "openai" or "voyage"
+    embedding_model: str = "text-embedding-3-small"  # OpenAI model
+    embedding_dimensions: int = 1536
 
     # JWT
     jwt_algorithm: str = "HS256"
