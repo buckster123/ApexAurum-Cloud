@@ -199,7 +199,7 @@ Multi-agent capabilities - spawn sub-agents for complex tasks.
 |------|------|-------|--------|----------|
 | 8 | Vector Search | 5 | ✅ COMPLETE | 🔴 HIGH |
 | 9 | Music | 4 | ✅ COMPLETE | 🟡 MEDIUM |
-| 10 | Browser | 5 | ⬜ PLANNED | 🟡 MEDIUM |
+| 10 | Browser | 5 | ✅ COMPLETE | 🟡 MEDIUM |
 | 11 | Email | 4 | ⬜ PLANNED | 🟢 LOW |
 | 12 | Calendar | 4 | ⬜ PLANNED | 🟢 LOW |
 | 13 | Image | 4 | ⬜ PLANNED | 🟡 MEDIUM |
@@ -305,38 +305,45 @@ CREATE TABLE music_tracks (
 
 ---
 
-## Tier 10: Browser (The Exploring Hands) ⬜
+## Tier 10: Browser (The Exploring Hands) ✅
 
-**Priority:** 🟡 MEDIUM - Powerful but complex
-**Requires:** Browserbase API or Playwright cloud
+**Status:** COMPLETE - Deployed v39-steel-browser
+**Requires:** Steel Browser service (self-hosted on Railway)
 
-Headless browser automation for web interaction.
+Headless browser automation via Steel Browser API.
 
 | Tool | Description | Status |
 |------|-------------|--------|
-| `browser_open` | Open URL in session | ⬜ |
-| `browser_screenshot` | Capture page screenshot | ⬜ |
-| `browser_click` | Click element by selector | ⬜ |
-| `browser_type` | Type text into input | ⬜ |
-| `browser_extract` | Extract text/data from page | ⬜ |
+| `browser_scrape` | Extract content from JS-rendered pages | ✅ |
+| `browser_pdf` | Generate PDF from web page | ✅ |
+| `browser_screenshot` | Capture page screenshot | ✅ |
+| `browser_session` | Create/manage browser sessions | ✅ |
+| `browser_action` | Interact with pages in sessions | ✅ |
 
 **Implementation Notes:**
-- Session-based (persistent browser context)
-- Screenshot returns base64 or Vault file
-- Selector support: CSS, XPath, text content
-- Timeout: 30s per action
-- Max sessions per user: 2
+- Self-hosted Steel Browser on Railway (Apache 2.0 license)
+- No per-hour API billing - just server costs (~$5-10/mo)
+- Session-based for multi-step workflows
+- Quick endpoints for stateless operations (scrape, pdf)
+- CDP (Chrome DevTools Protocol) passthrough available
 
-**Options:**
-1. **Browserbase** - Managed browser API (easiest)
-2. **Playwright** - Self-hosted (more control)
-3. **Puppeteer Cloud** - Google's option
+**Steel Browser Service:**
+- Domain: `https://steel-browser-production-d237.up.railway.app`
+- Service ID: `cb007b71-dbcd-4384-a802-97b9000501c8`
+- Health: `/v1/health`
+
+**Why Steel over Browserbase:**
+1. Apache 2.0 = free for commercial/SaaS use
+2. Railway-native (one-click deploy)
+3. Predictable server costs vs per-hour billing
+4. Full control over sessions and limits
 
 **Use Cases:**
-- Fill out forms
-- Extract data from dynamic pages
+- Extract content from SPAs (React, Vue, etc.)
+- Generate PDFs from web pages
 - Take screenshots for verification
-- Automate repetitive web tasks
+- Multi-step form automation
+- Login flows with session persistence
 
 ---
 
@@ -541,6 +548,18 @@ Each tier has a poetic name reflecting its nature:
 ---
 
 ## Changelog
+
+### 2026-01-26 - v39-steel-browser
+- Completed Tier 10: Browser Tools (5 tools) - STEEL BROWSER ONLINE!
+- `browser_scrape` - Extract content from JS-rendered pages
+- `browser_pdf` - Generate PDFs from web pages
+- `browser_screenshot` - Capture page screenshots via session
+- `browser_session` - Create/manage persistent browser sessions
+- `browser_action` - Interact with pages in sessions (goto, screenshot, content)
+- Deployed Steel Browser as new Railway service
+- Self-hosted solution vs managed API (Apache 2.0 license)
+- No per-hour billing - predictable server costs
+- Total tools: 40 (35 + 5 browser)
 
 ### 2026-01-26 - v38-music-generation
 - Completed Tier 9: Music Generation (4 tools)
