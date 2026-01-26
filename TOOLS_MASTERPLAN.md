@@ -17,8 +17,8 @@ Each tool gives Claude's agents the ability to interact with the world.
 | 4 | Knowledge Base | 4 | ✅ COMPLETE |
 | 5 | Session Memory | 4 | ✅ COMPLETE |
 | 6 | Code Execution | 2 | ✅ COMPLETE |
-| 7 | Agents | 3 | ⬜ Planned |
-| **Total** | | **26** | **21/26** |
+| 7 | Agents | 3 | ✅ COMPLETE |
+| **Total** | | **26** | **24/26** |
 
 ---
 
@@ -163,17 +163,17 @@ Execute Python code in sandboxed environment.
 
 ---
 
-## Tier 7: Agent Tools (The Spawning Hands) ⬜
+## Tier 7: Agent Tools (The Spawning Hands) ✅
 
-**Status:** PLANNED
+**Status:** COMPLETE - Deployed v34
 
 Multi-agent capabilities - spawn sub-agents for complex tasks.
 
 | Tool | Description | Status |
 |------|-------------|--------|
-| `agent_spawn` | Spawn a background agent | ⬜ |
-| `agent_status` | Check agent progress | ⬜ |
-| `agent_result` | Get completed agent result | ⬜ |
+| `agent_spawn` | Spawn background agent | ✅ |
+| `agent_status` | Check agent progress | ✅ |
+| `agent_result` | Get completed result | ✅ |
 
 **Implementation Notes:**
 - Async task queue (Redis/Celery or simple DB queue)
@@ -284,6 +284,15 @@ Each tier has a poetic name reflecting its nature:
 ---
 
 ## Changelog
+
+### 2026-01-26 - v34-spawning-hands
+- Completed Tier 7: Agent Tools (3 tools) - FINAL TIER!
+- `agent_spawn` - Spawn background agents (research, code, writer, analyst)
+- `agent_status` - Check agent progress
+- `agent_result` - Get completed agent output
+- Max 3 concurrent agents per user
+- All 7 Tiers complete!
+- Total tools: 24/26 (2 vault tools pending service layer)
 
 ### 2026-01-26 - v33-making-hands
 - Completed Tier 6: Code Execution Tools (2 tools)

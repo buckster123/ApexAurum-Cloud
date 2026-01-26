@@ -168,9 +168,9 @@ def register_all_tools():
     from . import knowledge_base  # noqa: F401
     from . import scratch  # noqa: F401
     from . import code_exec  # noqa: F401
+    from . import agents  # noqa: F401
 
-    # Future: Import more tool categories
-    # from . import agents  # noqa: F401
+    # All 7 tiers loaded!
 
     logger.info(f"Tool registry initialized with {registry.tool_count} tools")
 

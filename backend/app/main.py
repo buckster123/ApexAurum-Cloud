@@ -114,12 +114,12 @@ async def health_check():
     return {
         "status": "healthy",
         "version": "0.1.0",
-        "build": "v33-making-hands",
+        "build": "v34-spawning-hands",
         "agents": {
             "native": 5,
             "pac": 4,
         },
-        "tools": 21,  # T1(6)+T2(2)+T3(3)+T4(4)+T5(4)+T6(2)
+        "tools": 24,  # All 7 Tiers complete!
         "features": [
             "streaming",
             "pac-mode",
