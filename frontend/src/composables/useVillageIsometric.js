@@ -4,10 +4,15 @@
  * Three.js isometric view of the Village with zone buildings and agent spheres.
  * Fixed camera angle like classic RPGs.
  *
+ * Phase 5 Polish:
+ * - Particle effects on tool completion (green=success, red=error)
+ * - Click detection for agents and zones
+ * - Speech bubbles for approval/input needed
+ *
  * "Where agents walk between buildings in isometric splendor"
  */
 
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, shallowRef, onMounted, onUnmounted } from 'vue'
 import * as THREE from 'three'
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -216,18 +221,263 @@ class Agent3D {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// PARTICLE SYSTEM
+// ═══════════════════════════════════════════════════════════════════════════
+
+class ParticleSystem {
+  constructor(scene) {
+    this.scene = scene
+    this.particleGroups = []
+  }
+
+  emit(position, color, count = 20, success = true) {
+    const geometry = new THREE.BufferGeometry()
+    const positions = new Float32Array(count * 3)
+    const velocities = []
+    const lifetimes = []
+
+    // Initialize particles
+    for (let i = 0; i < count; i++) {
+      positions[i * 3] = position.x
+      positions[i * 3 + 1] = position.y
+      positions[i * 3 + 2] = position.z
+
+      // Random velocity (burst outward)
+      const theta = Math.random() * Math.PI * 2
+      const phi = Math.random() * Math.PI - Math.PI / 2
+      const speed = 0.1 + Math.random() * 0.2
+      velocities.push({
+        x: Math.cos(theta) * Math.cos(phi) * speed,
+        y: Math.abs(Math.sin(phi) * speed) + 0.1, // Bias upward
+        z: Math.sin(theta) * Math.cos(phi) * speed
+      })
+      lifetimes.push(1.0) // Full lifetime
+    }
+
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
+
+    const material = new THREE.PointsMaterial({
+      color: new THREE.Color(color),
+      size: success ? 0.4 : 0.3,
+      transparent: true,
+      opacity: 1,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    })
+
+    const particles = new THREE.Points(geometry, material)
+    this.scene.add(particles)
+
+    this.particleGroups.push({
+      mesh: particles,
+      velocities,
+      lifetimes,
+      age: 0,
+      maxAge: 1.5
+    })
+  }
+
+  emitSuccess(position) {
+    this.emit(position, '#00ff88', 25, true)
+    // Secondary sparkle
+    setTimeout(() => this.emit(position, '#ffffff', 10, true), 100)
+  }
+
+  emitError(position) {
+    this.emit(position, '#ff4444', 20, false)
+    this.emit(position, '#ff8800', 10, false)
+  }
+
+  update(deltaTime) {
+    for (let i = this.particleGroups.length - 1; i >= 0; i--) {
+      const group = this.particleGroups[i]
+      group.age += deltaTime
+
+      if (group.age >= group.maxAge) {
+        // Remove expired particles
+        this.scene.remove(group.mesh)
+        group.mesh.geometry.dispose()
+        group.mesh.material.dispose()
+        this.particleGroups.splice(i, 1)
+        continue
+      }
+
+      // Update positions
+      const positions = group.mesh.geometry.attributes.position.array
+      const progress = group.age / group.maxAge
+
+      for (let j = 0; j < group.velocities.length; j++) {
+        const vel = group.velocities[j]
+        positions[j * 3] += vel.x
+        positions[j * 3 + 1] += vel.y - 0.01 * group.age // Gravity
+        positions[j * 3 + 2] += vel.z
+        group.lifetimes[j] -= deltaTime * 0.8
+      }
+
+      group.mesh.geometry.attributes.position.needsUpdate = true
+      group.mesh.material.opacity = 1 - progress
+    }
+  }
+
+  dispose() {
+    for (const group of this.particleGroups) {
+      this.scene.remove(group.mesh)
+      group.mesh.geometry.dispose()
+      group.mesh.material.dispose()
+    }
+    this.particleGroups = []
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SPEECH BUBBLE
+// ═══════════════════════════════════════════════════════════════════════════
+
+class SpeechBubble {
+  constructor(scene, position, message, type = 'info') {
+    this.scene = scene
+    this.message = message
+    this.type = type
+    this.age = 0
+    this.maxAge = type === 'approval' ? 30 : 5 // Approval bubbles stay longer
+
+    this.createMesh(position)
+  }
+
+  createMesh(position) {
+    const canvas = document.createElement('canvas')
+    const ctx = canvas.getContext('2d')
+    canvas.width = 256
+    canvas.height = 96
+
+    // Background color based on type
+    const bgColors = {
+      info: 'rgba(40, 40, 60, 0.9)',
+      approval: 'rgba(255, 200, 0, 0.95)',
+      error: 'rgba(255, 60, 60, 0.9)',
+      input: 'rgba(100, 100, 255, 0.9)'
+    }
+
+    const textColors = {
+      info: '#ffffff',
+      approval: '#000000',
+      error: '#ffffff',
+      input: '#ffffff'
+    }
+
+    // Draw bubble
+    ctx.fillStyle = bgColors[this.type] || bgColors.info
+    ctx.beginPath()
+    ctx.roundRect(10, 10, 236, 66, 10)
+    ctx.fill()
+
+    // Draw pointer
+    ctx.beginPath()
+    ctx.moveTo(128 - 10, 76)
+    ctx.lineTo(128, 96)
+    ctx.lineTo(128 + 10, 76)
+    ctx.fill()
+
+    // Draw text
+    ctx.fillStyle = textColors[this.type] || textColors.info
+    ctx.font = 'bold 16px sans-serif'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+
+    // Wrap text if needed
+    const words = this.message.split(' ')
+    let line = ''
+    let y = 35
+    const lineHeight = 20
+    const maxWidth = 210
+
+    for (const word of words) {
+      const testLine = line + word + ' '
+      if (ctx.measureText(testLine).width > maxWidth && line !== '') {
+        ctx.fillText(line.trim(), 128, y)
+        line = word + ' '
+        y += lineHeight
+      } else {
+        line = testLine
+      }
+    }
+    ctx.fillText(line.trim(), 128, y)
+
+    // Icon for approval type
+    if (this.type === 'approval') {
+      ctx.font = '20px sans-serif'
+      ctx.fillText('⚠️', 30, 43)
+    } else if (this.type === 'input') {
+      ctx.font = '20px sans-serif'
+      ctx.fillText('✏️', 30, 43)
+    }
+
+    const texture = new THREE.CanvasTexture(canvas)
+    const material = new THREE.SpriteMaterial({
+      map: texture,
+      transparent: true,
+      depthTest: false
+    })
+
+    this.sprite = new THREE.Sprite(material)
+    this.sprite.scale.set(6, 2.25, 1)
+    this.sprite.position.set(position.x, position.y + 4, position.z)
+    this.sprite.userData = { type: 'bubble', bubbleType: this.type }
+
+    this.scene.add(this.sprite)
+  }
+
+  update(deltaTime, agentPosition) {
+    this.age += deltaTime
+
+    // Follow agent
+    if (agentPosition) {
+      this.sprite.position.x = agentPosition.x
+      this.sprite.position.y = agentPosition.y + 4
+      this.sprite.position.z = agentPosition.z
+    }
+
+    // Fade out near end (except approval which stays)
+    if (this.type !== 'approval' && this.age > this.maxAge - 1) {
+      this.sprite.material.opacity = this.maxAge - this.age
+    }
+
+    // Gentle bob
+    this.sprite.position.y += Math.sin(this.age * 3) * 0.01
+
+    return this.age < this.maxAge
+  }
+
+  dismiss() {
+    this.age = this.maxAge
+  }
+
+  dispose() {
+    this.scene.remove(this.sprite)
+    this.sprite.material.map.dispose()
+    this.sprite.material.dispose()
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // COMPOSABLE
 // ═══════════════════════════════════════════════════════════════════════════
 
-export function useVillageIsometric(containerRef) {
+export function useVillageIsometric(containerRef, options = {}) {
   const isInitialized = ref(false)
   const activeZone = ref(null)
+  const selectedAgent = shallowRef(null)
+  const hoveredObject = shallowRef(null)
 
   let scene, camera, renderer
   let animationFrameId
   let zones = {}
   let agents = new Map()
   let clock
+  let particleSystem
+  let speechBubbles = []
+  let raycaster
+  let mouse
 
   function init() {
     if (!containerRef.value) return false
@@ -274,6 +524,18 @@ export function useVillageIsometric(containerRef) {
 
     // Clock for animations
     clock = new THREE.Clock()
+
+    // Particle system for effects
+    particleSystem = new ParticleSystem(scene)
+
+    // Raycaster for click detection
+    raycaster = new THREE.Raycaster()
+    mouse = new THREE.Vector2()
+
+    // Add event listeners
+    renderer.domElement.addEventListener('click', handleClick)
+    renderer.domElement.addEventListener('mousemove', handleMouseMove)
+    renderer.domElement.style.cursor = 'default'
 
     isInitialized.value = true
     return true
@@ -420,9 +682,118 @@ export function useVillageIsometric(containerRef) {
   function handleToolComplete(event) {
     const agent = agents.get(event.agent_id)
     if (agent) {
+      // Emit particles at agent position
+      const pos = agent.mesh.position.clone()
+      if (event.success !== false) {
+        particleSystem.emitSuccess(pos)
+      } else {
+        particleSystem.emitError(pos)
+      }
       agent.finishTool()
     }
     setTimeout(() => setActiveZone(null), 500)
+  }
+
+  function handleToolError(event) {
+    const agent = agents.get(event.agent_id)
+    if (agent) {
+      const pos = agent.mesh.position.clone()
+      particleSystem.emitError(pos)
+      agent.finishTool()
+
+      // Show error bubble
+      showBubble(event.agent_id, event.error || 'Error occurred', 'error')
+    }
+    setTimeout(() => setActiveZone(null), 500)
+  }
+
+  function showBubble(agentId, message, type = 'info') {
+    const agent = agents.get(agentId)
+    if (!agent) return
+
+    // Remove existing bubble for this agent
+    dismissBubble(agentId)
+
+    const bubble = new SpeechBubble(scene, agent.mesh.position, message, type)
+    bubble.agentId = agentId
+    speechBubbles.push(bubble)
+
+    return bubble
+  }
+
+  function showApprovalBubble(agentId, message) {
+    return showBubble(agentId, message, 'approval')
+  }
+
+  function showInputBubble(agentId, message) {
+    return showBubble(agentId, message, 'input')
+  }
+
+  function dismissBubble(agentId) {
+    const idx = speechBubbles.findIndex(b => b.agentId === agentId)
+    if (idx !== -1) {
+      speechBubbles[idx].dismiss()
+    }
+  }
+
+  function getMousePosition(event) {
+    const rect = renderer.domElement.getBoundingClientRect()
+    mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1
+    mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1
+  }
+
+  function getIntersections() {
+    raycaster.setFromCamera(mouse, camera)
+    const objects = []
+
+    // Collect agent meshes
+    for (const agent of agents.values()) {
+      objects.push(agent.mesh)
+    }
+
+    // Collect zone meshes
+    for (const zone of Object.values(zones)) {
+      objects.push(zone.mesh)
+    }
+
+    return raycaster.intersectObjects(objects, false)
+  }
+
+  function handleClick(event) {
+    getMousePosition(event)
+    const intersections = getIntersections()
+
+    if (intersections.length > 0) {
+      const hit = intersections[0].object
+      const userData = hit.userData
+
+      if (userData.type === 'agent') {
+        selectedAgent.value = userData.id
+        options.onAgentClick?.(userData.id, agents.get(userData.id))
+      } else if (userData.type === 'zone') {
+        options.onZoneClick?.(userData.name, userData.label)
+      }
+    } else {
+      selectedAgent.value = null
+    }
+  }
+
+  function handleMouseMove(event) {
+    getMousePosition(event)
+    const intersections = getIntersections()
+
+    if (intersections.length > 0) {
+      const hit = intersections[0].object
+      const userData = hit.userData
+
+      if (userData.type === 'agent' || userData.type === 'zone') {
+        hoveredObject.value = userData
+        renderer.domElement.style.cursor = 'pointer'
+      }
+    } else {
+      hoveredObject.value = null
+      renderer.domElement.style.cursor = 'default'
+    }
   }
 
   function animate() {
@@ -433,6 +804,23 @@ export function useVillageIsometric(containerRef) {
     // Update all agents
     for (const agent of agents.values()) {
       agent.update(deltaTime)
+    }
+
+    // Update particle system
+    if (particleSystem) {
+      particleSystem.update(deltaTime)
+    }
+
+    // Update speech bubbles
+    for (let i = speechBubbles.length - 1; i >= 0; i--) {
+      const bubble = speechBubbles[i]
+      const agent = agents.get(bubble.agentId)
+      const agentPos = agent ? agent.mesh.position : null
+
+      if (!bubble.update(deltaTime, agentPos)) {
+        bubble.dispose()
+        speechBubbles.splice(i, 1)
+      }
     }
 
     renderer.render(scene, camera)
@@ -461,10 +849,28 @@ export function useVillageIsometric(containerRef) {
       cancelAnimationFrame(animationFrameId)
     }
 
+    // Remove event listeners
+    if (renderer?.domElement) {
+      renderer.domElement.removeEventListener('click', handleClick)
+      renderer.domElement.removeEventListener('mousemove', handleMouseMove)
+    }
+
+    // Dispose agents
     for (const agent of agents.values()) {
       agent.dispose()
     }
     agents.clear()
+
+    // Dispose particles
+    if (particleSystem) {
+      particleSystem.dispose()
+    }
+
+    // Dispose speech bubbles
+    for (const bubble of speechBubbles) {
+      bubble.dispose()
+    }
+    speechBubbles = []
 
     if (renderer) {
       renderer.dispose()
@@ -491,11 +897,18 @@ export function useVillageIsometric(containerRef) {
   return {
     isInitialized,
     activeZone,
+    selectedAgent,
+    hoveredObject,
     agents,
     ensureAgent,
     handleToolStart,
     handleToolComplete,
+    handleToolError,
     setActiveZone,
+    showBubble,
+    showApprovalBubble,
+    showInputBubble,
+    dismissBubble,
     dispose,
     ZONES_3D,
     AGENT_COLORS

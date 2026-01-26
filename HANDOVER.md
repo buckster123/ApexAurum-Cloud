@@ -1,8 +1,8 @@
 # ApexAurum-Cloud Handover Document
 
 **Date:** 2026-01-26
-**Build:** v44-village-isometric
-**Status:** PRODUCTION - Village GUI with Isometric 3D + Task Tickers
+**Build:** v45-village-polish
+**Status:** PRODUCTION - Village GUI with Particles + Click Selection
 
 ---
 
@@ -29,6 +29,14 @@
    - Task Detail sidebar (full task cards)
    - 2D/3D view toggle with shared WebSocket
    - Mobile responsive with slide-up panel
+
+4. **Village Phase 5: Polish**
+   - Particle effects on tool completion (green=success, red=error)
+   - Click detection for agents (raycasting)
+   - Agent detail popup on click
+   - Hover tooltips for agents and zones
+   - Speech bubble system (approval/input/error)
+   - Cursor changes on hover
 
 ### Tool Count: 46 + 23 Features
 
@@ -86,12 +94,19 @@ Backend:
 
 ---
 
-## Remaining Work (Phase 5 Polish)
+## Phase 5 Polish Status
 
-- [ ] Particle effects on tool completion (success=green, error=red)
-- [ ] Floating labels above zones in 3D
-- [ ] Speech bubbles for approval/input needed events
-- [ ] Click agent to show details popup
+- [x] Particle effects on tool completion (success=green, error=red)
+- [x] Floating labels above zones in 3D (already in place)
+- [x] Speech bubbles system (approval/input/error types)
+- [x] Click agent to show details popup
+- [x] Hover tooltips for agents and zones
+- [x] Raycasting click detection
+
+### Future Enhancements
+- [ ] Zone info popup on zone click
+- [ ] Camera pan/zoom controls
+- [ ] Agent path visualization during movement
 
 ---
 
@@ -132,6 +147,7 @@ open https://frontend-production-5402.up.railway.app/village-gui
 ## Key Commits This Session
 
 ```
+(pending) Village Phase 5: Particles + Click Selection
 4e60e5b Village Isometric 3D + Task Tickers
 2f97418 Village Phase 1: Canvas-Based GUI Visualization
 8af71ea Village Phase 0: WebSocket Infrastructure
