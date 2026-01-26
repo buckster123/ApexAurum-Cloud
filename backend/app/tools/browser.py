@@ -393,29 +393,22 @@ Example: browser_session(action="create")""",
 # ============================================================================
 
 class BrowserActionTool(BaseTool):
-    """Perform actions in a browser session."""
+    """Get information about browser sessions."""
 
     @property
     def schema(self) -> ToolSchema:
         return ToolSchema(
             name="browser_action",
-            description="""Perform actions in an existing browser session.
-Requires an active session from browser_session(action="create").
+            description="""Get information about a browser session.
 
-Actions:
-- "goto": Navigate to a URL
-- "click": Click an element by CSS selector
-- "type": Type text into an input field
-- "screenshot": Take a screenshot (returns base64 PNG)
-- "content": Get current page content
+Currently supports:
+- "info": Get session details (status, dimensions, etc.)
 
-For advanced automation, combine multiple actions in sequence.
+Note: Interactive actions (click, type, navigate) require WebSocket/CDP
+connection which is not yet implemented. Use browser_scrape, browser_pdf,
+and browser_screenshot for most use cases - they work without sessions.
 
-Example:
-1. browser_session(action="create") -> get session_id
-2. browser_action(session_id=..., action="goto", url="https://example.com")
-3. browser_action(session_id=..., action="type", selector="input[name=q]", text="hello")
-4. browser_action(session_id=..., action="click", selector="button[type=submit]")""",
+Example: browser_action(session_id="...", action="info")""",
             input_schema={
                 "type": "object",
                 "properties": {
@@ -425,105 +418,47 @@ Example:
                     },
                     "action": {
                         "type": "string",
-                        "enum": ["goto", "click", "type", "screenshot", "content"],
+                        "enum": ["info"],
                         "description": "Action to perform"
-                    },
-                    "url": {
-                        "type": "string",
-                        "description": "URL for 'goto' action"
-                    },
-                    "selector": {
-                        "type": "string",
-                        "description": "CSS selector for 'click' and 'type' actions"
-                    },
-                    "text": {
-                        "type": "string",
-                        "description": "Text for 'type' action"
                     }
                 },
                 "required": ["session_id", "action"]
             },
             category=ToolCategory.BROWSER,
             requires_auth=True,
-            requires_confirmation=True,  # Can interact with external sites
+            requires_confirmation=False,
         )
 
     async def execute(self, params: dict, context: ToolContext) -> ToolResult:
         session_id = params["session_id"]
         action = params["action"]
 
-        # Steel uses CDP (Chrome DevTools Protocol) for session actions
-        # We need to connect via WebSocket, which is complex
-        # For now, implement a simplified REST-based approach
-
-        # Note: This is a simplified implementation
-        # Full CDP support would require WebSocket connection management
-
-        if action == "goto":
-            url = params.get("url")
-            if not url:
-                return ToolResult(success=False, error="url required for goto action")
-
-            # Use session context endpoint
+        if action == "info":
+            # Get session info
             success, result, error = await _steel_request(
-                "POST",
-                f"/v1/sessions/{session_id}/context",
-                json_data={"url": url}
+                "GET",
+                f"/v1/sessions/{session_id}"
             )
 
             if not success:
                 return ToolResult(success=False, error=error)
-
-            return ToolResult(
-                success=True,
-                result={"message": f"Navigated to {url}", "url": url}
-            )
-
-        elif action == "screenshot":
-            # Session screenshot
-            success, png_bytes, error = await _steel_request(
-                "POST",
-                f"/v1/sessions/{session_id}/screenshot",
-                expect_binary=True
-            )
-
-            if not success:
-                return ToolResult(success=False, error=error)
-
-            screenshot_base64 = base64.b64encode(png_bytes).decode("utf-8")
 
             return ToolResult(
                 success=True,
                 result={
-                    "screenshot_base64": screenshot_base64[:100] + "..." if len(screenshot_base64) > 100 else screenshot_base64,
-                    "size_bytes": len(png_bytes),
-                    "message": "Screenshot captured (base64 PNG)"
+                    "id": result.get("id"),
+                    "status": result.get("status"),
+                    "created_at": result.get("createdAt"),
+                    "duration": result.get("duration"),
+                    "dimensions": result.get("dimensions"),
+                    "user_agent": result.get("userAgent"),
+                    "websocket_url": result.get("websocketUrl"),
+                    "note": "For interactive actions, connect via websocketUrl using Playwright/Puppeteer"
                 }
             )
 
-        elif action == "content":
-            # Get page content
-            success, result, error = await _steel_request(
-                "GET",
-                f"/v1/sessions/{session_id}/content"
-            )
-
-            if not success:
-                return ToolResult(success=False, error=error)
-
-            return ToolResult(success=True, result=result)
-
-        elif action in ["click", "type"]:
-            # These require CDP WebSocket - return informative error
-            return ToolResult(
-                success=False,
-                error=f"Action '{action}' requires WebSocket CDP connection. "
-                      f"Consider using browser_scrape for read-only operations, "
-                      f"or the session's websocket_url for advanced automation."
-            )
-
         else:
-            return ToolResult(success=False, error=f"Unknown action: {action}")
+            return ToolResult(success=False, error=f"Unknown action: {action}. Currently only 'info' is supported.")
 
 
 # ============================================================================
@@ -538,16 +473,13 @@ class BrowserScreenshotTool(BaseTool):
         return ToolSchema(
             name="browser_screenshot",
             description="""Take a screenshot of a web page.
-Creates a temporary session, captures the screenshot, and cleans up.
-Returns a base64-encoded PNG image.
+Uses Steel's stateless screenshot endpoint - quick and efficient.
+Returns a base64-encoded JPEG image.
 
 Use for:
 - Visual verification of page content
 - Capturing dynamic/JavaScript content
 - Creating visual records
-
-Note: For multiple screenshots of the same page, use browser_session
-with browser_action(action="screenshot") for better performance.
 
 Example: browser_screenshot(url="https://example.com")""",
             input_schema={
@@ -574,59 +506,33 @@ Example: browser_screenshot(url="https://example.com")""",
         url = params["url"]
         full_page = params.get("full_page", True)
 
-        # Create a temporary session
-        success, session_result, error = await _steel_request(
+        # Use stateless screenshot endpoint (like scrape and pdf)
+        success, image_bytes, error = await _steel_request(
             "POST",
-            "/v1/sessions",
-            json_data={}
+            "/v1/screenshot",
+            json_data={
+                "url": url,
+                "fullPage": full_page
+            },
+            expect_binary=True
         )
 
         if not success:
-            return ToolResult(success=False, error=f"Failed to create session: {error}")
+            return ToolResult(success=False, error=error)
 
-        session_id = session_result.get("id")
+        # Steel returns JPEG, encode as base64
+        screenshot_base64 = base64.b64encode(image_bytes).decode("utf-8")
 
-        try:
-            # Navigate to URL
-            success, _, error = await _steel_request(
-                "POST",
-                f"/v1/sessions/{session_id}/context",
-                json_data={"url": url}
-            )
-
-            if not success:
-                return ToolResult(success=False, error=f"Failed to navigate: {error}")
-
-            # Wait a moment for page to render
-            import asyncio
-            await asyncio.sleep(2)
-
-            # Take screenshot
-            success, png_bytes, error = await _steel_request(
-                "POST",
-                f"/v1/sessions/{session_id}/screenshot",
-                json_data={"fullPage": full_page},
-                expect_binary=True
-            )
-
-            if not success:
-                return ToolResult(success=False, error=f"Failed to capture screenshot: {error}")
-
-            screenshot_base64 = base64.b64encode(png_bytes).decode("utf-8")
-
-            return ToolResult(
-                success=True,
-                result={
-                    "url": url,
-                    "size_bytes": len(png_bytes),
-                    "screenshot_base64": screenshot_base64,
-                    "full_page": full_page,
-                }
-            )
-
-        finally:
-            # Clean up session
-            await _steel_request("DELETE", f"/v1/sessions/{session_id}")
+        return ToolResult(
+            success=True,
+            result={
+                "url": url,
+                "size_bytes": len(image_bytes),
+                "format": "jpeg",
+                "screenshot_base64": screenshot_base64,
+                "full_page": full_page,
+            }
+        )
 
 
 # ============================================================================
