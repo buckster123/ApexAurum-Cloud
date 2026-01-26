@@ -13,12 +13,12 @@ Each tool gives Claude's agents the ability to interact with the world.
 |------|------|-------|--------|
 | 1 | Utilities | 6 | ✅ COMPLETE |
 | 2 | Web | 2 | ✅ COMPLETE |
-| 3 | Vault | 5 | ⬜ Planned |
+| 3 | Vault | 3/5 | 🔶 PARTIAL |
 | 4 | Knowledge Base | 4 | ⬜ Planned |
 | 5 | Session Memory | 4 | ⬜ Planned |
 | 6 | Code Execution | 2 | ⬜ Planned |
 | 7 | Agents | 3 | ⬜ Planned |
-| **Total** | | **26** | **8/26** |
+| **Total** | | **26** | **11/26** |
 
 ---
 
@@ -67,19 +67,19 @@ Fetch content and search the web. Pure HTTP - no API keys needed.
 
 ---
 
-## Tier 3: Vault Tools (The Crafting Hands) ⬜
+## Tier 3: Vault Tools (The Crafting Hands) 🔶
 
-**Status:** PLANNED
+**Status:** PARTIAL - 3/5 tools deployed v30
 
 File operations mapped to existing Vault API. User-scoped, quota-enforced.
 
 | Tool | Description | Maps To | Status |
 |------|-------------|---------|--------|
-| `vault_list` | List files in a folder | `GET /files/folder/{id}` | ⬜ |
-| `vault_read` | Read file content | `GET /files/{id}/content` | ⬜ |
-| `vault_write` | Write/update file | `PUT /files/{id}/content` | ⬜ |
-| `vault_search` | Search file contents | `GET /files/search/content` | ⬜ |
-| `vault_info` | Get storage stats | `GET /files/stats` | ⬜ |
+| `vault_list` | List files in a folder | SQLAlchemy direct | ✅ |
+| `vault_read` | Read file content | SQLAlchemy + filesystem | ✅ |
+| `vault_write` | Write/update file | Needs service layer | ⬜ |
+| `vault_search` | Search file contents | Needs service layer | ⬜ |
+| `vault_info` | Get storage stats | SQLAlchemy direct | ✅ |
 
 **Implementation Notes:**
 - Requires authenticated user context
@@ -284,6 +284,14 @@ Each tier has a poetic name reflecting its nature:
 ---
 
 ## Changelog
+
+### 2026-01-26 - v30-crafting-hands
+- Completed Tier 3 partial: Vault Tools (3/5)
+- `vault_list` - List files and folders
+- `vault_read` - Read text file content
+- `vault_info` - Storage usage statistics
+- Uses SQLAlchemy models directly (requires auth)
+- Total tools: 11/26
 
 ### 2026-01-26 - v29-reaching-hands
 - Completed Tier 2: Web Tools (2 tools)
