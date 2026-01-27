@@ -1,7 +1,7 @@
 # ApexAurum-Cloud Handover Document
 
 **Date:** 2026-01-27
-**Build:** v54-neural-fallback
+**Build:** v55-village-chat
 **Status:** BETA POLISHED - Ready for seekers!
 
 ---
@@ -54,12 +54,29 @@ ApexAurum Cloud is fully functional and polished:
 
 ---
 
+## Session 3 Accomplishments
+
+### 1. Auth Error Polish - COMPLETE
+- Login/Register now show friendly error messages
+- Session expired → "Your session has expired. Please sign in again."
+- Invalid credentials → "Invalid email or password. Please try again."
+- Network errors, rate limits, server errors all have clear explanations
+
+### 2. Village GUI → Chat - COMPLETE
+- Click agent avatar in Village GUI → navigates to Chat with that agent selected
+- Works in both 2D canvas and 3D isometric views
+- Agent click detection added to VillageCanvas (checks agents before zones)
+- ChatView reads `?agent=ID` query param and selects that agent
+- URL cleaned up after selection (removes query param)
+
+---
+
 ## Latest Commit
 ```
-fa42fda Add graceful WebGL fallback for Neural page
+8f86b81 Add Village GUI → Chat navigation on agent click
 ```
 
-**Note:** Railway API token may have expired. Code is pushed to GitHub - deploy manually from Railway dashboard or generate new token.
+**Railway Token:** Working - deploys via API are functioning.
 
 ---
 
@@ -83,7 +100,7 @@ curl -s -X POST "https://backboard.railway.app/graphql/v2" \
 - **Backend Service:** `9d60ca55-a937-4b17-8ec4-3fb34ac3d47e`
 - **Frontend Service:** `6cf1f965-94df-4ea0-96ca-d82959e2d3c5`
 - **Environment:** `2e9882b4-9b33-4233-9376-5b5342739e74`
-- **Token:** Needs refresh (was set to expire in 1 week)
+- **Token:** Working (confirmed in Session 3)
 
 ---
 
@@ -105,29 +122,25 @@ curl -s -X POST "https://backboard.railway.app/graphql/v2" \
 
 ## Remaining Tasks (Next Session)
 
-### Priority 1: Village GUI Chat
-- Click agent avatar → opens chat with that agent
-- Pass agent ID to ChatView via router
-- Already have WebSocket working
-
-### Priority 2: pgvector Setup
+### Priority 1: pgvector Setup
 - Enable pgvector extension on Railway PostgreSQL
 - Neural page will then show actual memory data
 - Currently returns empty (gracefully)
 
-### Priority 3: Nice-to-Have
+### Priority 2: Nice-to-Have
 - Suno/Music API integration
 - Coupon/admin freebies system
+- Update backend health endpoint build string
 
 ---
 
 ## Test Accounts
-- **Seeker:** buckster123
-- **Alchemist:** buckmazzta@gmail.com / abnudc1337
+- **Note:** Database was wiped during clean deploy - recreate test accounts
+- Previous accounts: buckster123 (Seeker), buckmazzta@gmail.com (Alchemist)
 
 ---
 
-## Key Files Modified This Session
+## Key Files Modified (Session 2)
 
 | File | Changes |
 |------|---------|
@@ -143,6 +156,17 @@ curl -s -X POST "https://backboard.railway.app/graphql/v2" \
 | `frontend/src/composables/useThreeScene.js` | WebGL detection, try/catch |
 | `frontend/src/composables/useVillage.js` | WebSocket URL fix |
 | `frontend/src/views/VillageGUIView.vue` | WebSocket URL fix |
+
+## Key Files Modified (Session 3)
+
+| File | Changes |
+|------|---------|
+| `frontend/src/views/LoginView.vue` | Friendly auth error messages |
+| `frontend/src/views/RegisterView.vue` | Friendly registration error messages |
+| `frontend/src/services/api.js` | Better session error message |
+| `frontend/src/components/village/VillageCanvas.vue` | Agent click detection |
+| `frontend/src/views/VillageGUIView.vue` | Agent click → navigate to chat |
+| `frontend/src/views/ChatView.vue` | Read agent from query param |
 
 ---
 
