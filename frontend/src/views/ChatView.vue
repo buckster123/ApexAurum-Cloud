@@ -147,6 +147,18 @@ onMounted(async () => {
     await chat.loadConversation(route.params.id)
   }
 
+  // Select agent from query param (e.g., from Village GUI click)
+  if (route.query.agent) {
+    const agentId = route.query.agent
+    // Check if it's a valid agent
+    const validAgent = allAgents.value.find(a => a.id === agentId || a.id === agentId + '-PAC')
+    if (validAgent) {
+      selectedAgent.value = validAgent.id
+      // Clear the query param to keep URL clean
+      router.replace({ path: '/chat', query: {} })
+    }
+  }
+
   inputRef.value?.focus()
 
   // Setup swipe gestures for mobile sidebar

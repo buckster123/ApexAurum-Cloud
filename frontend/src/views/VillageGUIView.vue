@@ -9,6 +9,7 @@
  */
 
 import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { useSound } from '@/composables/useSound'
 import VillageCanvas from '@/components/village/VillageCanvas.vue'
 import VillageIsometric from '@/components/village/VillageIsometric.vue'
@@ -17,7 +18,14 @@ import TaskDetailPanel from '@/components/village/TaskDetailPanel.vue'
 import { ZONES, AGENT_COLORS } from '@/composables/useVillage'
 import { ZONES_3D, AGENT_COLORS as AGENT_COLORS_3D } from '@/composables/useVillageIsometric'
 
+const router = useRouter()
 const { playTone } = useSound()
+
+// Navigate to chat with selected agent
+function handleAgentClick(agentId) {
+  playTone(660, 0.05, 'sine', 0.1)
+  router.push({ path: '/chat', query: { agent: agentId } })
+}
 
 // View mode
 const viewMode = ref(localStorage.getItem('village-view-mode') || '2d')
@@ -227,6 +235,7 @@ onUnmounted(() => {
           <VillageCanvas
             :events="eventLog"
             :status="status"
+            @agentClick="handleAgentClick"
           />
         </div>
 
@@ -235,6 +244,7 @@ onUnmounted(() => {
           <VillageIsometric
             :events="eventLog"
             :status="status"
+            @agent-click="handleAgentClick"
             @webgl-error="handleWebGLError"
           />
         </div>

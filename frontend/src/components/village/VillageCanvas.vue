@@ -219,9 +219,23 @@ function render() {
 
 function handleClick(event) {
   const rect = canvasRef.value.getBoundingClientRect()
-  const x = event.clientX - rect.left
-  const y = event.clientY - rect.top
+  const scaleX = CANVAS_WIDTH / rect.width
+  const scaleY = CANVAS_HEIGHT / rect.height
+  const x = (event.clientX - rect.left) * scaleX
+  const y = (event.clientY - rect.top) * scaleY
 
+  // Check agent clicks first (agents are on top of zones)
+  for (const agent of agents.values()) {
+    const dx = x - agent.x
+    const dy = y - agent.y
+    const distance = Math.sqrt(dx * dx + dy * dy)
+    if (distance <= agent.radius + 5) { // +5 for easier clicking
+      emit('agentClick', agent.id)
+      return
+    }
+  }
+
+  // Then check zone clicks
   for (const [name, zone] of Object.entries(ZONES)) {
     const halfW = zone.width / 2
     const halfH = zone.height / 2
