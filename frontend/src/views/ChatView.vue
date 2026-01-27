@@ -26,6 +26,7 @@ const showSidebar = ref(true)
 const mainArea = ref(null)
 const conversationsList = ref(null)
 const isMobile = ref(window.innerWidth < 768)
+const toolsCount = ref(0)
 
 // Conversation management state
 const searchQuery = ref('')
@@ -150,6 +151,14 @@ onMounted(async () => {
   await chat.fetchModels()  // Fetch available models for current provider
   await chat.fetchConversations()
   await fetchCustomAgents()
+
+  // Fetch tools count
+  try {
+    const response = await api.get('/api/v1/tools')
+    toolsCount.value = response.data.count || 0
+  } catch (e) {
+    toolsCount.value = 46  // Fallback to known count
+  }
 
   if (route.params.id) {
     await chat.loadConversation(route.params.id)
@@ -599,7 +608,7 @@ function renderMarkdown(content) {
           <label class="text-xs" :class="pacMode ? 'text-purple-300/60' : 'text-gray-500'">
             <span class="flex items-center gap-1">
               🔧 Tools
-              <span class="text-gray-600">(6)</span>
+              <span class="text-gray-600">({{ toolsCount }})</span>
             </span>
           </label>
           <button
