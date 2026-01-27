@@ -123,6 +123,8 @@ export function useDevMode() {
   // === KEYBOARD DETECTION ===
 
   function handleKeyDown(event) {
+    // Guard against undefined event.code (mobile/IME events)
+    if (!event.code) return
     // Konami code for Dev Mode
     if (!devMode.value) {
       const expectedKonami = KONAMI_CODE[konamiIndex.value]

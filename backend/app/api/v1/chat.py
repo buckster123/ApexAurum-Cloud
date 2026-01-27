@@ -513,20 +513,20 @@ async def send_message(
                 }
             )
 
-    # For Anthropic, use user's BYOK key
-    # For other providers, use platform keys (env vars)
+    # Use user's BYOK key if they have one, otherwise use platform key
     if provider == "anthropic":
         user_api_key = get_user_api_key(user)
-        if not user_api_key:
+        if user_api_key:
+            # User has BYOK - use their key
+            api_key = user_api_key
+        elif settings.anthropic_api_key:
+            # Use platform API key
+            api_key = settings.anthropic_api_key
+        else:
             raise HTTPException(
-                status_code=status.HTTP_402_PAYMENT_REQUIRED,
-                detail={
-                    "error": "api_key_required",
-                    "message": "Please add your Anthropic API key in Settings to start chatting.",
-                    "action": "setup_api_key"
-                }
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Anthropic API is not configured. Please contact support."
             )
-        api_key = user_api_key
     else:
         # Other providers use platform API keys from environment
         api_key = None  # Let the service get from env
