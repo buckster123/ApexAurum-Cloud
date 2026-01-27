@@ -84,6 +84,157 @@ class LayerUpdateRequest(BaseModel):
 # Endpoints
 # =============================================================================
 
+@router.get("/diagnostic")
+async def diagnostic(
+    db=Depends(get_db),
+):
+    """
+    Diagnostic endpoint to check pgvector and Neural system status.
+    No auth required - useful for troubleshooting.
+    """
+    result = {
+        "pgvector_extension": False,
+        "user_vectors_table": False,
+        "neo_cortex_columns": False,
+        "vector_column": False,
+        "total_vectors": 0,
+        "errors": [],
+        "notes": [],
+    }
+
+    try:
+        # Check if pgvector extension exists
+        ext_check = await db.execute(
+            text("SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'vector')")
+        )
+        result["pgvector_extension"] = ext_check.scalar()
+
+        if not result["pgvector_extension"]:
+            result["notes"].append("pgvector extension not installed - try: CREATE EXTENSION vector;")
+
+        # Check if user_vectors table exists
+        table_check = await db.execute(
+            text("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'user_vectors')")
+        )
+        result["user_vectors_table"] = table_check.scalar()
+
+        if result["user_vectors_table"]:
+            # Check for vector column
+            col_check = await db.execute(
+                text("""
+                    SELECT EXISTS (
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_name = 'user_vectors' AND column_name = 'embedding'
+                    )
+                """)
+            )
+            result["vector_column"] = col_check.scalar()
+
+            # Check for neo-cortex columns
+            layer_check = await db.execute(
+                text("""
+                    SELECT EXISTS (
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_name = 'user_vectors' AND column_name = 'layer'
+                    )
+                """)
+            )
+            result["neo_cortex_columns"] = layer_check.scalar()
+
+            # Count vectors
+            count_check = await db.execute(text("SELECT COUNT(*) FROM user_vectors"))
+            result["total_vectors"] = count_check.scalar() or 0
+
+        else:
+            result["notes"].append("user_vectors table not found - backend will create on next startup if pgvector is enabled")
+
+    except Exception as e:
+        result["errors"].append(str(e))
+
+    # Overall status
+    result["ready"] = (
+        result["pgvector_extension"] and
+        result["user_vectors_table"] and
+        result["neo_cortex_columns"]
+    )
+
+    return result
+
+
+@router.post("/setup")
+async def setup_pgvector(
+    db=Depends(get_db),
+):
+    """
+    Attempt to set up pgvector and create tables.
+    Run this after enabling pgvector extension in Railway.
+    """
+    results = {
+        "extension": {"success": False, "message": ""},
+        "table": {"success": False, "message": ""},
+        "columns": {"success": False, "message": ""},
+    }
+
+    try:
+        # Try to create extension
+        await db.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+        await db.commit()
+        results["extension"] = {"success": True, "message": "pgvector extension enabled"}
+    except Exception as e:
+        results["extension"] = {"success": False, "message": str(e)}
+
+    try:
+        # Create user_vectors table
+        await db.execute(text("""
+            CREATE TABLE IF NOT EXISTS user_vectors (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                collection VARCHAR(100) DEFAULT 'default',
+                content TEXT NOT NULL,
+                metadata JSONB DEFAULT '{}',
+                embedding vector(1536),
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+            )
+        """))
+        await db.commit()
+        results["table"] = {"success": True, "message": "user_vectors table created"}
+    except Exception as e:
+        results["table"] = {"success": False, "message": str(e)}
+
+    try:
+        # Add Neo-Cortex columns
+        columns_sql = """
+            ALTER TABLE user_vectors
+            ADD COLUMN IF NOT EXISTS layer VARCHAR(20) DEFAULT 'working' NOT NULL,
+            ADD COLUMN IF NOT EXISTS visibility VARCHAR(20) DEFAULT 'private' NOT NULL,
+            ADD COLUMN IF NOT EXISTS agent_id VARCHAR(50),
+            ADD COLUMN IF NOT EXISTS message_type VARCHAR(50) DEFAULT 'observation' NOT NULL,
+            ADD COLUMN IF NOT EXISTS attention_weight FLOAT DEFAULT 1.0 NOT NULL,
+            ADD COLUMN IF NOT EXISTS access_count INTEGER DEFAULT 0 NOT NULL,
+            ADD COLUMN IF NOT EXISTS last_accessed_at TIMESTAMP WITH TIME ZONE,
+            ADD COLUMN IF NOT EXISTS responding_to JSONB DEFAULT '[]'::jsonb NOT NULL,
+            ADD COLUMN IF NOT EXISTS conversation_thread VARCHAR(100),
+            ADD COLUMN IF NOT EXISTS related_agents JSONB DEFAULT '[]'::jsonb NOT NULL,
+            ADD COLUMN IF NOT EXISTS tags JSONB DEFAULT '[]'::jsonb NOT NULL
+        """
+        await db.execute(text(columns_sql))
+        await db.commit()
+        results["columns"] = {"success": True, "message": "Neo-Cortex columns added"}
+    except Exception as e:
+        results["columns"] = {"success": False, "message": str(e)}
+
+    # Create indexes
+    try:
+        await db.execute(text("CREATE INDEX IF NOT EXISTS idx_vectors_user ON user_vectors(user_id)"))
+        await db.execute(text("CREATE INDEX IF NOT EXISTS idx_vectors_layer ON user_vectors(layer)"))
+        await db.execute(text("CREATE INDEX IF NOT EXISTS idx_vectors_visibility ON user_vectors(visibility)"))
+        await db.commit()
+    except Exception:
+        pass  # Indexes are optional
+
+    return results
+
+
 @router.get("/memories", response_model=List[MemoryNode])
 async def list_memories(
     layer: Optional[str] = Query(None, description="Filter by layer"),
