@@ -1,43 +1,31 @@
 # ApexAurum-Cloud Handover Document
 
 **Date:** 2026-01-27
-**Build:** v47-billing-system
-**Status:** ⚠️ BROKEN - TDZ error breaks login/navbar
+**Build:** v48-tdz-fixes
+**Status:** ✅ FIXED - TDZ errors resolved
 
 ---
 
-## 🚨 CRITICAL: Frontend Broken
+## TDZ Bug Fixes (`7403f32`)
 
-**Symptom:** After login, navbar disappears, user appears logged out on F5.
+**Problem:** After login, navbar disappeared. Console showed `Cannot access 'O' before initialization`.
 
-**Root Cause:** Vite minification creates Temporal Dead Zone (TDZ) error:
-```
-Cannot access 'O' before initialization
-```
+**Root Causes Found & Fixed:**
 
-### What We Tried
-1. Rolled back to commit `2431a00` (was "LIVE") - still broken
-2. Fixed `loadBranchInfo` TDZ (moved function before watcher) - still broken
-3. Fixed `api.js` refresh URL (was hitting frontend not backend) - still broken
-4. Forced Railway cache bust via `vite.config.js` change - still broken
+1. **api.js Line 35** - Token refresh used bare `axios.post()` instead of the configured `api` instance. This meant refresh requests hit the frontend domain (no baseURL) instead of backend. **Fixed:** Now uses `api.post()`.
 
-### Theory
-The TDZ error existed before but didn't fully break the app. Something changed (browser? race condition?) that made it fatal. There may be MULTIPLE TDZ issues in ChatView.vue.
+2. **App.vue Lines 13-19** - pacMode watcher with `immediate: true` ran during component setup, causing TDZ in minified code. **Fixed:** Removed `immediate: true`, apply initial state synchronously.
 
-### Next Steps for Tomorrow
-1. **Search ALL watchers with `immediate: true`** in ChatView - move all referenced functions BEFORE them
-2. **Check computed properties** - ensure they don't reference functions defined later
-3. **Try Vite dev mode locally** to see unminified error with actual variable names
-4. **Nuclear option:** Temporarily disable all watchers with `immediate: true`
+3. **ChatView.vue** - `loadBranchInfo()` was defined at line 380, but the watcher calling it with `immediate: true` was at line 227. **Fixed:** Moved function definition BEFORE the watcher.
 
 ### Current Commit
 ```
-726c1b0 Bust build cache
+7403f32 Fix: TDZ errors causing navbar to disappear after login
 ```
 
 ---
 
-## Previous: Billing System (was working)
+## Billing System (was working)
 
 ### Fixes Applied Today
 
