@@ -1,7 +1,17 @@
 import axios from 'axios'
 
+const baseURL = import.meta.env.VITE_API_URL || ''
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || '',
+  baseURL,
+  headers: {
+    'Content-Type': 'application/json'
+  }
+})
+
+// Separate instance for refresh - has baseURL but NO interceptors (avoids infinite 401 loop)
+const refreshClient = axios.create({
+  baseURL,
   headers: {
     'Content-Type': 'application/json'
   }
@@ -32,7 +42,8 @@ api.interceptors.response.use(
           throw new Error('No refresh token')
         }
 
-        const response = await axios.post('/api/v1/auth/refresh', {
+        // Use refreshClient (has baseURL, no interceptors) to avoid infinite loop
+        const response = await refreshClient.post('/api/v1/auth/refresh', {
           refresh_token: refreshToken
         })
 

@@ -223,6 +223,15 @@ watch(() => chat.messages.length, () => {
   })
 })
 
+// Define loadBranchInfo BEFORE the watcher that uses it (TDZ fix)
+async function loadBranchInfo() {
+  if (chat.currentConversation?.id) {
+    branchInfo.value = await chat.getBranches(chat.currentConversation.id)
+  } else {
+    branchInfo.value = { parent: null, branches: [], branch_count: 0 }
+  }
+}
+
 // Load branch info when conversation changes
 watch(() => chat.currentConversation?.id, () => {
   loadBranchInfo()
@@ -374,14 +383,6 @@ async function handleFork() {
     alert('Failed to create branch')
   } finally {
     forking.value = false
-  }
-}
-
-async function loadBranchInfo() {
-  if (chat.currentConversation?.id) {
-    branchInfo.value = await chat.getBranches(chat.currentConversation.id)
-  } else {
-    branchInfo.value = { parent: null, branches: [], branch_count: 0 }
   }
 }
 
