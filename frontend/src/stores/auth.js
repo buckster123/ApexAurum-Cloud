@@ -3,22 +3,27 @@ import { ref, computed } from 'vue'
 import api from '@/services/api'
 
 export const useAuthStore = defineStore('auth', () => {
-  // DEBUG: Log what we get from localStorage
-  const storedToken = localStorage.getItem('accessToken')
-  console.log('[AUTH DEBUG] localStorage accessToken:', storedToken, 'type:', typeof storedToken, 'truthy:', !!storedToken)
-  console.log('[AUTH DEBUG] localStorage keys:', Object.keys(localStorage))
+  // Helper to get valid token (handles "undefined" string bug)
+  function getValidToken(key) {
+    const value = localStorage.getItem(key)
+    // Treat null, undefined, "undefined", "null", empty string as invalid
+    if (!value || value === 'undefined' || value === 'null') {
+      // Clean up bad values
+      if (value === 'undefined' || value === 'null') {
+        localStorage.removeItem(key)
+      }
+      return null
+    }
+    return value
+  }
 
   // State
   const user = ref(null)
-  const accessToken = ref(storedToken)
-  const refreshToken = ref(localStorage.getItem('refreshToken'))
+  const accessToken = ref(getValidToken('accessToken'))
+  const refreshToken = ref(getValidToken('refreshToken'))
 
   // Getters
-  const isAuthenticated = computed(() => {
-    const result = !!accessToken.value
-    console.log('[AUTH DEBUG] isAuthenticated computed:', result, 'accessToken.value:', accessToken.value)
-    return result
-  })
+  const isAuthenticated = computed(() => !!accessToken.value)
 
   // Actions
   async function login(email, password) {
@@ -78,6 +83,11 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   function setTokens(data) {
+    // Validate tokens before storing to prevent "undefined" string bug
+    if (!data?.access_token || !data?.refresh_token) {
+      console.error('setTokens called with invalid data:', data)
+      return
+    }
     accessToken.value = data.access_token
     refreshToken.value = data.refresh_token
     localStorage.setItem('accessToken', data.access_token)
