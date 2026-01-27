@@ -319,7 +319,7 @@ async def get_pricing():
             id="free",
             name="Seeker",
             tagline="Begin your journey",
-            price_monthly=0,
+            price_monthly=3,
             messages_per_month=50,
             features=[
                 "50 messages per month",
@@ -333,7 +333,7 @@ async def get_pricing():
             id="pro",
             name="Alchemist",
             tagline="Transform your workflow",
-            price_monthly=9.99,
+            price_monthly=10,
             messages_per_month=1000,
             features=[
                 "1,000 messages per month",
@@ -350,7 +350,7 @@ async def get_pricing():
             id="opus",
             name="Adept",
             tagline="Unlimited mastery",
-            price_monthly=29.99,
+            price_monthly=30,
             messages_per_month=None,
             features=[
                 "Unlimited messages",

@@ -58,8 +58,9 @@ class Settings(BaseSettings):
     stripe_webhook_secret: Optional[str] = None
 
     # Stripe Price IDs (create these in Stripe Dashboard)
-    stripe_price_pro_monthly: Optional[str] = None  # $9.99/mo subscription
-    stripe_price_opus_monthly: Optional[str] = None  # $29.99/mo subscription
+    stripe_price_seeker_monthly: Optional[str] = None  # $3/mo subscription
+    stripe_price_pro_monthly: Optional[str] = None  # $10/mo subscription
+    stripe_price_opus_monthly: Optional[str] = None  # $30/mo subscription
     stripe_price_credits_500: Optional[str] = None  # $5 for 500 credits
     stripe_price_credits_2500: Optional[str] = None  # $20 for 2500 credits
 

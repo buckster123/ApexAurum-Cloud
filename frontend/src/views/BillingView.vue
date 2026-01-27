@@ -93,7 +93,7 @@ function formatDate(dateStr) {
           <div class="text-sm text-gray-400 mb-1">Current Plan</div>
           <div class="text-2xl font-bold text-gold">{{ billing.tierName }}</div>
           <div class="text-sm text-gray-500 mt-1">
-            {{ billing.status.tier === 'free' ? 'Free tier' : `$${billing.status.tier === 'pro' ? '9.99' : '29.99'}/month` }}
+            {{ `$${billing.status.tier === 'free' ? '3' : billing.status.tier === 'pro' ? '10' : '30'}/month` }}
           </div>
         </div>
 
