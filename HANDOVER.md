@@ -1,26 +1,32 @@
 # ApexAurum-Cloud Handover Document
 
 **Date:** 2026-01-27
-**Build:** v48-tdz-fixes
-**Status:** ✅ FIXED - TDZ errors resolved
+**Build:** v49-auth-race-fix
+**Status:** 🧪 TESTING - Auth race conditions fixed
 
 ---
 
-## TDZ Bug Fixes (`7403f32`)
+## Auth Race Condition Fixes (`f1e814a`)
 
-**Problem:** After login, navbar disappeared. Console showed `Cannot access 'O' before initialization`.
+**Problem:** UI showed incorrect auth state - "logged in" on fresh loads with stale tokens, navbar disappearing after login/logout.
 
 **Root Causes Found & Fixed:**
 
-1. **api.js Line 35** - Token refresh used bare `axios.post()` instead of the configured `api` instance. This meant refresh requests hit the frontend domain (no baseURL) instead of backend. **Fixed:** Now uses `api.post()`.
+1. **auth.js** - `isAuthenticated` was computed from `!!accessToken` only, ignoring whether the token was valid. Added `initialized` flag that's only `true` after token validation. Now `isAuthenticated = initialized && !!accessToken`. Invalid tokens cleared on 401 during profile fetch.
 
-2. **App.vue Lines 13-19** - pacMode watcher with `immediate: true` ran during component setup, causing TDZ in minified code. **Fixed:** Removed `immediate: true`, apply initial state synchronously.
+2. **App.vue** - Shows loading state ("Au" pulse) while auth initializes, preventing flash of incorrect state before token is validated.
 
-3. **ChatView.vue** - `loadBranchInfo()` was defined at line 380, but the watcher calling it with `immediate: true` was at line 227. **Fixed:** Moved function definition BEFORE the watcher.
+3. **router/index.js** - Navigation guards now wait for auth initialization before checking `isAuthenticated`, preventing premature redirects.
+
+### Previous: TDZ Bug Fixes (`7403f32`)
+
+- api.js: Token refresh now uses `api.post()` (has baseURL) not bare axios
+- App.vue: Removed `immediate:true` from pacMode watcher
+- ChatView.vue: Moved `loadBranchInfo()` before watcher that calls it
 
 ### Current Commit
 ```
-7403f32 Fix: TDZ errors causing navbar to disappear after login
+f1e814a Fix: Auth state race condition causing incorrect UI
 ```
 
 ---
