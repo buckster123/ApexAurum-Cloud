@@ -26,7 +26,14 @@ if (pacMode.value) {
 </script>
 
 <template>
+  <!-- Loading state while auth initializes -->
+  <div v-if="!auth.initialized" class="min-h-screen bg-apex-darker flex items-center justify-center">
+    <div class="text-gold text-2xl font-serif animate-pulse">Au</div>
+  </div>
+
+  <!-- Main app after auth initialized -->
   <div
+    v-else
     class="min-h-screen transition-all duration-1000"
     :class="{
       'bg-apex-darker': !pacMode,

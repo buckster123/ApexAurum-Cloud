@@ -7,9 +7,10 @@ export const useAuthStore = defineStore('auth', () => {
   const user = ref(null)
   const accessToken = ref(localStorage.getItem('accessToken'))
   const refreshToken = ref(localStorage.getItem('refreshToken'))
+  const initialized = ref(false) // Track if auth check completed
 
-  // Getters
-  const isAuthenticated = computed(() => !!accessToken.value)
+  // Getters - only authenticated if we have a token AND init completed
+  const isAuthenticated = computed(() => initialized.value && !!accessToken.value)
 
   // Actions
   async function login(email, password) {
@@ -38,15 +39,19 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function fetchProfile() {
-    if (!accessToken.value) return
+    if (!accessToken.value) return false
     try {
       const response = await api.get('/api/v1/user/profile')
       user.value = response.data
+      return true
     } catch (e) {
-      // Don't clear tokens on profile fetch failure - token might still be valid
-      // This prevents logout loops when profile endpoint has issues
       console.error('Failed to fetch profile:', e)
+      // If 401, token is invalid - clear it
+      if (e.response?.status === 401) {
+        clearTokens()
+      }
       user.value = null
+      return false
     }
   }
 
@@ -83,19 +88,27 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.removeItem('refreshToken')
   }
 
-  // Initialize: try to load profile if we have a token
-  if (accessToken.value) {
-    fetchProfile()
+  // Initialize: validate token if we have one
+  async function initialize() {
+    if (accessToken.value) {
+      await fetchProfile()
+    }
+    initialized.value = true
   }
+
+  // Start initialization immediately
+  initialize()
 
   return {
     user,
     accessToken,
     isAuthenticated,
+    initialized,
     login,
     register,
     logout,
     fetchProfile,
     refreshAccessToken,
+    initialize,
   }
 })
