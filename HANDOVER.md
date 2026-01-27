@@ -1,22 +1,20 @@
 # ApexAurum-Cloud Handover Document
 
 **Date:** 2026-01-27
-**Build:** v49-auth-race-fix
-**Status:** 🧪 TESTING - Auth race conditions fixed
+**Build:** v50-infinite-loop-fix
+**Status:** 🧪 TESTING - Fixed infinite 401 refresh loop
 
 ---
 
-## Auth Race Condition Fixes (`f1e814a`)
+## Infinite 401 Loop Fix (`29a0c82`)
 
-**Problem:** UI showed incorrect auth state - "logged in" on fresh loads with stale tokens, navbar disappearing after login/logout.
+**Problem:** Clicking Billing or navigating caused crashes. Auth state was inconsistent.
 
-**Root Causes Found & Fixed:**
+**Root Cause:** The api.js token refresh used `api.post()` which goes through the response interceptor. If refresh itself returns 401 (expired refresh token), the interceptor tries to refresh again → infinite loop!
 
-1. **auth.js** - `isAuthenticated` was computed from `!!accessToken` only, ignoring whether the token was valid. Added `initialized` flag that's only `true` after token validation. Now `isAuthenticated = initialized && !!accessToken`. Invalid tokens cleared on 401 during profile fetch.
+**Fix:** Created separate `refreshClient` axios instance with baseURL but NO interceptors. Refresh calls now use this, avoiding the loop.
 
-2. **App.vue** - Shows loading state ("Au" pulse) while auth initializes, preventing flash of incorrect state before token is validated.
-
-3. **router/index.js** - Navigation guards now wait for auth initialization before checking `isAuthenticated`, preventing premature redirects.
+**Also simplified:** Reverted auth complexity (removed `initialized` flag) back to simple token check that was working before.
 
 ### Previous: TDZ Bug Fixes (`7403f32`)
 
