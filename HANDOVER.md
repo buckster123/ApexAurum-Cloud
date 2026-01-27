@@ -2,60 +2,79 @@
 
 **Date:** 2026-01-27
 **Build:** v47-billing-system
-**Status:** DEPLOYED FIX - Testing Stripe checkout
+**Status:** ✅ BILLING WORKING - Payment processed successfully!
 
 ---
 
-## Latest: Fixed "Missing Customer" Error
+## 🎉 Billing System LIVE
 
-**Root Cause:** When Stripe customer creation failed (or Stripe wasn't configured), the code silently returned fake IDs like `cus_error_xxx` which Stripe doesn't recognize.
+**Payment Successful!** The first subscription payment went through Stripe.
 
-**Fix Applied:** (`fa53408`)
-1. Customer creation now raises errors instead of returning fake IDs
-2. Added `_ensure_valid_stripe_customer()` that validates customer ID before every checkout
-3. Auto-creates new Stripe customer if existing ID is invalid or not found in Stripe
+### Fixes Applied Today
 
-**Deployment:** Backend deployed to Railway - wait 2-3 min then test.
+1. **Customer ID Validation** (`fa53408`)
+   - Customer creation now raises errors instead of returning fake IDs
+   - Added `_ensure_valid_stripe_customer()` that validates before checkout
+   - Auto-creates new Stripe customer if ID is invalid
 
----
+2. **Automatic Tax Fix** (`8db10c0`)
+   - Added `customer_update={"address": "auto"}` for Stripe Tax
+   - Saves billing address from checkout to customer record
 
-## CRITICAL: Stripe Price Configuration Issue
+3. **Success Redirect Fix** (`771c32c`)
+   - Changed from localhost to HTTPS production URL
+   - Now redirects to `frontend-production-5402.up.railway.app/billing/success`
 
-Looking at `docs/prices.csv`, **Pro and Opus prices are NOT recurring subscriptions**:
+4. **Railway Start Command**
+   - Removed custom `cd /app && ...` start command that was breaking deploys
+   - Now uses Dockerfile CMD
 
-| Product | Price ID | Interval | **Problem** |
-|---------|----------|----------|-------------|
-| Seeker | `price_1StziIA9aTMBwIBdAADgIA9r` | month,1 | OK (recurring) |
-| Pro | `price_1StzdWA9aTMBwIBdOfT44bnz` | (empty) | **NOT RECURRING!** |
-| Opus | `price_1StzgfA9aTMBwIBdkOCTWhpD` | (empty) | **NOT RECURRING!** |
-
-**How to Fix in Stripe Dashboard:**
-1. Go to **Products** → Find "ApexAurum Pro - Alchemist"
-2. Click on the price → **Edit** or create new price
-3. Set **Recurring** billing, **Monthly** interval
-4. Copy new price ID to Railway `STRIPE_PRICE_PRO_MONTHLY`
-5. Repeat for Opus
-
-**OR** create new recurring prices:
-- Stripe Dashboard → Products → Add price → Recurring → Monthly
+5. **Tools Count** (`a5025e5`)
+   - Fixed hardcoded "(6)" in sidebar to show actual tool count (46)
 
 ---
 
-## Current Stripe Config in Railway
+## Known Issues
 
-| Env Var | Value |
-|---------|-------|
-| `STRIPE_SECRET_KEY` | sk_live_... (set) |
-| `STRIPE_PUBLISHABLE_KEY` | pk_live_... (set) |
-| `STRIPE_WEBHOOK_SECRET` | whsec_... (set) |
-| `STRIPE_PRICE_PRO_MONTHLY` | price_1StzdWA9aTMBwIBdOfT44bnz (need recurring!) |
-| `STRIPE_PRICE_OPUS_MONTHLY` | price_1StzgfA9aTMBwIBdkOCTWhpD (need recurring!) |
-| `STRIPE_PRICE_CREDITS_500` | NOT SET - need to create |
-| `STRIPE_PRICE_CREDITS_2500` | NOT SET - need to create |
+### ChatView Console Error
+```
+Cannot access 'H' before initialization
+```
+- This is a minification/bundling issue in Vite
+- Doesn't seem to break functionality
+- Needs investigation in build process
+
+### Neural Page CORS Errors
+- Browser shows CORS errors but backend CORS is configured correctly
+- Likely caused by ad blocker or WebGL context failure
+- WebGL not supported on user's current browser/hardware
 
 ---
 
-## Test After Deploy
+## Stripe Config Status
+
+| Item | Status |
+|------|--------|
+| Secret Key | ✅ Set |
+| Publishable Key | ✅ Set |
+| Webhook Secret | ✅ Set |
+| Pro Price (recurring) | ✅ Fixed |
+| Opus Price (recurring) | ✅ Fixed |
+| Credit Pack 500 | ❌ Not created |
+| Credit Pack 2500 | ❌ Not created |
+
+---
+
+## Next Steps
+
+1. **Create credit pack prices** in Stripe (optional)
+2. **Test webhook** - verify `checkout.session.completed` updates subscription
+3. **Test tier features** - verify model/tool restrictions work per tier
+4. **Investigate ChatView error** - low priority, doesn't break functionality
+
+---
+
+## Quick Verification
 
 1. **Check health:**
    ```bash
