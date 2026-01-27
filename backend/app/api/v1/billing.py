@@ -107,8 +107,12 @@ async def create_subscription_checkout(
             detail="Invalid tier. Must be 'pro' or 'opus'."
         )
 
-    # Build URLs
-    base_url = settings.allowed_origins_list[0] if settings.allowed_origins_list else "http://localhost:3000"
+    # Build URLs - prefer HTTPS production URL over localhost
+    base_url = "http://localhost:3000"
+    for origin in settings.allowed_origins_list:
+        if origin.startswith("https://"):
+            base_url = origin
+            break
     success_url = request.success_url or f"{base_url}/billing/success?session_id={{CHECKOUT_SESSION_ID}}"
     cancel_url = request.cancel_url or f"{base_url}/billing"
 
@@ -164,8 +168,12 @@ async def create_credits_checkout(
             detail="Invalid pack. Must be 'small' or 'large'."
         )
 
-    # Build URLs
-    base_url = settings.allowed_origins_list[0] if settings.allowed_origins_list else "http://localhost:3000"
+    # Build URLs - prefer HTTPS production URL over localhost
+    base_url = "http://localhost:3000"
+    for origin in settings.allowed_origins_list:
+        if origin.startswith("https://"):
+            base_url = origin
+            break
     success_url = request.success_url or f"{base_url}/billing/success?session_id={{CHECKOUT_SESSION_ID}}"
     cancel_url = request.cancel_url or f"{base_url}/billing"
 
