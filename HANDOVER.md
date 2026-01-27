@@ -1,55 +1,63 @@
 # ApexAurum-Cloud Handover Document
 
 **Date:** 2026-01-27
-**Build:** v52-beta-ready
-**Status:** READY FOR BETA LAUNCH
+**Build:** v53-polished
+**Status:** BETA READY - FULLY POLISHED
 
 ---
 
 ## Current State
 
-ApexAurum Cloud is fully functional and ready for beta users:
+ApexAurum Cloud is fully functional and polished for beta users:
 - Auth system working correctly
-- Chat with Azoth (and all agents) operational
+- Chat with all agents operational
 - Billing/Stripe integration live
-- Pricing: Seeker $3 | Alchemist $10 | Adept $30
+- Tier-based feature visibility working
+- Message counting across all features
+- Graceful error handling
+
+**Pricing:** Seeker $3 | Alchemist $10 | Adept $30
 
 ---
 
-## Today's Session - Major Fixes
+## Today's Session 2 - Polish & Features
 
-### 1. Auth State Bug (The "undefined" String)
-**Problem:** Navbar showed "Logout" even in fresh incognito.
-**Root Cause:** `localStorage.setItem('accessToken', undefined)` stored the STRING `"undefined"` which is truthy.
-**Fix:** `auth.js` now validates tokens - treats `"undefined"`, `"null"`, empty strings as invalid and cleans them up.
-
-### 2. TDZ (Temporal Dead Zone) Errors
-**Problem:** `Cannot access 'X' before initialization` errors crashing ChatView.
-**Root Cause:** Variables/functions used in `immediate: true` watchers before being defined.
+### 1. Message Counter Fixed
+**Problem:** Messages weren't counting toward usage limits.
+**Root Cause:** Streaming path in chat.py didn't call `record_message_usage()`.
 **Fixes:**
-- Moved `branchInfo` ref before `loadBranchInfo` function
-- Added null safety (`?.` and `??`) to agent checks
+- `llm_provider.py`: Now emits usage info during stream
+- `chat.py`: Captures and records streaming usage
+- `agents.py`: Added billing to spawn and council endpoints
 
-### 3. Missing HTTPS in API URLs
-**Problem:** API calls returning HTML instead of JSON (hitting frontend server).
-**Root Cause:** `VITE_API_URL` env var missing `https://` prefix.
-**Fix:** Both `api.js` and `chat.js` now auto-prepend `https://` if missing.
+### 2. Tier-Based Model Filtering
+**Problem:** Users could select models they couldn't use → 403 errors.
+**Fix:** Backend `/api/v1/chat/models` now filters by user's tier.
 
-### 4. BYOK Requirement Removed
-**Problem:** 402 errors even for paying users.
-**Root Cause:** Backend required user API key for Anthropic.
-**Fix:** Backend now uses platform Anthropic API key. BYOK is optional (for future Pro+ feature).
+### 3. BYOK Hidden from Seeker
+**Problem:** Seeker tier saw BYOK option in Settings.
+**Fix:** Settings page checks `billing.status.features.byok_allowed`.
 
-### 5. Pricing Updated
-- Seeker: $0 → $3/month
-- Alchemist: $9.99 → $10/month
-- Adept: $29.99 → $30/month
+### 4. Dev Mode = Adept Only
+**Problem:** Anyone could activate dev mode with easter eggs.
+**Fix:** `useDevMode.js` now checks tier before enabling.
+**Bonus:** Added visible "Enable Dev Mode" button for Adept users.
+
+### 5. Graceful Error Handling
+**Problem:** 403/500 errors shown as raw console messages.
+**Fixes:**
+- Chat shows friendly messages for billing errors (🔒 Model requires higher tier)
+- Cortex endpoints return empty data instead of 500 when table missing
+
+### 6. Village WebSocket URL Fixed
+**Problem:** WebSocket connecting to wrong URL (same https:// prefix bug).
+**Fix:** Both `VillageGUIView.vue` and `useVillage.js` add protocol prefix.
 
 ---
 
 ## Current Commit
 ```
-70917dc Fix: Use platform API key for Anthropic + guard keydown handler
+ef3ae14 Fix message counting for spawns/councils + graceful cortex handling
 ```
 
 ---
@@ -86,42 +94,51 @@ curl -s -X POST "https://backboard.railway.app/graphql/v2" \
 
 ## Subscription Tiers
 
-| Tier | Price | Messages | Models | Tools |
-|------|-------|----------|--------|-------|
-| Seeker | $3/mo | 50/month | Haiku | No |
-| Alchemist | $10/mo | 1000/month | Haiku, Sonnet | Yes |
-| Adept | $30/mo | Unlimited | All + Opus | Yes + Multi-provider |
+| Tier | ID | Price | Messages | Models | BYOK | Dev Mode |
+|------|----|-------|----------|--------|------|----------|
+| Seeker | free | $3/mo | 50 | Haiku | No | No |
+| Alchemist | pro | $10/mo | 1000 | Haiku, Sonnet | Yes | No |
+| Adept | opus | $30/mo | Unlimited | All + Opus | Yes | Yes |
 
 ---
 
-## Known Issues (Minor)
+## Known Limitations (Non-Blocking)
 
-1. **Neural View** - `user_vectors` table doesn't exist yet (needs migration)
-2. **Music Library** - Returns 422 (needs Suno API setup)
-
-These are non-blocking for beta launch.
-
----
-
-## Next Steps for Beta
-
-1. Invite beta users from meme-coin community
-2. Monitor usage and error logs
-3. Test 3D Village GUI on Windows
-4. Polish UI/UX based on feedback
+1. **Neural View** - `user_vectors` table needs pgvector extension (gracefully returns empty)
+2. **Music Library** - Suno API not configured (returns 422)
+3. **WebGL on Pi** - No GPU, uses 2D fallback
 
 ---
 
-## Key Files Reference
+## Test Accounts
+- **Seeker:** buckster123
+- **Alchemist:** buckmazzta@gmail.com / abnudc1337
 
-| File | Purpose |
+---
+
+## Key Files Modified This Session
+
+| File | Changes |
 |------|---------|
-| `frontend/src/stores/auth.js` | Auth state with token validation |
-| `frontend/src/stores/chat.js` | Chat logic with API URL fix |
-| `frontend/src/services/api.js` | Axios with https:// fix |
-| `backend/app/api/v1/chat.py` | Chat endpoint with platform API key |
-| `backend/app/api/v1/billing.py` | Pricing display ($3/$10/$30) |
+| `backend/app/api/v1/chat.py` | Tier-filtered models endpoint |
+| `backend/app/api/v1/agents.py` | Billing for spawn/council |
+| `backend/app/api/v1/cortex.py` | Graceful table-missing handling |
+| `backend/app/services/llm_provider.py` | Usage tracking in stream |
+| `frontend/src/stores/chat.js` | Friendly error messages |
+| `frontend/src/stores/billing.js` | Already had tier getters |
+| `frontend/src/views/SettingsView.vue` | BYOK visibility, dev mode button |
+| `frontend/src/composables/useDevMode.js` | Tier check before activation |
+| `frontend/src/views/VillageGUIView.vue` | WebSocket URL fix |
+| `frontend/src/composables/useVillage.js` | WebSocket URL fix |
 
 ---
 
-*"The Athanor burns bright. Beta awaits."*
+## Easter Eggs
+
+- **Dev Mode:** Konami code (↑↑↓↓←→←→BA) or 7-tap on Au logo (Adept only)
+- **PAC Mode:** Type "AZOTH" while in Dev Mode
+- **PAC prompts:** `backend/native_prompts/*-PAC.txt`
+
+---
+
+*"The Athanor burns pure. The gold is ready."*
