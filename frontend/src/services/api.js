@@ -1,6 +1,10 @@
 import axios from 'axios'
 
-const baseURL = import.meta.env.VITE_API_URL || ''
+// Ensure baseURL has https:// prefix (Railway env var sometimes missing it)
+let baseURL = import.meta.env.VITE_API_URL || ''
+if (baseURL && !baseURL.startsWith('http://') && !baseURL.startsWith('https://')) {
+  baseURL = 'https://' + baseURL
+}
 
 const api = axios.create({
   baseURL,

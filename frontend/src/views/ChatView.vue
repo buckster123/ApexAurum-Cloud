@@ -206,6 +206,9 @@ watch(() => chat.messages.length, () => {
   })
 })
 
+// Branch info - defined here (before loadBranchInfo) to avoid TDZ error
+const branchInfo = ref({ parent: null, branches: [], branch_count: 0 })
+
 // Define loadBranchInfo BEFORE the watcher that uses it (TDZ fix)
 async function loadBranchInfo() {
   if (chat.currentConversation?.id) {
@@ -325,9 +328,6 @@ const showForkModal = ref(false)
 const forkMessageId = ref(null)
 const forkLabel = ref('')
 const forking = ref(false)
-
-// Branch info for current conversation
-const branchInfo = ref({ parent: null, branches: [], branch_count: 0 })
 
 async function handleExport(format) {
   if (exportConvId.value) {
