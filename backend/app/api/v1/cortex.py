@@ -15,6 +15,7 @@ from pydantic import BaseModel
 from sqlalchemy import text
 
 from app.auth.deps import get_current_user
+from app.config import get_settings
 from app.database import get_db
 from app.models.user import User
 
@@ -95,15 +96,28 @@ async def diagnostic(
     from app.config import get_settings
     settings = get_settings()
 
+    # Determine embedding availability based on provider
+    if settings.embedding_provider == "local":
+        embedding_available = True  # Local embeddings always available (no API key needed)
+    elif settings.embedding_provider == "openai":
+        embedding_available = bool(settings.openai_api_key)
+    elif settings.embedding_provider == "voyage":
+        embedding_available = bool(settings.voyage_api_key)
+    else:
+        embedding_available = False
+
     result = {
         "pgvector_extension": False,
         "user_vectors_table": False,
         "neo_cortex_columns": False,
         "vector_column": False,
+        "vector_dimensions": None,
         "total_vectors": 0,
         "vectors_with_embeddings": 0,
         "embedding_provider": settings.embedding_provider,
-        "embedding_available": bool(settings.openai_api_key if settings.embedding_provider == "openai" else settings.voyage_api_key),
+        "embedding_model": settings.embedding_model,
+        "embedding_dimensions": settings.embedding_dimensions,
+        "embedding_available": embedding_available,
         "errors": [],
         "notes": [],
     }
@@ -135,6 +149,27 @@ async def diagnostic(
                 """)
             )
             result["vector_column"] = col_check.scalar()
+
+            # Check actual vector dimension in database
+            if result["vector_column"]:
+                try:
+                    dim_check = await db.execute(
+                        text("""
+                            SELECT atttypmod - 4 as dim
+                            FROM pg_attribute
+                            WHERE attrelid = 'user_vectors'::regclass
+                              AND attname = 'embedding'
+                        """)
+                    )
+                    db_dim = dim_check.scalar()
+                    result["vector_dimensions"] = db_dim
+                    if db_dim != settings.embedding_dimensions:
+                        result["notes"].append(
+                            f"DB vector dim ({db_dim}) != config ({settings.embedding_dimensions}). "
+                            "Column will be recreated on next startup."
+                        )
+                except Exception:
+                    pass  # Ignore if can't get dimension
 
             # Check for neo-cortex columns
             layer_check = await db.execute(
@@ -198,20 +233,22 @@ async def setup_pgvector(
         results["extension"] = {"success": False, "message": str(e)}
 
     try:
-        # Create user_vectors table
-        await db.execute(text("""
+        # Create user_vectors table with configured embedding dimension
+        settings = get_settings()
+        embed_dim = settings.embedding_dimensions
+        await db.execute(text(f"""
             CREATE TABLE IF NOT EXISTS user_vectors (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
                 collection VARCHAR(100) DEFAULT 'default',
                 content TEXT NOT NULL,
                 metadata JSONB DEFAULT '{}',
-                embedding vector(1536),
+                embedding vector({embed_dim}),
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
             )
         """))
         await db.commit()
-        results["table"] = {"success": True, "message": "user_vectors table created"}
+        results["table"] = {"success": True, "message": f"user_vectors table created (embed_dim={embed_dim})"}
     except Exception as e:
         results["table"] = {"success": False, "message": str(e)}
 

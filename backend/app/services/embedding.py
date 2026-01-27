@@ -1,7 +1,12 @@
 """
 Embedding Service - The Remembering Deep
 
-Generate embeddings for semantic search using OpenAI or Voyage.
+Generate embeddings for semantic search.
+
+Supports:
+- Local (FastEmbed) - Private, no API key needed
+- OpenAI - text-embedding-3-small
+- Voyage AI - voyage-2
 """
 
 import logging
@@ -12,12 +17,36 @@ from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 
+# Lazy-load FastEmbed to avoid import overhead when not using local embeddings
+_local_model = None
+
+
+def _get_local_model():
+    """Lazy-load the local embedding model."""
+    global _local_model
+    if _local_model is None:
+        try:
+            from fastembed import TextEmbedding
+            settings = get_settings()
+            model_name = settings.embedding_model
+            logger.info(f"Loading local embedding model: {model_name}")
+            _local_model = TextEmbedding(model_name=model_name)
+            logger.info(f"Local embedding model loaded successfully")
+        except ImportError:
+            logger.error("FastEmbed not installed. Run: pip install fastembed")
+            raise
+        except Exception as e:
+            logger.error(f"Failed to load local embedding model: {e}")
+            raise
+    return _local_model
+
 
 class EmbeddingService:
     """
     Generate text embeddings for vector storage.
 
     Supports:
+    - Local via FastEmbed (BAAI/bge-small-en-v1.5, 384 dimensions)
     - OpenAI text-embedding-3-small (1536 dimensions)
     - Voyage AI voyage-2 (1024 dimensions)
     """
@@ -47,6 +76,11 @@ class EmbeddingService:
     def dimensions(self) -> int:
         return self.settings.embedding_dimensions
 
+    @property
+    def is_local(self) -> bool:
+        """Check if using local embeddings."""
+        return self.provider == "local"
+
     async def embed(self, text: str) -> Optional[list[float]]:
         """
         Generate embedding for a single text.
@@ -54,6 +88,10 @@ class EmbeddingService:
         Returns:
             List of floats (embedding vector) or None if failed
         """
+        # Local embeddings don't need API key
+        if self.provider == "local":
+            return await self._embed_local(text)
+
         if not self.api_key:
             logger.warning(f"No API key for embedding provider: {self.provider}")
             return None
@@ -80,6 +118,10 @@ class EmbeddingService:
         if not texts:
             return []
 
+        # Local embeddings don't need API key
+        if self.provider == "local":
+            return await self._embed_local_batch(texts)
+
         if not self.api_key:
             return [None] * len(texts)
 
@@ -92,6 +134,29 @@ class EmbeddingService:
                 return [None] * len(texts)
         except Exception as e:
             logger.exception(f"Batch embedding failed: {e}")
+            return [None] * len(texts)
+
+    async def _embed_local(self, text: str) -> Optional[list[float]]:
+        """Generate embedding using local FastEmbed model."""
+        try:
+            model = _get_local_model()
+            # FastEmbed returns a generator, get first result
+            embeddings = list(model.embed([text]))
+            if embeddings:
+                return embeddings[0].tolist()
+            return None
+        except Exception as e:
+            logger.exception(f"Local embedding failed: {e}")
+            return None
+
+    async def _embed_local_batch(self, texts: list[str]) -> list[Optional[list[float]]]:
+        """Generate embeddings for batch using local FastEmbed model."""
+        try:
+            model = _get_local_model()
+            embeddings = list(model.embed(texts))
+            return [e.tolist() for e in embeddings]
+        except Exception as e:
+            logger.exception(f"Local batch embedding failed: {e}")
             return [None] * len(texts)
 
     async def _embed_openai(self, text: str) -> Optional[list[float]]:

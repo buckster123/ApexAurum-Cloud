@@ -1,7 +1,7 @@
 # ApexAurum-Cloud Handover Document
 
 **Date:** 2026-01-28
-**Build:** v56-neural-3d-fix
+**Build:** v57-local-embeddings
 **Status:** BETA POLISHED - Ready for seekers!
 
 ---
@@ -91,7 +91,16 @@ ApexAurum Cloud is fully functional and polished:
 - Fixed Vue 3 Proxy conflict with Three.js `modelViewMatrix`
 - Changed `ref()` to `shallowRef()` for Three.js objects in `useThreeScene.js`
 - Scene, camera, renderer, controls now use shallow reactivity
-- Neural 3D visualization should work on WebGL-capable PCs now
+- Neural 3D visualization works on WebGL-capable PCs now
+
+### 2. Local Embeddings - COMPLETE
+- Added FastEmbed library for private, local embeddings (no external API needed)
+- Default model: `BAAI/bge-small-en-v1.5` (384 dimensions)
+- Config: `EMBEDDING_PROVIDER=local` (now default)
+- Updated database to handle configurable vector dimensions
+- Diagnostic endpoint shows embedding config and DB dimension status
+- Auto-migration handles dimension changes (drops old embeddings if dimension changes)
+- **Product vision:** Private memory instances for users' AI systems
 
 ---
 
@@ -153,10 +162,11 @@ curl -s -X POST "https://backboard.railway.app/graphql/v2" \
 - **Files:** `frontend/src/composables/useThreeScene.js`
 - Village GUI 3D works fine - only Neural view was affected
 
-### Priority 2: Local Embeddings (Optional)
-- Add sentence-transformers for local embedding generation
-- Enables semantic search without OpenAI API key
-- Currently memories store without embeddings (visualization works)
+### Priority 2: Local Embeddings - COMPLETE (Session 4)
+- Added FastEmbed for local embedding generation (lighter than sentence-transformers)
+- Enables semantic search without external API keys
+- Model: BAAI/bge-small-en-v1.5 (384 dims)
+- Memories now store WITH embeddings by default
 
 ### Priority 3: Nice-to-Have
 - Suno/Music API integration
@@ -193,7 +203,12 @@ curl -s -X POST "https://backboard.railway.app/graphql/v2" \
 | File | Changes |
 |------|---------|
 | `frontend/src/composables/useThreeScene.js` | Changed `ref()` to `shallowRef()` for Three.js objects |
-| `backend/app/main.py` | Updated version to v56 |
+| `backend/app/main.py` | Updated version to v57, added local-embeddings feature |
+| `backend/app/services/embedding.py` | Added FastEmbed local embedding support |
+| `backend/app/config.py` | Changed default to local embeddings (384 dims) |
+| `backend/app/database.py` | Dynamic vector dimensions, auto-migration for dimension changes |
+| `backend/app/api/v1/cortex.py` | Enhanced diagnostic with embedding config info |
+| `backend/requirements.txt` | Added fastembed dependency |
 
 ## Key Files Modified (Session 3)
 

@@ -65,9 +65,12 @@ class Settings(BaseSettings):
     stripe_price_credits_2500: Optional[str] = None  # $20 for 2500 credits
 
     # Embedding config (for vector search)
-    embedding_provider: str = "openai"  # "openai" or "voyage"
-    embedding_model: str = "text-embedding-3-small"  # OpenAI model
-    embedding_dimensions: int = 1536
+    # Providers: "local" (FastEmbed), "openai", or "voyage"
+    embedding_provider: str = "local"  # Default to local for privacy
+    embedding_model: str = "BAAI/bge-small-en-v1.5"  # Local model (384 dims)
+    # For OpenAI: "text-embedding-3-small" (1536 dims)
+    # For local: "BAAI/bge-small-en-v1.5" (384), "BAAI/bge-base-en-v1.5" (768)
+    embedding_dimensions: int = 384  # Match local model dimensions
 
     # JWT
     jwt_algorithm: str = "HS256"

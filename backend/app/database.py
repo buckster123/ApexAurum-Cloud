@@ -183,22 +183,8 @@ async def init_db():
                 RAISE NOTICE 'pgvector extension not available, vector search disabled';
             END $$;
             """,
-            """
-            DO $$
-            BEGIN
-                CREATE TABLE IF NOT EXISTS user_vectors (
-                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                    collection VARCHAR(100) DEFAULT 'default',
-                    content TEXT NOT NULL,
-                    metadata JSONB DEFAULT '{}',
-                    embedding vector(1536),
-                    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-                );
-            EXCEPTION WHEN OTHERS THEN
-                RAISE NOTICE 'user_vectors table creation failed (pgvector may not be available)';
-            END $$;
-            """,
+            # Note: user_vectors table creation is now dynamic (see below)
+            # to support configurable embedding dimensions,
             """
             DO $$
             BEGIN
@@ -364,9 +350,59 @@ async def init_db():
         ]
 
         from sqlalchemy import text
+
+        # Dynamic user_vectors table creation with configurable embedding dimensions
+        settings = get_settings()
+        embed_dim = settings.embedding_dimensions
+
+        # Create user_vectors table with configured embedding dimension
+        user_vectors_sql = f"""
+        DO $$
+        BEGIN
+            CREATE TABLE IF NOT EXISTS user_vectors (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                collection VARCHAR(100) DEFAULT 'default',
+                content TEXT NOT NULL,
+                metadata JSONB DEFAULT '{}',
+                embedding vector({embed_dim}),
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+            );
+        EXCEPTION WHEN OTHERS THEN
+            RAISE NOTICE 'user_vectors table creation failed (pgvector may not be available)';
+        END $$;
+        """
+        migrations.append(user_vectors_sql)
+
+        # Migration to alter embedding dimension if table exists with different size
+        # This handles switching between OpenAI (1536) and local (384) embeddings
+        alter_embedding_sql = f"""
+        DO $$
+        DECLARE
+            current_dim INTEGER;
+        BEGIN
+            -- Check current embedding dimension
+            SELECT atttypmod - 4 INTO current_dim
+            FROM pg_attribute
+            WHERE attrelid = 'user_vectors'::regclass
+              AND attname = 'embedding';
+
+            -- If dimension doesn't match config, recreate the column
+            IF current_dim IS NOT NULL AND current_dim != {embed_dim} THEN
+                RAISE NOTICE 'Altering embedding column from % to % dimensions', current_dim, {embed_dim};
+                -- Drop old embeddings (they're incompatible with new dimension anyway)
+                ALTER TABLE user_vectors DROP COLUMN IF EXISTS embedding;
+                ALTER TABLE user_vectors ADD COLUMN embedding vector({embed_dim});
+            END IF;
+        EXCEPTION WHEN OTHERS THEN
+            NULL; -- Ignore if table doesn't exist yet
+        END $$;
+        """
+        migrations.append(alter_embedding_sql)
+
         for migration in migrations:
             await conn.execute(text(migration))
-        print("Database migrations complete")
+        print(f"Database migrations complete (embedding_dim={embed_dim})")
 
 
 async def close_db():
