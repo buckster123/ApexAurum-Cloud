@@ -76,11 +76,18 @@ ApexAurum Cloud is fully functional and polished:
 - Setup endpoint: `/api/v1/cortex/setup`
 - All Neo-Cortex columns ready for memory visualization
 
+### 4. Neural Memory Storage - COMPLETE
+- New `NeuralMemoryService` stores chat messages as vectors
+- User messages → sensory layer, assistant → working layer
+- Works without OpenAI key (stores without embeddings)
+- Chat with agents now populates Neural visualization
+- Confirmed: memories being created (1+ vectors in DB)
+
 ---
 
 ## Latest Commit
 ```
-527eedd Add pgvector diagnostic and setup endpoints
+b4f496e Improve cortex diagnostic with embedding status
 ```
 
 **Railway Token:** Working - deploys via API are functioning.
@@ -129,12 +136,19 @@ curl -s -X POST "https://backboard.railway.app/graphql/v2" \
 
 ## Remaining Tasks (Future Sessions)
 
-### Priority 1: Memory Population
-- Chat messages should create memories in user_vectors
-- Hook up embedding service for semantic search
-- Neural page will show actual memory visualization
+### Priority 1: Neural 3D View Bug Fix
+- **Bug:** Vue 3 Proxy conflict with Three.js `modelViewMatrix`
+- **Error:** `TypeError: 'get' on proxy: property 'modelViewMatrix'`
+- **Fix:** Change `ref()` to `shallowRef()` in `useThreeScene.js`
+- **Files:** `frontend/src/composables/useThreeScene.js`
+- Village GUI 3D works fine - only Neural view affected
 
-### Priority 2: Nice-to-Have
+### Priority 2: Local Embeddings (Optional)
+- Add sentence-transformers for local embedding generation
+- Enables semantic search without OpenAI API key
+- Currently memories store without embeddings (visualization works)
+
+### Priority 3: Nice-to-Have
 - Suno/Music API integration
 - Coupon/admin freebies system
 - Admin dashboard for user management
