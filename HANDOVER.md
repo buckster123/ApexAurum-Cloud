@@ -69,11 +69,18 @@ ApexAurum Cloud is fully functional and polished:
 - ChatView reads `?agent=ID` query param and selects that agent
 - URL cleaned up after selection (removes query param)
 
+### 3. pgvector Setup - COMPLETE
+- Added pgvector-enabled PostgreSQL 17 on Railway
+- Neural system fully operational
+- Diagnostic endpoint: `/api/v1/cortex/diagnostic`
+- Setup endpoint: `/api/v1/cortex/setup`
+- All Neo-Cortex columns ready for memory visualization
+
 ---
 
 ## Latest Commit
 ```
-8f86b81 Add Village GUI → Chat navigation on agent click
+527eedd Add pgvector diagnostic and setup endpoints
 ```
 
 **Railway Token:** Working - deploys via API are functioning.
@@ -120,17 +127,17 @@ curl -s -X POST "https://backboard.railway.app/graphql/v2" \
 
 ---
 
-## Remaining Tasks (Next Session)
+## Remaining Tasks (Future Sessions)
 
-### Priority 1: pgvector Setup
-- Enable pgvector extension on Railway PostgreSQL
-- Neural page will then show actual memory data
-- Currently returns empty (gracefully)
+### Priority 1: Memory Population
+- Chat messages should create memories in user_vectors
+- Hook up embedding service for semantic search
+- Neural page will show actual memory visualization
 
 ### Priority 2: Nice-to-Have
 - Suno/Music API integration
 - Coupon/admin freebies system
-- Update backend health endpoint build string
+- Admin dashboard for user management
 
 ---
 
