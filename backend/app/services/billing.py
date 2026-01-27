@@ -504,6 +504,7 @@ class BillingService:
                 success_url=success_url,
                 cancel_url=cancel_url,
                 automatic_tax={"enabled": True},
+                customer_update={"address": "auto"},  # Save billing address for tax calculation
                 billing_address_collection="required",
                 metadata={"user_id": str(user_id), "tier": tier},
             )
@@ -562,6 +563,7 @@ class BillingService:
                 success_url=success_url,
                 cancel_url=cancel_url,
                 automatic_tax={"enabled": True},
+                customer_update={"address": "auto"},  # Save billing address for tax calculation
                 billing_address_collection="required",
                 metadata={
                     "user_id": str(user_id),

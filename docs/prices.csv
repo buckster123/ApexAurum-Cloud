@@ -1,0 +1,6 @@
+Price ID,Product ID,Product Name,Product Statement Descriptor,Product Tax Code,Description,Created (UTC),Amount,Currency,Interval,Interval Count,Usage Type,Aggregate Usage,Billing Scheme,Trial Period Days,Tax Behavior
+price_1Stzo9A9aTMBwIBd3Zfgw15l,prod_TrjGLfdoDdDJih,Apex Aurum Credit - 2000,,txcd_10000000,,2026-01-27 00:07,"20,00",usd,,,,,per_unit,,unspecified
+price_1StznHA9aTMBwIBdvdPApP9U,prod_TrjFPAf9krb6kG,Apex Aurum Credit  - 500,,txcd_10000000,,2026-01-27 00:06,"5,00",usd,,,,,per_unit,,unspecified
+price_1StziIA9aTMBwIBdAADgIA9r,prod_TrjAM9AXKz8q0j,Apex Aurum - Seeker,,txcd_10000000,,2026-01-27 00:00,"2,99",nok,month,1,licensed,,per_unit,,unspecified
+price_1StzgfA9aTMBwIBdkOCTWhpD,prod_Trj8bvMHv8fEJv,Apex Aurum Opus - Adept Master,,txcd_10000000,,2026-01-26 23:59,"29,99",usd,,,,,per_unit,,unspecified
+price_1StzdWA9aTMBwIBdOfT44bnz,prod_Trj5DUVqu8ApCY,ApexAurum Pro - Alchemist,,txcd_10000000,,2026-01-26 23:56,"9,99",usd,,,,,per_unit,,unspecified
