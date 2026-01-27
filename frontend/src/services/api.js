@@ -43,7 +43,7 @@ api.interceptors.response.use(
       try {
         const refreshToken = localStorage.getItem('refreshToken')
         if (!refreshToken) {
-          throw new Error('No refresh token')
+          throw new Error('Session expired - no refresh token')
         }
 
         // Use refreshClient (has baseURL, no interceptors) to avoid infinite loop

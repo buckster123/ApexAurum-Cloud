@@ -13,6 +13,44 @@ const displayName = ref('')
 const error = ref('')
 const loading = ref(false)
 
+// Parse registration errors into friendly messages
+function parseRegisterError(e) {
+  const status = e.response?.status
+  const detail = e.response?.data?.detail || ''
+  const message = e.message || ''
+
+  // Email already exists
+  if (status === 409 || detail.includes('already') || detail.includes('exists')) {
+    return 'An account with this email already exists. Try signing in instead.'
+  }
+
+  // Invalid email format
+  if (detail.includes('email') && detail.includes('invalid')) {
+    return 'Please enter a valid email address.'
+  }
+
+  // Password requirements
+  if (detail.includes('password')) {
+    return detail // Usually these are already user-friendly
+  }
+
+  if (status === 429) {
+    return 'Too many attempts. Please wait a moment and try again.'
+  }
+
+  if (status >= 500) {
+    return 'Server is temporarily unavailable. Please try again in a moment.'
+  }
+
+  // Network errors
+  if (message.includes('Network Error') || message.includes('ERR_NETWORK')) {
+    return 'Unable to connect. Please check your internet connection.'
+  }
+
+  // Fallback
+  return detail || 'Registration failed. Please try again.'
+}
+
 async function handleSubmit() {
   error.value = ''
 
@@ -35,7 +73,7 @@ async function handleSubmit() {
     await router.push('/chat')
   } catch (e) {
     console.error('Registration error:', e)
-    error.value = e.response?.data?.detail || e.message || 'Registration failed'
+    error.value = parseRegisterError(e)
   } finally {
     loading.value = false
   }

@@ -12,6 +12,43 @@ const password = ref('')
 const error = ref('')
 const loading = ref(false)
 
+// Parse login errors into friendly messages
+function parseLoginError(e) {
+  const status = e.response?.status
+  const detail = e.response?.data?.detail
+  const message = e.message || ''
+
+  // Session/token errors
+  if (message.includes('refresh token') || message.includes('No refresh')) {
+    return 'Your session has expired. Please sign in again.'
+  }
+
+  // Common backend errors
+  if (status === 401 || detail?.includes('Invalid') || detail?.includes('incorrect')) {
+    return 'Invalid email or password. Please try again.'
+  }
+
+  if (status === 404 || detail?.includes('not found') || detail?.includes('User not found')) {
+    return 'Account not found. Please check your email or create a new account.'
+  }
+
+  if (status === 429) {
+    return 'Too many attempts. Please wait a moment and try again.'
+  }
+
+  if (status >= 500) {
+    return 'Server is temporarily unavailable. Please try again in a moment.'
+  }
+
+  // Network errors
+  if (message.includes('Network Error') || message.includes('ERR_NETWORK')) {
+    return 'Unable to connect. Please check your internet connection.'
+  }
+
+  // Fallback to backend message or generic
+  return detail || 'Sign in failed. Please try again.'
+}
+
 async function handleSubmit() {
   error.value = ''
   loading.value = true
@@ -24,7 +61,7 @@ async function handleSubmit() {
     await router.push(redirect)
   } catch (e) {
     console.error('Login error:', e)
-    error.value = e.response?.data?.detail || e.message || 'Login failed'
+    error.value = parseLoginError(e)
   } finally {
     loading.value = false
   }
