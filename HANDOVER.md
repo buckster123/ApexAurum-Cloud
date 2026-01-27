@@ -2,13 +2,42 @@
 
 **Date:** 2026-01-27
 **Build:** v47-billing-system
-**Status:** ✅ BILLING WORKING - Payment processed successfully!
+**Status:** ⚠️ BROKEN - TDZ error breaks login/navbar
 
 ---
 
-## 🎉 Billing System LIVE
+## 🚨 CRITICAL: Frontend Broken
 
-**Payment Successful!** The first subscription payment went through Stripe.
+**Symptom:** After login, navbar disappears, user appears logged out on F5.
+
+**Root Cause:** Vite minification creates Temporal Dead Zone (TDZ) error:
+```
+Cannot access 'O' before initialization
+```
+
+### What We Tried
+1. Rolled back to commit `2431a00` (was "LIVE") - still broken
+2. Fixed `loadBranchInfo` TDZ (moved function before watcher) - still broken
+3. Fixed `api.js` refresh URL (was hitting frontend not backend) - still broken
+4. Forced Railway cache bust via `vite.config.js` change - still broken
+
+### Theory
+The TDZ error existed before but didn't fully break the app. Something changed (browser? race condition?) that made it fatal. There may be MULTIPLE TDZ issues in ChatView.vue.
+
+### Next Steps for Tomorrow
+1. **Search ALL watchers with `immediate: true`** in ChatView - move all referenced functions BEFORE them
+2. **Check computed properties** - ensure they don't reference functions defined later
+3. **Try Vite dev mode locally** to see unminified error with actual variable names
+4. **Nuclear option:** Temporarily disable all watchers with `immediate: true`
+
+### Current Commit
+```
+726c1b0 Bust build cache
+```
+
+---
+
+## Previous: Billing System (was working)
 
 ### Fixes Applied Today
 
