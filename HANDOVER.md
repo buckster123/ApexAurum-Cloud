@@ -1,50 +1,67 @@
 # ApexAurum-Cloud Handover Document
 
-**Date:** 2026-01-26
+**Date:** 2026-01-27
 **Build:** v47-billing-system
-**Status:** DEPLOYED - Billing System Ready for Stripe Configuration
+**Status:** DEBUGGING - Stripe checkout "missing customer" error
 
 ---
 
-## Next Session: Testing & Debug
+## Current Issue: "Missing Customer" Error
 
-### Immediate TODO
+When clicking "Upgrade" on billing page, getting a "missing customer" error.
 
-1. **Configure Stripe in Railway** (required before testing)
+### What's Been Done
+- [x] Stripe API keys added to Railway (LIVE mode)
+- [x] Stripe products created (Seeker 2.99 NOK, Pro $9.99, Opus $29.99)
+- [x] Stripe webhook endpoint created and secret added
+- [x] Price IDs added to Railway (except credit packs)
+- [x] Navbar updated with Billing link
+- [ ] Database migration may not have run successfully
+
+### Debug Steps for Next Session
+
+1. **Check if billing tables exist**
    ```bash
-   # Add these environment variables to Railway backend service:
-   STRIPE_SECRET_KEY=sk_test_...        # From Stripe Dashboard > Developers > API keys
-   STRIPE_PUBLISHABLE_KEY=pk_test_...   # Same place
-   STRIPE_WEBHOOK_SECRET=whsec_...      # After creating webhook endpoint
+   # In Railway Postgres or via connection
+   \dt  # List tables - look for: subscriptions, credit_balances, credit_transactions, webhook_events
    ```
 
-2. **Create Stripe Products & Prices**
-   - Go to Stripe Dashboard > Products
-   - Create "ApexAurum Pro" - $9.99/month recurring
-   - Create "ApexAurum Opus" - $29.99/month recurring
-   - Create "Credits 500" - $5.00 one-time
-   - Create "Credits 2500" - $20.00 one-time
-   - Copy price IDs (price_xxx) to Railway:
-     ```
-     STRIPE_PRICE_PRO_MONTHLY=price_...
-     STRIPE_PRICE_OPUS_MONTHLY=price_...
-     STRIPE_PRICE_CREDITS_500=price_...
-     STRIPE_PRICE_CREDITS_2500=price_...
-     ```
-
-3. **Create Stripe Webhook**
-   - Stripe Dashboard > Developers > Webhooks
-   - Add endpoint: `https://backend-production-507c.up.railway.app/api/v1/webhooks/stripe`
-   - Select events: `checkout.session.completed`, `customer.subscription.*`, `invoice.*`
-   - Copy signing secret to `STRIPE_WEBHOOK_SECRET`
-
-4. **Run Database Migration**
+2. **Check Alembic migration status**
    ```bash
-   # In Railway backend console or via SSH:
-   alembic upgrade head
+   cd /app && alembic current
+   cd /app && alembic history
    ```
 
-### Test Checklist
+3. **Get actual error from logs**
+   - Railway Dashboard → Backend → Deployments → View Logs
+   - Or browser DevTools → Network → click Upgrade → check response
+
+4. **Test billing status endpoint**
+   ```bash
+   # Get a JWT token first by logging in, then:
+   curl -H "Authorization: Bearer $TOKEN" \
+     https://backend-production-507c.up.railway.app/api/v1/billing/status
+   ```
+
+### Likely Causes
+
+1. **Migration not run** - `subscriptions` table doesn't exist
+2. **Stripe customer creation failing** - check Stripe Dashboard for customers
+3. **Database connection issue** - check Railway Postgres logs
+
+### Stripe Price IDs (from docs/prices.csv)
+
+| Product | Price ID | Notes |
+|---------|----------|-------|
+| Seeker | `price_1StziIA9aTMBwIBdAADgIA9r` | 2.99 NOK/mo |
+| Pro | `price_1StzdWA9aTMBwIBdOfT44bnz` | $9.99 (check if recurring) |
+| Opus | `price_1StzgfA9aTMBwIBdkOCTWhpD` | $29.99 (check if recurring) |
+| Credits 500 | NOT CREATED | Need to create |
+| Credits 2500 | NOT CREATED | Need to create |
+
+---
+
+## Previous: Test Checklist
 
 - [ ] `/api/v1/billing/pricing` returns tier info (no auth needed)
 - [ ] `/api/v1/billing/status` returns free tier for new users
