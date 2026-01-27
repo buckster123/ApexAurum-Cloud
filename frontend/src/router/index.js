@@ -95,29 +95,9 @@ const router = createRouter({
   ]
 })
 
-// Wait for auth initialization helper
-function waitForAuth(auth) {
-  return new Promise(resolve => {
-    if (auth.initialized) {
-      resolve()
-      return
-    }
-    // Poll until initialized (init is fast, typically <100ms)
-    const interval = setInterval(() => {
-      if (auth.initialized) {
-        clearInterval(interval)
-        resolve()
-      }
-    }, 10)
-  })
-}
-
 // Navigation guards
-router.beforeEach(async (to, from, next) => {
+router.beforeEach((to, from, next) => {
   const auth = useAuthStore()
-
-  // Wait for auth to initialize before checking
-  await waitForAuth(auth)
 
   if (to.meta.requiresAuth && !auth.isAuthenticated) {
     next({ name: 'login', query: { redirect: to.fullPath } })

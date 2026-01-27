@@ -7,10 +7,9 @@ export const useAuthStore = defineStore('auth', () => {
   const user = ref(null)
   const accessToken = ref(localStorage.getItem('accessToken'))
   const refreshToken = ref(localStorage.getItem('refreshToken'))
-  const initialized = ref(false) // Track if auth check completed
 
-  // Getters - only authenticated if we have a token AND init completed
-  const isAuthenticated = computed(() => initialized.value && !!accessToken.value)
+  // Getters - simple: authenticated if we have a token
+  const isAuthenticated = computed(() => !!accessToken.value)
 
   // Actions
   async function login(email, password) {
@@ -39,19 +38,14 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function fetchProfile() {
-    if (!accessToken.value) return false
+    if (!accessToken.value) return
     try {
       const response = await api.get('/api/v1/user/profile')
       user.value = response.data
-      return true
     } catch (e) {
+      // Profile fetch failed - don't clear tokens here, let interceptor handle 401
       console.error('Failed to fetch profile:', e)
-      // If 401, token is invalid - clear it
-      if (e.response?.status === 401) {
-        clearTokens()
-      }
       user.value = null
-      return false
     }
   }
 
@@ -88,27 +82,19 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.removeItem('refreshToken')
   }
 
-  // Initialize: validate token if we have one
-  async function initialize() {
-    if (accessToken.value) {
-      await fetchProfile()
-    }
-    initialized.value = true
+  // Initialize: try to load profile if we have a token (non-blocking)
+  if (accessToken.value) {
+    fetchProfile()
   }
-
-  // Start initialization immediately
-  initialize()
 
   return {
     user,
     accessToken,
     isAuthenticated,
-    initialized,
     login,
     register,
     logout,
     fetchProfile,
     refreshAccessToken,
-    initialize,
   }
 })
