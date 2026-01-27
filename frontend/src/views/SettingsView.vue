@@ -2,6 +2,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useChatStore } from '@/stores/chat'
+import { useBillingStore } from '@/stores/billing'
 import { useDevMode } from '@/composables/useDevMode'
 import { useSound } from '@/composables/useSound'
 import { useHaptic } from '@/composables/useHaptic'
@@ -9,6 +10,7 @@ import api from '@/services/api'
 
 const auth = useAuthStore()
 const chatStore = useChatStore()
+const billing = useBillingStore()
 
 // Tools (The Athanor's Hands)
 const toolsEnabled = ref(chatStore.toolsEnabled)
@@ -55,7 +57,7 @@ const categoryLabels = {
   music: '🎵 Music',
   browser: '🖥️ Browser',
 }
-const { devMode, pacMode, handleTap, tapCount, alchemyLayer, layerName } = useDevMode()
+const { devMode, pacMode, handleTap, tapCount, alchemyLayer, layerName, tierRestrictionMessage, enableDevMode } = useDevMode()
 const { soundEnabled, toggleSound, sounds } = useSound()
 const { hapticEnabled, setEnabled: setHapticEnabled, haptics, isSupported: hapticSupported } = useHaptic()
 
@@ -153,11 +155,20 @@ const agents = ['AZOTH', 'ELYSIAN', 'VAJRA', 'KETHER', 'CLAUDE']
 // Computed
 const tapProgress = computed(() => Math.min(tapCount.value / 7 * 100, 100))
 
+// Computed: BYOK allowed for this tier (Alchemist and Adept only)
+const canUseBYOK = computed(() => billing.status?.features?.byok_allowed || false)
+
+// Computed: Dev mode allowed for this tier (Adept only)
+const canUseDevMode = computed(() => billing.isOpus)
+
 onMounted(async () => {
   displayName.value = auth.user?.display_name || ''
+  await billing.fetchStatus() // Fetch tier info first
   await fetchPreferences()
   await fetchUsage()
-  await fetchApiKeyStatus()
+  if (canUseBYOK.value) {
+    await fetchApiKeyStatus()
+  }
   await fetchTools()
 
   if (devMode.value) {
@@ -595,6 +606,15 @@ function getAgentSymbol(agentId) {
       Settings saved successfully!
     </div>
 
+    <!-- Tier restriction message (when non-Adept tries dev mode) -->
+    <div
+      v-if="tierRestrictionMessage"
+      class="mb-6 p-3 bg-gold/10 border border-gold/30 rounded-lg text-gold text-sm flex items-center gap-2"
+    >
+      <span class="text-lg">🔒</span>
+      {{ tierRestrictionMessage }}
+    </div>
+
     <!-- Dev Mode: Tab Navigation (scrollable on mobile) -->
     <div v-if="devMode" class="flex gap-2 mb-6 border-b border-apex-border overflow-x-auto scrollbar-hide pb-px -mb-px">
       <button
@@ -745,8 +765,8 @@ function getAgentSymbol(agentId) {
         </div>
       </div>
 
-      <!-- API Key (BYOK Beta) - Always visible -->
-      <div class="card mb-6" :class="{ 'border-gold/30': apiKeyStatus.configured }">
+      <!-- API Key (BYOK) - Only for Alchemist and Adept tiers -->
+      <div v-if="canUseBYOK" class="card mb-6" :class="{ 'border-gold/30': apiKeyStatus.configured }">
         <div class="flex items-center justify-between mb-4">
           <h2 class="text-xl font-bold">API Key</h2>
           <span
@@ -760,7 +780,7 @@ function getAgentSymbol(agentId) {
         </div>
 
         <p class="text-sm text-gray-400 mb-4">
-          ApexAurum is in beta - bring your own Anthropic API key to start chatting with the Agents.
+          Optionally use your own Anthropic API key for direct billing to your Anthropic account.
           <a
             href="https://console.anthropic.com/settings/keys"
             target="_blank"
@@ -825,6 +845,24 @@ function getAgentSymbol(agentId) {
           <p class="text-xs text-gray-500">
             Your key is encrypted and stored securely. We never see or log your full API key.
           </p>
+        </div>
+      </div>
+
+      <!-- Dev Mode Toggle (Adept tier only) -->
+      <div v-if="canUseDevMode && !devMode" class="card mb-6">
+        <div class="flex items-center justify-between">
+          <div>
+            <h3 class="font-medium text-gold">Developer Mode</h3>
+            <p class="text-sm text-gray-400 mt-1">
+              Access advanced settings, custom agents, and memory management.
+            </p>
+          </div>
+          <button
+            @click="enableDevMode()"
+            class="px-4 py-2 rounded-lg text-sm font-medium bg-gold/10 border border-gold/30 text-gold hover:bg-gold/20 transition-colors"
+          >
+            Enable
+          </button>
         </div>
       </div>
 

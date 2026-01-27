@@ -43,7 +43,7 @@ from app.services.tool_executor import create_tool_executor
 from app.tools import registry as tool_registry, ToolContext, ToolCategory
 from app.api.v1.user import get_user_api_key
 from app.services.billing import BillingService
-from app.config import get_settings
+from app.config import get_settings, TIER_LIMITS
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -374,7 +374,11 @@ class ProviderModelsResponse(BaseModel):
 
 
 @router.get("/models", response_model=ModelsResponse)
-async def get_available_models(provider: str = "anthropic"):
+async def get_available_models(
+    provider: str = "anthropic",
+    user: User = Depends(get_current_user_optional),
+    db: AsyncSession = Depends(get_db),
+):
     """
     Get list of available models for a provider.
 
@@ -382,17 +386,39 @@ async def get_available_models(provider: str = "anthropic"):
         provider: Provider ID (anthropic, deepseek, groq, together, qwen)
 
     Returns model IDs, names, and capabilities.
-    Use these model IDs when sending messages.
+    Models are filtered based on user's subscription tier.
     """
+    # Get user's allowed models (if authenticated)
+    allowed_models = None
+    user_tier = "free"
+    if user and settings.stripe_secret_key:
+        billing_service = BillingService(db)
+        subscription = await billing_service.get_or_create_subscription(user.id)
+        user_tier = subscription.tier
+        tier_config = TIER_LIMITS.get(user_tier, TIER_LIMITS["free"])
+        allowed_models = set(tier_config["models"])
+
     # For backwards compatibility, return Claude models in original format for anthropic
     if provider == "anthropic":
-        models = [
+        all_models = [
             ModelInfo(id=model_id, **model_info)
             for model_id, model_info in AVAILABLE_MODELS.items()
         ]
+        # Filter by tier if authenticated
+        if allowed_models is not None:
+            models = [m for m in all_models if m.id in allowed_models]
+        else:
+            models = all_models
+
+        # Determine best default for user's tier
+        default = DEFAULT_MODEL
+        if allowed_models and DEFAULT_MODEL not in allowed_models:
+            # User can't use default, pick first available
+            default = models[0].id if models else DEFAULT_MODEL
+
         return ModelsResponse(
             models=models,
-            default=DEFAULT_MODEL,
+            default=default,
             default_max_tokens=DEFAULT_MAX_TOKENS,
         )
 

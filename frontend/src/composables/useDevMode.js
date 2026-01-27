@@ -6,6 +6,9 @@ import { useHaptic } from './useHaptic'
 const devMode = ref(localStorage.getItem('devMode') === 'true')
 const pacMode = ref(localStorage.getItem('pacMode') === 'true')
 
+// Tier restriction message shown when non-Adept tries to activate
+const tierRestrictionMessage = ref('')
+
 // Sound system
 const { sounds } = useSound()
 
@@ -54,7 +57,36 @@ export function useDevMode() {
 
   // === DEV MODE (Layer 1) ===
 
-  function enableDevMode() {
+  function enableDevMode(skipTierCheck = false) {
+    // Check tier restriction (Adept only) unless explicitly skipped
+    if (!skipTierCheck) {
+      // Dynamically import billing store to check tier
+      import('@/stores/billing').then(({ useBillingStore }) => {
+        const billing = useBillingStore()
+        if (!billing.isOpus) {
+          // Show restriction message
+          tierRestrictionMessage.value = 'Dev Mode requires Adept tier. Upgrade to unlock!'
+          console.log('%c🔒 Dev Mode requires Adept tier', 'color: #FFD700; font-size: 14px;')
+          console.log('%cUpgrade to Adept to unlock developer features.', 'color: #888; font-style: italic;')
+
+          // Clear message after 5 seconds
+          setTimeout(() => {
+            tierRestrictionMessage.value = ''
+          }, 5000)
+          return
+        }
+        // Tier check passed, actually enable
+        doEnableDevMode()
+      }).catch(() => {
+        // If store fails to load, allow activation (fail open for testing)
+        doEnableDevMode()
+      })
+      return
+    }
+    doEnableDevMode()
+  }
+
+  function doEnableDevMode() {
     devMode.value = true
     localStorage.setItem('devMode', 'true')
 
@@ -241,6 +273,7 @@ export function useDevMode() {
     layerName,
     justActivatedPac,
     tapCount,
+    tierRestrictionMessage,
 
     // Actions
     enableDevMode,
