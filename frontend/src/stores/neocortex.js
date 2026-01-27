@@ -8,6 +8,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import api from '@/services/api'
+import { isWebGLAvailable } from '@/composables/useThreeScene'
 
 // Agent colors for visualization
 export const AGENT_COLORS = {
@@ -58,7 +59,9 @@ export const useNeoCortexStore = defineStore('neocortex', () => {
   })
 
   // View settings
-  const viewMode = ref('3d') // '3d' | '2d' | 'list'
+  // Check WebGL availability and default to 2D if not supported
+  const webglSupported = ref(false)
+  const viewMode = ref('list') // '3d' | '2d' | 'list' - default to list, set to 3d in initialize() if WebGL available
   const showConnections = ref(true)
   const autoRotate = ref(true)
   const nodeScale = ref(1.0)
@@ -262,6 +265,16 @@ export const useNeoCortexStore = defineStore('neocortex', () => {
 
   // Initialize
   async function initialize() {
+    // Check WebGL availability
+    webglSupported.value = isWebGLAvailable()
+    if (webglSupported.value) {
+      viewMode.value = '3d'
+      console.log('Neo-Cortex: WebGL available, using 3D mode')
+    } else {
+      viewMode.value = 'list'
+      console.log('Neo-Cortex: WebGL not available, falling back to list mode')
+    }
+
     await Promise.all([fetchGraphData(), fetchStats()])
   }
 
@@ -276,6 +289,7 @@ export const useNeoCortexStore = defineStore('neocortex', () => {
     error,
     filters,
     viewMode,
+    webglSupported,
     showConnections,
     autoRotate,
     nodeScale,

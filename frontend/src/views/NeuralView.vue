@@ -126,18 +126,27 @@ watch(() => store.filters, async () => {
 
       <!-- Center: Visualization -->
       <div class="flex-1 relative">
-        <!-- 3D View -->
+        <!-- WebGL fallback notice -->
+        <div
+          v-if="!store.webglSupported"
+          class="absolute top-4 left-1/2 -translate-x-1/2 z-10 bg-gold/10 border border-gold/30 text-gold px-4 py-2 rounded-lg text-sm flex items-center gap-2"
+        >
+          <span>🖥️</span>
+          <span>3D mode unavailable (no GPU) - using list view</span>
+        </div>
+
+        <!-- 3D View - Only mount if WebGL is supported -->
         <NeuralSpace
-          v-show="store.viewMode === '3d'"
+          v-if="store.webglSupported && store.viewMode === '3d'"
           ref="neuralSpaceRef"
           :auto-rotate="store.autoRotate"
           :show-connections="store.showConnections"
           @select="onMemorySelect"
         />
 
-        <!-- 2D/List View -->
+        <!-- 2D/List View - Show when no WebGL or when mode is not 3d -->
         <MemoryList
-          v-show="store.viewMode !== '3d'"
+          v-if="!store.webglSupported || store.viewMode !== '3d'"
         />
 
         <!-- Error display -->

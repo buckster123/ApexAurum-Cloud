@@ -9,6 +9,33 @@ import { ref, onMounted, onUnmounted, watch } from 'vue'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 
+/**
+ * Check if WebGL is available in this browser/device
+ */
+export function isWebGLAvailable() {
+  try {
+    const canvas = document.createElement('canvas')
+    return !!(
+      window.WebGLRenderingContext &&
+      (canvas.getContext('webgl') || canvas.getContext('experimental-webgl'))
+    )
+  } catch (e) {
+    return false
+  }
+}
+
+/**
+ * Check if WebGL2 is available
+ */
+export function isWebGL2Available() {
+  try {
+    const canvas = document.createElement('canvas')
+    return !!(window.WebGL2RenderingContext && canvas.getContext('webgl2'))
+  } catch (e) {
+    return false
+  }
+}
+
 export function useThreeScene(containerRef, options = {}) {
   const {
     backgroundColor = 0x0a0a0f,
@@ -36,54 +63,65 @@ export function useThreeScene(containerRef, options = {}) {
   function init() {
     if (!containerRef.value) return false
 
-    const width = containerRef.value.clientWidth
-    const height = containerRef.value.clientHeight
-
-    // Scene
-    scene.value = new THREE.Scene()
-    scene.value.background = new THREE.Color(backgroundColor)
-    scene.value.fog = new THREE.FogExp2(backgroundColor, 0.008)
-
-    // Camera
-    camera.value = new THREE.PerspectiveCamera(60, width / height, 0.1, 1000)
-    camera.value.position.set(...cameraPosition)
-
-    // Renderer
-    renderer.value = new THREE.WebGLRenderer({
-      antialias: true,
-      alpha: true,
-    })
-    renderer.value.setSize(width, height)
-    renderer.value.setPixelRatio(Math.min(window.devicePixelRatio, 2))
-    containerRef.value.appendChild(renderer.value.domElement)
-
-    // Controls
-    if (enableOrbit) {
-      controls.value = new OrbitControls(camera.value, renderer.value.domElement)
-      controls.value.enableDamping = true
-      controls.value.dampingFactor = 0.05
-      controls.value.autoRotate = autoRotate
-      controls.value.autoRotateSpeed = autoRotateSpeed
-      controls.value.minDistance = 20
-      controls.value.maxDistance = 200
+    // Safety check for WebGL before trying to create renderer
+    if (!isWebGLAvailable()) {
+      console.warn('useThreeScene: WebGL not available, skipping initialization')
+      return false
     }
 
-    // Ambient light
-    const ambientLight = new THREE.AmbientLight(0x404040, 0.5)
-    scene.value.add(ambientLight)
+    try {
+      const width = containerRef.value.clientWidth
+      const height = containerRef.value.clientHeight
 
-    // Point light at center
-    const pointLight = new THREE.PointLight(0xffffff, 1, 200)
-    pointLight.position.set(0, 0, 0)
-    scene.value.add(pointLight)
+      // Scene
+      scene.value = new THREE.Scene()
+      scene.value.background = new THREE.Color(backgroundColor)
+      scene.value.fog = new THREE.FogExp2(backgroundColor, 0.008)
 
-    // Add subtle grid helper
-    const gridHelper = new THREE.GridHelper(200, 40, 0x1a1a2e, 0x1a1a2e)
-    gridHelper.position.y = -30
-    scene.value.add(gridHelper)
+      // Camera
+      camera.value = new THREE.PerspectiveCamera(60, width / height, 0.1, 1000)
+      camera.value.position.set(...cameraPosition)
 
-    isInitialized.value = true
-    return true
+      // Renderer
+      renderer.value = new THREE.WebGLRenderer({
+        antialias: true,
+        alpha: true,
+      })
+      renderer.value.setSize(width, height)
+      renderer.value.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+      containerRef.value.appendChild(renderer.value.domElement)
+
+      // Controls
+      if (enableOrbit) {
+        controls.value = new OrbitControls(camera.value, renderer.value.domElement)
+        controls.value.enableDamping = true
+        controls.value.dampingFactor = 0.05
+        controls.value.autoRotate = autoRotate
+        controls.value.autoRotateSpeed = autoRotateSpeed
+        controls.value.minDistance = 20
+        controls.value.maxDistance = 200
+      }
+
+      // Ambient light
+      const ambientLight = new THREE.AmbientLight(0x404040, 0.5)
+      scene.value.add(ambientLight)
+
+      // Point light at center
+      const pointLight = new THREE.PointLight(0xffffff, 1, 200)
+      pointLight.position.set(0, 0, 0)
+      scene.value.add(pointLight)
+
+      // Add subtle grid helper
+      const gridHelper = new THREE.GridHelper(200, 40, 0x1a1a2e, 0x1a1a2e)
+      gridHelper.position.y = -30
+      scene.value.add(gridHelper)
+
+      isInitialized.value = true
+      return true
+    } catch (e) {
+      console.error('useThreeScene: Failed to initialize WebGL:', e)
+      return false
+    }
   }
 
   // Animation loop
