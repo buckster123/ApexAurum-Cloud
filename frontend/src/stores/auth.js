@@ -3,13 +3,22 @@ import { ref, computed } from 'vue'
 import api from '@/services/api'
 
 export const useAuthStore = defineStore('auth', () => {
+  // DEBUG: Log what we get from localStorage
+  const storedToken = localStorage.getItem('accessToken')
+  console.log('[AUTH DEBUG] localStorage accessToken:', storedToken, 'type:', typeof storedToken, 'truthy:', !!storedToken)
+  console.log('[AUTH DEBUG] localStorage keys:', Object.keys(localStorage))
+
   // State
   const user = ref(null)
-  const accessToken = ref(localStorage.getItem('accessToken'))
+  const accessToken = ref(storedToken)
   const refreshToken = ref(localStorage.getItem('refreshToken'))
 
   // Getters
-  const isAuthenticated = computed(() => !!accessToken.value)
+  const isAuthenticated = computed(() => {
+    const result = !!accessToken.value
+    console.log('[AUTH DEBUG] isAuthenticated computed:', result, 'accessToken.value:', accessToken.value)
+    return result
+  })
 
   // Actions
   async function login(email, password) {
