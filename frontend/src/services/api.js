@@ -32,7 +32,8 @@ api.interceptors.response.use(
           throw new Error('No refresh token')
         }
 
-        const response = await axios.post('/api/v1/auth/refresh', {
+        // Use api instance (has baseURL) not bare axios
+        const response = await api.post('/api/v1/auth/refresh', {
           refresh_token: refreshToken
         })
 
