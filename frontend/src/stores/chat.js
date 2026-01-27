@@ -158,7 +158,11 @@ export const useChatStore = defineStore('chat', () => {
     })
 
     try {
-      const apiUrl = import.meta.env.VITE_API_URL || ''
+      // Ensure API URL has https:// prefix
+      let apiUrl = import.meta.env.VITE_API_URL || ''
+      if (apiUrl && !apiUrl.startsWith('http://') && !apiUrl.startsWith('https://')) {
+        apiUrl = 'https://' + apiUrl
+      }
       const token = localStorage.getItem('accessToken')
 
       const response = await fetch(`${apiUrl}/api/v1/chat/message`, {

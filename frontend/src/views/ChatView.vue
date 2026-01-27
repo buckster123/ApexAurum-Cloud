@@ -101,12 +101,12 @@ function selectAgent(agentId) {
 
 // Check if currently using a PAC agent
 const isUsingPacAgent = computed(() => {
-  return selectedAgent.value.endsWith('-PAC')
+  return selectedAgent.value?.endsWith('-PAC') ?? false
 })
 
 // Get the actual agent ID for API calls (strip -PAC suffix)
 const actualAgentId = computed(() => {
-  return selectedAgent.value.replace('-PAC', '')
+  return selectedAgent.value?.replace('-PAC', '') ?? 'AZOTH'
 })
 
 // Load custom agents
