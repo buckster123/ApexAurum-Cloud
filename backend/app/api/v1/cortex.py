@@ -92,12 +92,18 @@ async def diagnostic(
     Diagnostic endpoint to check pgvector and Neural system status.
     No auth required - useful for troubleshooting.
     """
+    from app.config import get_settings
+    settings = get_settings()
+
     result = {
         "pgvector_extension": False,
         "user_vectors_table": False,
         "neo_cortex_columns": False,
         "vector_column": False,
         "total_vectors": 0,
+        "vectors_with_embeddings": 0,
+        "embedding_provider": settings.embedding_provider,
+        "embedding_available": bool(settings.openai_api_key if settings.embedding_provider == "openai" else settings.voyage_api_key),
         "errors": [],
         "notes": [],
     }
@@ -145,6 +151,10 @@ async def diagnostic(
             count_check = await db.execute(text("SELECT COUNT(*) FROM user_vectors"))
             result["total_vectors"] = count_check.scalar() or 0
 
+            # Count vectors with embeddings
+            embed_check = await db.execute(text("SELECT COUNT(*) FROM user_vectors WHERE embedding IS NOT NULL"))
+            result["vectors_with_embeddings"] = embed_check.scalar() or 0
+
         else:
             result["notes"].append("user_vectors table not found - backend will create on next startup if pgvector is enabled")
 
@@ -157,6 +167,10 @@ async def diagnostic(
         result["user_vectors_table"] and
         result["neo_cortex_columns"]
     )
+
+    # Add note about embeddings if not available
+    if not result["embedding_available"]:
+        result["notes"].append(f"No {settings.embedding_provider.upper()}_API_KEY - memories will store without embeddings (semantic search disabled)")
 
     return result
 
