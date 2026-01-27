@@ -13,9 +13,12 @@ RUN npm install
 ARG VITE_API_URL=https://backend-production-507c.up.railway.app
 ENV VITE_API_URL=$VITE_API_URL
 
+# Cache buster - change this to force rebuild
+ARG CACHE_BUST=1
+
 # Build the app (VITE_API_URL is now available to Vite)
 COPY . .
-RUN echo "Building with VITE_API_URL=$VITE_API_URL" && npm run build
+RUN echo "Cache bust: $CACHE_BUST - Building with VITE_API_URL=$VITE_API_URL" && npm run build
 
 # Production stage - serve static files
 FROM node:20-alpine
