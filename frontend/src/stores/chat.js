@@ -185,7 +185,34 @@ export const useChatStore = defineStore('chat', () => {
       })
 
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+        // Try to parse error details from response
+        let errorMessage = `HTTP ${response.status}`
+        try {
+          const errorData = await response.json()
+          if (errorData.detail) {
+            // Handle structured error responses (402/403)
+            if (typeof errorData.detail === 'object') {
+              const detail = errorData.detail
+              if (detail.error === 'model_not_allowed') {
+                errorMessage = `🔒 ${detail.message || 'This model requires a higher tier.'}\n\nTry switching to Haiku or Sonnet in settings, or upgrade your plan.`
+              } else if (detail.error === 'tools_not_allowed') {
+                errorMessage = `🔧 ${detail.message || 'Tools require a Pro subscription.'}\n\nUpgrade to unlock AI tools.`
+              } else if (detail.error === 'usage_limit') {
+                errorMessage = `📊 ${detail.message || 'You\'ve reached your message limit.'}\n\nUpgrade your plan or purchase credits to continue.`
+              } else if (detail.error === 'multi_provider_not_allowed') {
+                errorMessage = `🌐 ${detail.message || 'Multi-provider LLMs require Adept tier.'}`
+              } else {
+                errorMessage = detail.message || JSON.stringify(detail)
+              }
+            } else {
+              errorMessage = errorData.detail
+            }
+          }
+        } catch {
+          // Couldn't parse JSON, use status text
+          errorMessage = `${response.status}: ${response.statusText}`
+        }
+        throw new Error(errorMessage)
       }
 
       // Read the SSE stream
@@ -256,11 +283,16 @@ export const useChatStore = defineStore('chat', () => {
 
     } catch (e) {
       console.error('Chat error:', e)
-      // Update assistant message to show error
+      // Update assistant message to show friendly error
       const msg = messages.value.find(m => m.id === assistantMsgId)
       if (msg) {
         msg.role = 'system'
-        msg.content = `Error: ${e.message}`
+        // Check if it's a billing/permission error (has emoji)
+        if (e.message.match(/^[🔒🔧📊🌐]/)) {
+          msg.content = e.message
+        } else {
+          msg.content = `⚠️ Something went wrong:\n\n${e.message}\n\nPlease try again or refresh the page.`
+        }
       }
     } finally {
       isStreaming.value = false
