@@ -51,7 +51,7 @@ async def lifespan(app: FastAPI):
     """Application lifespan manager."""
     # Startup
     print("=" * 50)
-    print("ApexAurum Cloud v55 - Village Chat + Neural")
+    print("ApexAurum Cloud v56 - Neural 3D Fix")
     print("=" * 50)
 
     # Import all models before database init to ensure SQLAlchemy
@@ -120,7 +120,7 @@ async def health_check():
     return {
         "status": "healthy",
         "version": "0.1.0",
-        "build": "v55-village-chat",
+        "build": "v56-neural-3d-fix",
         "agents": {
             "native": 5,
             "pac": 4,

@@ -5,7 +5,7 @@
  * "The canvas of the neural cosmos"
  */
 
-import { ref, onMounted, onUnmounted, watch } from 'vue'
+import { ref, shallowRef, onMounted, onUnmounted, watch } from 'vue'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 
@@ -45,11 +45,13 @@ export function useThreeScene(containerRef, options = {}) {
     autoRotateSpeed = 0.5,
   } = options
 
-  // Three.js objects
-  const scene = ref(null)
-  const camera = ref(null)
-  const renderer = ref(null)
-  const controls = ref(null)
+  // Three.js objects - use shallowRef to avoid Vue Proxy conflicts
+  // Vue's deep reactivity wraps objects in Proxies, but Three.js has
+  // non-configurable properties (modelViewMatrix, etc.) that break under proxy
+  const scene = shallowRef(null)
+  const camera = shallowRef(null)
+  const renderer = shallowRef(null)
+  const controls = shallowRef(null)
 
   // State
   const isInitialized = ref(false)
