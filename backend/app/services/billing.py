@@ -92,8 +92,7 @@ class BillingService:
     async def _create_stripe_customer(self, user: User) -> str:
         """Create Stripe customer for user."""
         if not settings.stripe_secret_key:
-            # Return placeholder if Stripe not configured
-            return f"cus_local_{user.id}"
+            raise ValueError("Stripe not configured - cannot create customer")
 
         try:
             customer = stripe.Customer.create(
@@ -105,8 +104,7 @@ class BillingService:
             return customer.id
         except stripe.StripeError as e:
             logger.error(f"Failed to create Stripe customer: {e}")
-            # Return placeholder on error
-            return f"cus_error_{user.id}"
+            raise ValueError(f"Failed to create Stripe customer: {e}")
 
     async def get_subscription_status(self, user_id: UUID) -> dict:
         """Get comprehensive subscription status for API response."""
@@ -436,6 +434,32 @@ class BillingService:
     # STRIPE CHECKOUT
     # ═══════════════════════════════════════════════════════════════════════════
 
+    async def _ensure_valid_stripe_customer(self, subscription, user: User) -> str:
+        """Ensure subscription has a valid Stripe customer ID, creating one if needed."""
+        customer_id = subscription.stripe_customer_id
+
+        # Check if customer ID looks invalid (our old error placeholders)
+        if not customer_id or customer_id.startswith("cus_error_") or customer_id.startswith("cus_local_"):
+            logger.warning(f"Invalid customer ID '{customer_id}' for user {user.id}, creating new one")
+            # Create new Stripe customer
+            new_customer_id = await self._create_stripe_customer(user)
+            subscription.stripe_customer_id = new_customer_id
+            await self.db.flush()
+            return new_customer_id
+
+        # Verify customer exists in Stripe
+        try:
+            stripe.Customer.retrieve(customer_id)
+            return customer_id
+        except stripe.InvalidRequestError as e:
+            if "No such customer" in str(e):
+                logger.warning(f"Customer {customer_id} not found in Stripe, creating new one")
+                new_customer_id = await self._create_stripe_customer(user)
+                subscription.stripe_customer_id = new_customer_id
+                await self.db.flush()
+                return new_customer_id
+            raise
+
     async def create_subscription_checkout(
         self,
         user_id: UUID,
@@ -448,6 +472,17 @@ class BillingService:
             raise ValueError("Stripe not configured")
 
         subscription = await self.get_or_create_subscription(user_id)
+
+        # Get user for customer validation
+        user_result = await self.db.execute(
+            select(User).where(User.id == user_id)
+        )
+        user = user_result.scalar_one_or_none()
+        if not user:
+            raise ValueError(f"User {user_id} not found")
+
+        # Ensure we have a valid Stripe customer
+        customer_id = await self._ensure_valid_stripe_customer(subscription, user)
 
         # Get price ID for tier
         price_id = None
@@ -463,7 +498,7 @@ class BillingService:
 
         try:
             session = stripe.checkout.Session.create(
-                customer=subscription.stripe_customer_id,
+                customer=customer_id,
                 mode="subscription",
                 line_items=[{"price": price_id, "quantity": 1}],
                 success_url=success_url,
@@ -493,6 +528,17 @@ class BillingService:
 
         subscription = await self.get_or_create_subscription(user_id)
 
+        # Get user for customer validation
+        user_result = await self.db.execute(
+            select(User).where(User.id == user_id)
+        )
+        user = user_result.scalar_one_or_none()
+        if not user:
+            raise ValueError(f"User {user_id} not found")
+
+        # Ensure we have a valid Stripe customer
+        customer_id = await self._ensure_valid_stripe_customer(subscription, user)
+
         # Get price ID for pack
         price_id = None
         if pack == "small":
@@ -510,7 +556,7 @@ class BillingService:
 
         try:
             session = stripe.checkout.Session.create(
-                customer=subscription.stripe_customer_id,
+                customer=customer_id,
                 mode="payment",
                 line_items=[{"price": price_id, "quantity": 1}],
                 success_url=success_url,
@@ -542,9 +588,20 @@ class BillingService:
 
         subscription = await self.get_or_create_subscription(user_id)
 
+        # Get user for customer validation
+        user_result = await self.db.execute(
+            select(User).where(User.id == user_id)
+        )
+        user = user_result.scalar_one_or_none()
+        if not user:
+            raise ValueError(f"User {user_id} not found")
+
+        # Ensure we have a valid Stripe customer
+        customer_id = await self._ensure_valid_stripe_customer(subscription, user)
+
         try:
             session = stripe.billing_portal.Session.create(
-                customer=subscription.stripe_customer_id,
+                customer=customer_id,
                 return_url=return_url,
             )
             return {"portal_url": session.url}
