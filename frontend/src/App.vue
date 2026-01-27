@@ -10,19 +10,13 @@ const auth = useAuthStore()
 const { pacMode, justActivatedPac } = useDevMode()
 
 // Apply pac-mode class to body for global styling
-// Note: No immediate:true to avoid TDZ issues with Vite minification
 watch(pacMode, (active) => {
   if (active) {
     document.body.classList.add('pac-mode')
   } else {
     document.body.classList.remove('pac-mode')
   }
-})
-
-// Apply initial state synchronously (safe - pacMode is already initialized)
-if (pacMode.value) {
-  document.body.classList.add('pac-mode')
-}
+}, { immediate: true })
 </script>
 
 <template>

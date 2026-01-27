@@ -8,7 +8,7 @@ export const useAuthStore = defineStore('auth', () => {
   const accessToken = ref(localStorage.getItem('accessToken'))
   const refreshToken = ref(localStorage.getItem('refreshToken'))
 
-  // Getters - simple: authenticated if we have a token
+  // Getters
   const isAuthenticated = computed(() => !!accessToken.value)
 
   // Actions
@@ -43,7 +43,8 @@ export const useAuthStore = defineStore('auth', () => {
       const response = await api.get('/api/v1/user/profile')
       user.value = response.data
     } catch (e) {
-      // Profile fetch failed - don't clear tokens here, let interceptor handle 401
+      // Don't clear tokens on profile fetch failure - token might still be valid
+      // This prevents logout loops when profile endpoint has issues
       console.error('Failed to fetch profile:', e)
       user.value = null
     }
@@ -82,7 +83,7 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.removeItem('refreshToken')
   }
 
-  // Initialize: try to load profile if we have a token (non-blocking)
+  // Initialize: try to load profile if we have a token
   if (accessToken.value) {
     fetchProfile()
   }
