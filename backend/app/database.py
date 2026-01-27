@@ -364,7 +364,7 @@ async def init_db():
                 user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
                 collection VARCHAR(100) DEFAULT 'default',
                 content TEXT NOT NULL,
-                metadata JSONB DEFAULT '{}',
+                metadata JSONB DEFAULT '{{}}'::jsonb,
                 embedding vector({embed_dim}),
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
             );
