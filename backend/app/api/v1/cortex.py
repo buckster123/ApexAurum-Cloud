@@ -99,44 +99,58 @@ async def list_memories(
     List memories with optional filters.
     Returns memories for the 3D visualization.
     """
-    # Build dynamic query
-    where_clauses = ["user_id = :user_id"]
-    params = {"user_id": user.id, "limit": limit, "offset": offset}
+    try:
+        # Check if user_vectors table exists
+        check_result = await db.execute(
+            text("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'user_vectors')")
+        )
+        table_exists = check_result.scalar()
 
-    if layer:
-        where_clauses.append("layer = :layer")
-        params["layer"] = layer
+        if not table_exists:
+            logger.info("user_vectors table not found - returning empty list")
+            return []
 
-    if visibility:
-        where_clauses.append("visibility = :visibility")
-        params["visibility"] = visibility
+        # Build dynamic query
+        where_clauses = ["user_id = :user_id"]
+        params = {"user_id": user.id, "limit": limit, "offset": offset}
 
-    if agent_id:
-        where_clauses.append("agent_id = :agent_id")
-        params["agent_id"] = agent_id
+        if layer:
+            where_clauses.append("layer = :layer")
+            params["layer"] = layer
 
-    if message_type:
-        where_clauses.append("message_type = :message_type")
-        params["message_type"] = message_type
+        if visibility:
+            where_clauses.append("visibility = :visibility")
+            params["visibility"] = visibility
 
-    where_sql = " AND ".join(where_clauses)
+        if agent_id:
+            where_clauses.append("agent_id = :agent_id")
+            params["agent_id"] = agent_id
 
-    result = await db.execute(
-        text(f"""
-            SELECT
-                id, content, agent_id, visibility, layer, message_type,
-                attention_weight, access_count, tags, responding_to,
-                related_agents, conversation_thread, created_at, last_accessed_at
-            FROM user_vectors
-            WHERE {where_sql}
-            ORDER BY created_at DESC
-            LIMIT :limit OFFSET :offset
-        """),
-        params
-    )
-    rows = result.fetchall()
+        if message_type:
+            where_clauses.append("message_type = :message_type")
+            params["message_type"] = message_type
 
-    return [_row_to_node(row) for row in rows]
+        where_sql = " AND ".join(where_clauses)
+
+        result = await db.execute(
+            text(f"""
+                SELECT
+                    id, content, agent_id, visibility, layer, message_type,
+                    attention_weight, access_count, tags, responding_to,
+                    related_agents, conversation_thread, created_at, last_accessed_at
+                FROM user_vectors
+                WHERE {where_sql}
+                ORDER BY created_at DESC
+                LIMIT :limit OFFSET :offset
+            """),
+            params
+        )
+        rows = result.fetchall()
+
+        return [_row_to_node(row) for row in rows]
+    except Exception as e:
+        logger.error(f"Cortex memories error: {e}")
+        return []
 
 
 @router.get("/memories/{memory_id}", response_model=MemoryNode)
@@ -177,39 +191,53 @@ async def get_graph_data(
     Get graph data optimized for 3D visualization.
     Returns nodes and edges for the neural space.
     """
-    # Build query
-    where_clauses = ["user_id = :user_id"]
-    params = {"user_id": user.id, "limit": limit}
+    try:
+        # Check if user_vectors table exists
+        check_result = await db.execute(
+            text("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'user_vectors')")
+        )
+        table_exists = check_result.scalar()
 
-    if layer:
-        where_clauses.append("layer = :layer")
-        params["layer"] = layer
+        if not table_exists:
+            logger.info("user_vectors table not found - returning empty graph")
+            return GraphData(nodes=[], edges=[])
 
-    if visibility:
-        where_clauses.append("visibility = :visibility")
-        params["visibility"] = visibility
+        # Build query
+        where_clauses = ["user_id = :user_id"]
+        params = {"user_id": user.id, "limit": limit}
 
-    where_sql = " AND ".join(where_clauses)
+        if layer:
+            where_clauses.append("layer = :layer")
+            params["layer"] = layer
 
-    result = await db.execute(
-        text(f"""
-            SELECT
-                id, content, agent_id, visibility, layer, message_type,
-                attention_weight, access_count, tags, responding_to,
-                related_agents, conversation_thread, created_at, last_accessed_at
-            FROM user_vectors
-            WHERE {where_sql}
-            ORDER BY attention_weight DESC, created_at DESC
-            LIMIT :limit
-        """),
-        params
-    )
-    rows = result.fetchall()
+        if visibility:
+            where_clauses.append("visibility = :visibility")
+            params["visibility"] = visibility
 
-    nodes = [_row_to_node(row) for row in rows]
-    edges = _build_edges(nodes)
+        where_sql = " AND ".join(where_clauses)
 
-    return GraphData(nodes=nodes, edges=edges)
+        result = await db.execute(
+            text(f"""
+                SELECT
+                    id, content, agent_id, visibility, layer, message_type,
+                    attention_weight, access_count, tags, responding_to,
+                    related_agents, conversation_thread, created_at, last_accessed_at
+                FROM user_vectors
+                WHERE {where_sql}
+                ORDER BY attention_weight DESC, created_at DESC
+                LIMIT :limit
+            """),
+            params
+        )
+        rows = result.fetchall()
+
+        nodes = [_row_to_node(row) for row in rows]
+        edges = _build_edges(nodes)
+
+        return GraphData(nodes=nodes, edges=edges)
+    except Exception as e:
+        logger.error(f"Cortex graph error: {e}")
+        return GraphData(nodes=[], edges=[])
 
 
 @router.get("/stats", response_model=CortexStats)
@@ -218,64 +246,92 @@ async def get_stats(
     db=Depends(get_db),
 ) -> CortexStats:
     """Get memory statistics for the dashboard."""
-    # Total count
-    total_result = await db.execute(
-        text("SELECT COUNT(*) FROM user_vectors WHERE user_id = :user_id"),
-        {"user_id": user.id}
-    )
-    total = total_result.scalar() or 0
+    try:
+        # Check if user_vectors table exists
+        check_result = await db.execute(
+            text("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'user_vectors')")
+        )
+        table_exists = check_result.scalar()
 
-    # By layer
-    layer_result = await db.execute(
-        text("""
-            SELECT COALESCE(layer, 'unknown') as layer, COUNT(*) as count
-            FROM user_vectors WHERE user_id = :user_id
-            GROUP BY layer
-        """),
-        {"user_id": user.id}
-    )
-    by_layer = {row.layer: row.count for row in layer_result.fetchall()}
+        if not table_exists:
+            # Table doesn't exist - return empty stats with helpful message
+            logger.info("user_vectors table not found - Neural system not yet initialized")
+            return CortexStats(
+                total=0,
+                by_layer={"info": "Neural system initializing..."},
+                by_visibility={},
+                by_agent={},
+                by_message_type={},
+            )
 
-    # By visibility
-    vis_result = await db.execute(
-        text("""
-            SELECT COALESCE(visibility, 'private') as visibility, COUNT(*) as count
-            FROM user_vectors WHERE user_id = :user_id
-            GROUP BY visibility
-        """),
-        {"user_id": user.id}
-    )
-    by_visibility = {row.visibility: row.count for row in vis_result.fetchall()}
+        # Total count
+        total_result = await db.execute(
+            text("SELECT COUNT(*) FROM user_vectors WHERE user_id = :user_id"),
+            {"user_id": user.id}
+        )
+        total = total_result.scalar() or 0
 
-    # By agent
-    agent_result = await db.execute(
-        text("""
-            SELECT COALESCE(agent_id, 'CLAUDE') as agent_id, COUNT(*) as count
-            FROM user_vectors WHERE user_id = :user_id
-            GROUP BY agent_id
-        """),
-        {"user_id": user.id}
-    )
-    by_agent = {row.agent_id: row.count for row in agent_result.fetchall()}
+        # By layer
+        layer_result = await db.execute(
+            text("""
+                SELECT COALESCE(layer, 'unknown') as layer, COUNT(*) as count
+                FROM user_vectors WHERE user_id = :user_id
+                GROUP BY layer
+            """),
+            {"user_id": user.id}
+        )
+        by_layer = {row.layer: row.count for row in layer_result.fetchall()}
 
-    # By message type
-    type_result = await db.execute(
-        text("""
-            SELECT COALESCE(message_type, 'observation') as message_type, COUNT(*) as count
-            FROM user_vectors WHERE user_id = :user_id
-            GROUP BY message_type
-        """),
-        {"user_id": user.id}
-    )
-    by_message_type = {row.message_type: row.count for row in type_result.fetchall()}
+        # By visibility
+        vis_result = await db.execute(
+            text("""
+                SELECT COALESCE(visibility, 'private') as visibility, COUNT(*) as count
+                FROM user_vectors WHERE user_id = :user_id
+                GROUP BY visibility
+            """),
+            {"user_id": user.id}
+        )
+        by_visibility = {row.visibility: row.count for row in vis_result.fetchall()}
 
-    return CortexStats(
-        total=total,
-        by_layer=by_layer,
-        by_visibility=by_visibility,
-        by_agent=by_agent,
-        by_message_type=by_message_type,
-    )
+        # By agent
+        agent_result = await db.execute(
+            text("""
+                SELECT COALESCE(agent_id, 'CLAUDE') as agent_id, COUNT(*) as count
+                FROM user_vectors WHERE user_id = :user_id
+                GROUP BY agent_id
+            """),
+            {"user_id": user.id}
+        )
+        by_agent = {row.agent_id: row.count for row in agent_result.fetchall()}
+
+        # By message type
+        type_result = await db.execute(
+            text("""
+                SELECT COALESCE(message_type, 'observation') as message_type, COUNT(*) as count
+                FROM user_vectors WHERE user_id = :user_id
+                GROUP BY message_type
+            """),
+            {"user_id": user.id}
+        )
+        by_message_type = {row.message_type: row.count for row in type_result.fetchall()}
+
+        return CortexStats(
+            total=total,
+            by_layer=by_layer,
+            by_visibility=by_visibility,
+            by_agent=by_agent,
+            by_message_type=by_message_type,
+        )
+    except Exception as e:
+        logger.error(f"Cortex stats error: {e}")
+        # Return empty stats instead of 500
+        return CortexStats(
+            total=0,
+            by_layer={"error": "Neural system unavailable"},
+            by_visibility={},
+            by_agent={},
+            by_message_type={},
+        )
 
 
 @router.post("/search", response_model=List[MemoryNode])

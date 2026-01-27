@@ -19,9 +19,15 @@ from app.models.user import User
 from app.models.agent import Agent
 from app.auth.deps import get_current_user_optional
 from app.services.claude import ClaudeService
+from app.services.billing import BillingService
+from app.config import get_settings
 
+settings = get_settings()
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+# Use Haiku 4.5 for agents (fast and efficient)
+AGENT_MODEL = "claude-haiku-4-5-20251001"
 
 # Initialize Claude service
 _claude_service = None
@@ -107,7 +113,7 @@ async def spawn_agent(
         # Execute the task
         response = await claude.chat(
             messages=[{"role": "user", "content": request.task}],
-            model="claude-3-haiku-20240307",
+            model=AGENT_MODEL,
             system=system_prompt,
         )
 
@@ -116,6 +122,22 @@ async def spawn_agent(
         for block in response.get("content", []):
             if block.get("text"):
                 result_content += block["text"]
+
+        # Record billing usage if user authenticated and Stripe configured
+        if user and settings.stripe_secret_key:
+            try:
+                billing_service = BillingService(db)
+                usage = response.get("usage", {})
+                await billing_service.record_message_usage(
+                    user_id=user.id,
+                    provider="anthropic",
+                    model=AGENT_MODEL,
+                    input_tokens=usage.get("input_tokens", 0),
+                    output_tokens=usage.get("output_tokens", 0),
+                )
+                logger.debug(f"Recorded spawn usage: {usage.get('input_tokens', 0)}in/{usage.get('output_tokens', 0)}out")
+            except Exception as e:
+                logger.error(f"Failed to record spawn billing: {e}")
 
         # Save to DB if authenticated
         if user:
@@ -247,6 +269,10 @@ async def socratic_council(
 
     claude = get_claude_service()
 
+    # Track total usage across all council members
+    total_input_tokens = 0
+    total_output_tokens = 0
+
     # Council member personas
     council_personas = [
         ("Pragmatist", "You are a practical, results-oriented thinker. Focus on what works in reality."),
@@ -263,6 +289,8 @@ async def socratic_council(
 
     async def get_council_vote(persona_name: str, persona_prompt: str) -> dict:
         """Get a single council member's vote and reasoning."""
+        nonlocal total_input_tokens, total_output_tokens
+
         system = f"""You are {persona_name}, a member of a deliberative council. {persona_prompt}
 
 You must provide a clear vote and brief reasoning. Format your response EXACTLY as:
@@ -272,9 +300,14 @@ REASONING: [2-3 sentences explaining why]"""
         try:
             response = await claude.chat(
                 messages=[{"role": "user", "content": f"Question for the council: {request.question}{options_text}"}],
-                model="claude-3-haiku-20240307",
+                model=AGENT_MODEL,
                 system=system,
             )
+
+            # Track usage
+            usage = response.get("usage", {})
+            total_input_tokens += usage.get("input_tokens", 0)
+            total_output_tokens += usage.get("output_tokens", 0)
 
             content = ""
             for block in response.get("content", []):
@@ -304,6 +337,22 @@ REASONING: [2-3 sentences explaining why]"""
 
     tasks = [get_council_vote(name, prompt) for name, prompt in selected_personas]
     results = await asyncio.gather(*tasks)
+
+    # Record billing usage for all council calls combined
+    if user and settings.stripe_secret_key and (total_input_tokens > 0 or total_output_tokens > 0):
+        try:
+            billing_service = BillingService(db)
+            await billing_service.record_message_usage(
+                user_id=user.id,
+                provider="anthropic",
+                model=AGENT_MODEL,
+                input_tokens=total_input_tokens,
+                output_tokens=total_output_tokens,
+            )
+            await db.commit()
+            logger.debug(f"Recorded council usage ({num_members} members): {total_input_tokens}in/{total_output_tokens}out")
+        except Exception as e:
+            logger.error(f"Failed to record council billing: {e}")
 
     # Tally votes
     votes = {}
