@@ -366,13 +366,18 @@ export function useVillage() {
   }
 
   function connectWebSocket() {
-    const apiUrl = import.meta.env.VITE_API_URL || ''
+    let apiUrl = import.meta.env.VITE_API_URL || ''
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+
+    // Ensure apiUrl has protocol prefix (same fix as api.js)
+    if (apiUrl && !apiUrl.startsWith('http://') && !apiUrl.startsWith('https://')) {
+      apiUrl = 'https://' + apiUrl
+    }
 
     let wsUrl
     if (apiUrl) {
-      // Use API URL for WebSocket (replace http with ws)
-      wsUrl = apiUrl.replace(/^http/, 'ws') + '/ws/village'
+      // Use API URL for WebSocket (replace http/https with ws/wss)
+      wsUrl = apiUrl.replace(/^https?:/, wsProtocol) + '/ws/village'
     } else {
       // Same host
       wsUrl = `${wsProtocol}//${window.location.host}/ws/village`

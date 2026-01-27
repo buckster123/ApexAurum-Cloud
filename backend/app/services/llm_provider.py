@@ -522,6 +522,7 @@ class MultiProviderLLM:
 
         current_tool = None
         tool_input_json = ""
+        usage_info = {"input_tokens": 0, "output_tokens": 0}
 
         try:
             async with self.anthropic_client.messages.stream(**kwargs) as stream:
@@ -533,7 +534,16 @@ class MultiProviderLLM:
                             tool_input_json += event.delta.partial_json
                     elif event.type == "message_start":
                         yield {"type": "start", "model": event.message.model, "provider": "anthropic"}
+                        # Capture input tokens from message_start
+                        if hasattr(event.message, "usage") and event.message.usage:
+                            usage_info["input_tokens"] = event.message.usage.input_tokens
+                    elif event.type == "message_delta":
+                        # Capture output tokens from message_delta (sent near end of stream)
+                        if hasattr(event, "usage") and event.usage:
+                            usage_info["output_tokens"] = event.usage.output_tokens
                     elif event.type == "message_stop":
+                        # Yield usage info before end event
+                        yield {"type": "usage", "usage": usage_info}
                         yield {"type": "end"}
                     elif event.type == "content_block_start":
                         if event.content_block.type == "tool_use":

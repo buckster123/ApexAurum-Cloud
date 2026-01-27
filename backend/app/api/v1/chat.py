@@ -613,6 +613,9 @@ async def send_message(
             tool_calls = []  # Track tool calls made
             tool_results = []  # Track tool results
             current_messages = messages.copy()
+            # Track total usage across all LLM calls (for tool loops)
+            total_input_tokens = 0
+            total_output_tokens = 0
 
             try:
                 conv_id = str(conversation.id) if conversation else None
@@ -645,6 +648,11 @@ async def send_message(
                                 "name": event.get("name"),
                                 "input": event.get("input"),
                             })
+                        elif event.get("type") == "usage":
+                            # Capture usage info from stream
+                            usage = event.get("usage", {})
+                            total_input_tokens += usage.get("input_tokens", 0)
+                            total_output_tokens += usage.get("output_tokens", 0)
 
                     # If no tools were called, we're done
                     if not pending_tool_uses:
@@ -697,7 +705,23 @@ async def send_message(
                         # Reset for next turn
                         full_response = ""
 
-                yield f"data: {json.dumps({'type': 'end', 'tool_calls': len(tool_calls)})}\n\n"
+                # Record billing usage after stream completes (if Stripe configured)
+                usage_info = None
+                if billing_service and (total_input_tokens > 0 or total_output_tokens > 0):
+                    try:
+                        usage_info = await billing_service.record_message_usage(
+                            user_id=user.id,
+                            provider=provider,
+                            model=model,
+                            input_tokens=total_input_tokens,
+                            output_tokens=total_output_tokens,
+                        )
+                        await db.commit()
+                        logger.debug(f"Recorded streaming usage: {total_input_tokens}in/{total_output_tokens}out tokens")
+                    except Exception as e:
+                        logger.error(f"Failed to record streaming usage: {e}")
+
+                yield f"data: {json.dumps({'type': 'end', 'tool_calls': len(tool_calls), 'usage': {'input_tokens': total_input_tokens, 'output_tokens': total_output_tokens}})}\n\n"
 
             except Exception as e:
                 logger.error(f"Streaming error: {e}")

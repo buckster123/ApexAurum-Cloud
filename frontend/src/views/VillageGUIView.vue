@@ -50,12 +50,17 @@ watch(viewMode, (mode) => {
 
 // WebSocket connection
 function connectWebSocket() {
-  const apiUrl = import.meta.env.VITE_API_URL || ''
+  let apiUrl = import.meta.env.VITE_API_URL || ''
   const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+
+  // Ensure apiUrl has protocol prefix (same fix as api.js)
+  if (apiUrl && !apiUrl.startsWith('http://') && !apiUrl.startsWith('https://')) {
+    apiUrl = 'https://' + apiUrl
+  }
 
   let wsUrl
   if (apiUrl) {
-    wsUrl = apiUrl.replace(/^http/, 'ws') + '/ws/village'
+    wsUrl = apiUrl.replace(/^https?:/, wsProtocol) + '/ws/village'
   } else {
     wsUrl = `${wsProtocol}//${window.location.host}/ws/village`
   }
