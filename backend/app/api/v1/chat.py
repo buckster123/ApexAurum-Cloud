@@ -43,6 +43,7 @@ from app.services.tool_executor import create_tool_executor
 from app.tools import registry as tool_registry, ToolContext, ToolCategory
 from app.api.v1.user import get_user_api_key
 from app.services.billing import BillingService
+from app.services.neural_memory import store_chat_memory
 from app.config import get_settings, TIER_LIMITS
 
 settings = get_settings()
@@ -747,6 +748,36 @@ async def send_message(
                     except Exception as e:
                         logger.error(f"Failed to record streaming usage: {e}")
 
+                # Store chat exchange as neural memories (for Neo-Cortex visualization)
+                # Get the accumulated response from all turns
+                final_response = full_response
+                if not final_response:
+                    # If full_response is empty (e.g., after tool use reset), try to reconstruct
+                    for msg in reversed(current_messages):
+                        if msg.get("role") == "assistant":
+                            content = msg.get("content", [])
+                            if isinstance(content, list):
+                                for block in content:
+                                    if isinstance(block, dict) and block.get("type") == "text":
+                                        final_response = block.get("text", "")
+                                        break
+                            break
+
+                if final_response and len(final_response) > 10:
+                    try:
+                        await store_chat_memory(
+                            db=db,
+                            user_id=user.id,
+                            user_message=request.message,
+                            assistant_response=final_response,
+                            agent_id=request.agent,
+                            conversation_id=conversation.id if conversation else None,
+                        )
+                        await db.commit()
+                        logger.debug(f"Stored neural memory for agent {request.agent}")
+                    except Exception as e:
+                        logger.error(f"Failed to store neural memory: {e}")
+
                 yield f"data: {json.dumps({'type': 'end', 'tool_calls': len(tool_calls), 'usage': {'input_tokens': total_input_tokens, 'output_tokens': total_output_tokens}})}\n\n"
 
             except Exception as e:
@@ -865,6 +896,22 @@ async def send_message(
                     message_id=assistant_msg_id,
                 )
                 await db.commit()
+
+            # Store chat exchange as neural memories (for Neo-Cortex visualization)
+            if assistant_content and len(assistant_content) > 10:
+                try:
+                    await store_chat_memory(
+                        db=db,
+                        user_id=user.id,
+                        user_message=request.message,
+                        assistant_response=assistant_content,
+                        agent_id=request.agent,
+                        conversation_id=conversation.id if conversation else None,
+                    )
+                    await db.commit()
+                    logger.debug(f"Stored neural memory for agent {request.agent}")
+                except Exception as e:
+                    logger.error(f"Failed to store neural memory: {e}")
 
             return {
                 "conversation_id": str(conversation.id) if conversation else None,
