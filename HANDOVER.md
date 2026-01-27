@@ -2,62 +2,89 @@
 
 **Date:** 2026-01-27
 **Build:** v47-billing-system
-**Status:** DEBUGGING - Stripe checkout "missing customer" error
+**Status:** DEPLOYED FIX - Testing Stripe checkout
 
 ---
 
-## Current Issue: "Missing Customer" Error
+## Latest: Fixed "Missing Customer" Error
 
-When clicking "Upgrade" on billing page, getting a "missing customer" error.
+**Root Cause:** When Stripe customer creation failed (or Stripe wasn't configured), the code silently returned fake IDs like `cus_error_xxx` which Stripe doesn't recognize.
 
-### What's Been Done
-- [x] Stripe API keys added to Railway (LIVE mode)
-- [x] Stripe products created (Seeker 2.99 NOK, Pro $9.99, Opus $29.99)
-- [x] Stripe webhook endpoint created and secret added
-- [x] Price IDs added to Railway (except credit packs)
-- [x] Navbar updated with Billing link
-- [ ] Database migration may not have run successfully
+**Fix Applied:** (`fa53408`)
+1. Customer creation now raises errors instead of returning fake IDs
+2. Added `_ensure_valid_stripe_customer()` that validates customer ID before every checkout
+3. Auto-creates new Stripe customer if existing ID is invalid or not found in Stripe
 
-### Debug Steps for Next Session
+**Deployment:** Backend deployed to Railway - wait 2-3 min then test.
 
-1. **Check if billing tables exist**
+---
+
+## CRITICAL: Stripe Price Configuration Issue
+
+Looking at `docs/prices.csv`, **Pro and Opus prices are NOT recurring subscriptions**:
+
+| Product | Price ID | Interval | **Problem** |
+|---------|----------|----------|-------------|
+| Seeker | `price_1StziIA9aTMBwIBdAADgIA9r` | month,1 | OK (recurring) |
+| Pro | `price_1StzdWA9aTMBwIBdOfT44bnz` | (empty) | **NOT RECURRING!** |
+| Opus | `price_1StzgfA9aTMBwIBdkOCTWhpD` | (empty) | **NOT RECURRING!** |
+
+**How to Fix in Stripe Dashboard:**
+1. Go to **Products** → Find "ApexAurum Pro - Alchemist"
+2. Click on the price → **Edit** or create new price
+3. Set **Recurring** billing, **Monthly** interval
+4. Copy new price ID to Railway `STRIPE_PRICE_PRO_MONTHLY`
+5. Repeat for Opus
+
+**OR** create new recurring prices:
+- Stripe Dashboard → Products → Add price → Recurring → Monthly
+
+---
+
+## Current Stripe Config in Railway
+
+| Env Var | Value |
+|---------|-------|
+| `STRIPE_SECRET_KEY` | sk_live_... (set) |
+| `STRIPE_PUBLISHABLE_KEY` | pk_live_... (set) |
+| `STRIPE_WEBHOOK_SECRET` | whsec_... (set) |
+| `STRIPE_PRICE_PRO_MONTHLY` | price_1StzdWA9aTMBwIBdOfT44bnz (need recurring!) |
+| `STRIPE_PRICE_OPUS_MONTHLY` | price_1StzgfA9aTMBwIBdkOCTWhpD (need recurring!) |
+| `STRIPE_PRICE_CREDITS_500` | NOT SET - need to create |
+| `STRIPE_PRICE_CREDITS_2500` | NOT SET - need to create |
+
+---
+
+## Test After Deploy
+
+1. **Check health:**
    ```bash
-   # In Railway Postgres or via connection
-   \dt  # List tables - look for: subscriptions, credit_balances, credit_transactions, webhook_events
+   curl https://backend-production-507c.up.railway.app/health | jq '{build, features: .features[-3:]}'
    ```
 
-2. **Check Alembic migration status**
+2. **Test pricing (public):**
    ```bash
-   cd /app && alembic current
-   cd /app && alembic history
+   curl https://backend-production-507c.up.railway.app/api/v1/billing/pricing | jq
    ```
 
-3. **Get actual error from logs**
-   - Railway Dashboard → Backend → Deployments → View Logs
-   - Or browser DevTools → Network → click Upgrade → check response
+3. **Login and test checkout:**
+   - Go to https://frontend-production-5402.up.railway.app
+   - Login → Navigate to Billing → Click "Upgrade" on Pro tier
+   - Should redirect to Stripe checkout (or show better error message)
 
-4. **Test billing status endpoint**
-   ```bash
-   # Get a JWT token first by logging in, then:
-   curl -H "Authorization: Bearer $TOKEN" \
-     https://backend-production-507c.up.railway.app/api/v1/billing/status
-   ```
+---
 
-### Likely Causes
+## Previous: Test Checklist
 
-1. **Migration not run** - `subscriptions` table doesn't exist
-2. **Stripe customer creation failing** - check Stripe Dashboard for customers
-3. **Database connection issue** - check Railway Postgres logs
-
-### Stripe Price IDs (from docs/prices.csv)
-
-| Product | Price ID | Notes |
-|---------|----------|-------|
-| Seeker | `price_1StziIA9aTMBwIBdAADgIA9r` | 2.99 NOK/mo |
-| Pro | `price_1StzdWA9aTMBwIBdOfT44bnz` | $9.99 (check if recurring) |
-| Opus | `price_1StzgfA9aTMBwIBdkOCTWhpD` | $29.99 (check if recurring) |
-| Credits 500 | NOT CREATED | Need to create |
-| Credits 2500 | NOT CREATED | Need to create |
+- [x] `/api/v1/billing/pricing` returns tier info (no auth needed)
+- [ ] `/api/v1/billing/status` returns free tier for new users
+- [ ] Subscription checkout redirects to Stripe
+- [ ] Credit purchase redirects to Stripe
+- [ ] Webhook processes `checkout.session.completed`
+- [ ] Usage counter increments on chat
+- [ ] Model restrictions work (free tier = Haiku only)
+- [ ] Tool restrictions work (free tier = no tools)
+- [ ] Credits deduct when subscription limit reached
 
 ---
 
