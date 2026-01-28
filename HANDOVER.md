@@ -1,8 +1,8 @@
 # ApexAurum-Cloud Handover Document
 
 **Date:** 2026-01-28
-**Build:** v57-local-embeddings
-**Status:** BETA POLISHED - Ready for seekers!
+**Build:** v58-council-deliberation
+**Status:** BETA POLISHED - Council MVP ready!
 
 ---
 
@@ -15,7 +15,9 @@ ApexAurum Cloud is fully functional and polished:
 - Tier-based feature visibility working
 - Message counting across ALL features (chat, spawn, council)
 - Graceful error handling throughout
-- Neural page with WebGL fallback
+- Neural page with WebGL fallback (3D fix deployed!)
+- Local embeddings via FastEmbed (no external API needed)
+- **Council deliberation backend MVP ready** (frontend next)
 
 **Pricing:** Seeker $3 | Alchemist $10 | Adept $30
 
@@ -102,11 +104,26 @@ ApexAurum Cloud is fully functional and polished:
 - Auto-migration handles dimension changes (drops old embeddings if dimension changes)
 - **Product vision:** Private memory instances for users' AI systems
 
+### 3. Council Deliberation MVP - COMPLETE
+- **Multi-agent group chat from OG ApexAurum brought to Cloud!**
+- New models: `DeliberationSession`, `SessionAgent`, `DeliberationRound`, `SessionMessage`
+- REST API endpoints for sessions and round execution
+- Parallel agent execution using `asyncio.gather`
+- Round-based context building (agents see previous discussion)
+- Per-agent token tracking and billing integration
+- Endpoints:
+  - `POST /api/v1/council/sessions` - Create session
+  - `GET /api/v1/council/sessions` - List sessions
+  - `GET /api/v1/council/sessions/{id}` - Get details with all rounds
+  - `POST /api/v1/council/sessions/{id}/round` - Execute deliberation round
+  - `DELETE /api/v1/council/sessions/{id}` - Delete session
+- **Frontend UI coming next session**
+
 ---
 
 ## Latest Commit
 ```
-b4f496e Improve cortex diagnostic with embedding status
+0006612 Add Council deliberation MVP backend
 ```
 
 **Railway Token:** Working - deploys via API are functioning.
@@ -155,21 +172,24 @@ curl -s -X POST "https://backboard.railway.app/graphql/v2" \
 
 ## Remaining Tasks (Future Sessions)
 
-### Priority 1: Neural 3D View Bug Fix - COMPLETE (Session 4)
-- **Bug:** Vue 3 Proxy conflict with Three.js `modelViewMatrix`
-- **Error:** `TypeError: 'get' on proxy: property 'modelViewMatrix'`
-- **Fix:** Changed `ref()` to `shallowRef()` in `useThreeScene.js`
-- **Files:** `frontend/src/composables/useThreeScene.js`
-- Village GUI 3D works fine - only Neural view was affected
+### Priority 1: Council Frontend UI
+- Create `CouncilView.vue` - Main deliberation interface
+- Create `council.js` Pinia store with WebSocket support
+- Create `AgentCard.vue` component showing status and streaming
+- Create `RoundTimeline.vue` for visual round history
+- Add `/council` route and Navbar link
+- **Plan file:** `/home/hailo/.claude/plans/linear-brewing-sonnet.md`
 
-### Priority 2: Local Embeddings - COMPLETE (Session 4)
-- Added FastEmbed for local embedding generation (lighter than sentence-transformers)
-- Enables semantic search without external API keys
-- Model: BAAI/bge-small-en-v1.5 (384 dims)
-- Memories now store WITH embeddings by default
+### Priority 2: Council Advanced Features
+- Human "butt-in" capability mid-deliberation
+- Auto-deliberation mode (N rounds without user input)
+- Add/remove agents mid-session
+- Convergence detection
+- Village memory integration
+- Session persistence and history
 
 ### Priority 3: Nice-to-Have
-- Suno/Music API integration
+- Suno/Music API integration (ties into Village)
 - Coupon/admin freebies system
 - Admin dashboard for user management
 
@@ -203,12 +223,17 @@ curl -s -X POST "https://backboard.railway.app/graphql/v2" \
 | File | Changes |
 |------|---------|
 | `frontend/src/composables/useThreeScene.js` | Changed `ref()` to `shallowRef()` for Three.js objects |
-| `backend/app/main.py` | Updated version to v57, added local-embeddings feature |
+| `backend/app/main.py` | Updated version to v58, added council-deliberation feature |
 | `backend/app/services/embedding.py` | Added FastEmbed local embedding support |
 | `backend/app/config.py` | Changed default to local embeddings (384 dims) |
-| `backend/app/database.py` | Dynamic vector dimensions, auto-migration for dimension changes |
+| `backend/app/database.py` | Dynamic vector dimensions, auto-migration |
 | `backend/app/api/v1/cortex.py` | Enhanced diagnostic with embedding config info |
 | `backend/requirements.txt` | Added fastembed dependency |
+| `backend/app/models/council.py` | **NEW** - Council data models |
+| `backend/app/api/v1/council.py` | **NEW** - Council REST endpoints |
+| `backend/app/models/user.py` | Added deliberation_sessions relationship |
+| `backend/app/models/__init__.py` | Import council models |
+| `backend/app/api/v1/__init__.py` | Include council router |
 
 ## Key Files Modified (Session 3)
 
@@ -231,4 +256,4 @@ curl -s -X POST "https://backboard.railway.app/graphql/v2" \
 
 ---
 
-*"The Athanor burns pure. The gold awaits the seekers."*
+*"The Council convenes. The Athanor blazes. The gold multiplies."*
