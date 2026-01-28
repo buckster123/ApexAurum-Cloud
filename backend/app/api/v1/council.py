@@ -1340,6 +1340,26 @@ async def execute_agent_turn(
     if not base_prompt:
         base_prompt = f"You are {agent.agent_id}, an AI assistant with a distinct perspective."
 
+    # Inject Village memories (shared wisdom from past deliberations)
+    village_memory_block = ""
+    if user and db:
+        try:
+            neural = NeuralMemoryService(db)
+            village_memories = await neural.get_village_memories(
+                user_id=user.id,
+                topic=session.topic,  # Semantic search by topic
+                limit=5,
+                collection="council",
+            )
+            if village_memories:
+                village_memory_block = neural.format_village_memories_for_prompt(
+                    village_memories,
+                    max_chars=1500,
+                )
+                logger.debug(f"Injected {len(village_memories)} Village memories for {agent.agent_id}")
+        except Exception as e:
+            logger.warning(f"Failed to get Village memories: {e}")
+
     # Build deliberation system prompt with legitimizing preamble
     other_agents = [a.agent_id for a in session.agents if a.is_active and a.agent_id != agent.agent_id]
     other_agents_str = ", ".join(other_agents) if other_agents else "none"
@@ -1353,7 +1373,7 @@ Your responses should be thoughtful, substantive, and helpful. Stay true to your
 
 === YOUR PERSPECTIVE ===
 {base_prompt}
-
+{village_memory_block}
 === DELIBERATION CONTEXT ===
 Topic: "{session.topic}"
 Other participants: {other_agents_str}
@@ -1365,6 +1385,7 @@ Guidelines:
 - Move the discussion forward with new insights
 - Use tools when they would help analyze or research the topic
 - If consensus seems possible, propose specific wording
+- Draw on Village memories if they relate to this topic
 
 {f"Previous discussion:{chr(10)}{context}" if context else "This is Round 1. Share your initial thoughts on the topic."}
 """

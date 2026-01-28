@@ -204,6 +204,144 @@ class NeuralMemoryService:
         }
 
 
+    async def get_village_memories(
+        self,
+        user_id: UUID,
+        topic: Optional[str] = None,
+        limit: int = 10,
+        collection: str = "council",
+    ) -> list[dict]:
+        """
+        Retrieve Village-level memories (visibility='village') for context injection.
+
+        These are shared memories from past council discussions and other agents.
+        Can optionally do semantic search if topic is provided and embeddings exist.
+
+        Args:
+            user_id: The user's ID (memories are still user-scoped)
+            topic: Optional topic for semantic search
+            limit: Max memories to return
+            collection: Filter by collection (default: council)
+
+        Returns:
+            List of memory dicts with content, agent_id, created_at
+        """
+        try:
+            # If topic provided and embedding service available, do semantic search
+            if topic and self.embedding_service:
+                try:
+                    topic_embedding = await self.embedding_service.embed(topic)
+                    if topic_embedding:
+                        embedding_str = f"[{','.join(str(x) for x in topic_embedding)}]"
+                        result = await self.db.execute(
+                            text("""
+                                SELECT id, content, agent_id, created_at, message_type,
+                                       1 - (embedding <=> :topic_embedding::vector) as similarity
+                                FROM user_vectors
+                                WHERE user_id = :user_id
+                                  AND visibility = 'village'
+                                  AND collection = :collection
+                                  AND embedding IS NOT NULL
+                                ORDER BY embedding <=> :topic_embedding::vector
+                                LIMIT :limit
+                            """),
+                            {
+                                "user_id": user_id,
+                                "collection": collection,
+                                "topic_embedding": embedding_str,
+                                "limit": limit,
+                            }
+                        )
+                        rows = result.fetchall()
+                        return [
+                            {
+                                "id": str(row[0]),
+                                "content": row[1],
+                                "agent_id": row[2],
+                                "created_at": row[3].isoformat() if row[3] else None,
+                                "message_type": row[4],
+                                "similarity": float(row[5]) if row[5] else None,
+                            }
+                            for row in rows
+                        ]
+                except Exception as e:
+                    logger.warning(f"Semantic search failed, falling back to recency: {e}")
+
+            # Fallback: get most recent Village memories
+            result = await self.db.execute(
+                text("""
+                    SELECT id, content, agent_id, created_at, message_type
+                    FROM user_vectors
+                    WHERE user_id = :user_id
+                      AND visibility = 'village'
+                      AND collection = :collection
+                    ORDER BY created_at DESC
+                    LIMIT :limit
+                """),
+                {
+                    "user_id": user_id,
+                    "collection": collection,
+                    "limit": limit,
+                }
+            )
+            rows = result.fetchall()
+            return [
+                {
+                    "id": str(row[0]),
+                    "content": row[1],
+                    "agent_id": row[2],
+                    "created_at": row[3].isoformat() if row[3] else None,
+                    "message_type": row[4],
+                }
+                for row in rows
+            ]
+
+        except Exception as e:
+            logger.error(f"Failed to get village memories: {e}")
+            return []
+
+    def format_village_memories_for_prompt(
+        self,
+        memories: list[dict],
+        max_chars: int = 2000,
+    ) -> str:
+        """
+        Format Village memories into a prompt injection block.
+
+        Args:
+            memories: List of memory dicts from get_village_memories
+            max_chars: Maximum characters for the block
+
+        Returns:
+            Formatted string to append to system prompt
+        """
+        if not memories:
+            return ""
+
+        lines = [
+            "\n\n═══ THE VILLAGE MEMORY ═══",
+            "Shared wisdom from past deliberations and fellow agents:\n"
+        ]
+
+        total_chars = sum(len(l) for l in lines)
+
+        for mem in memories:
+            agent = mem.get("agent_id", "Unknown")
+            content = mem.get("content", "")[:500]  # Truncate individual memories
+            line = f"[{agent}]: {content}\n"
+
+            if total_chars + len(line) > max_chars:
+                lines.append("... (more memories available)")
+                break
+
+            lines.append(line)
+            total_chars += len(line)
+
+        lines.append("═══════════════════════════\n")
+
+        return "\n".join(lines)
+
+
 # Convenience function for use in chat.py
 async def store_chat_memory(
     db: AsyncSession,
