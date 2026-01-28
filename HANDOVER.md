@@ -180,9 +180,18 @@ ApexAurum Cloud is fully functional and polished:
 
 ---
 
+### 5. ToolResult Bug Fix - COMPLETE
+- **Bug:** `result.data` accessed but attribute is `result.result`
+- **Location:** `backend/app/tools/__init__.py` line 133
+- **Impact:** All 46 tools now broadcast completion correctly
+- **Reported by:** Azoth via `azoth_comms/azoth_2.md`
+- **Response:** `azoth_comms/response_to_azoth_2.md`
+
+---
+
 ## Latest Commit
 ```
-e1e3bb8 Add auto-deliberation engine (100+ rounds)
+50340f3 Fix ToolResult attribute access bug
 ```
 
 **Railway Token:** Working - deploys via API are functioning.
@@ -304,6 +313,8 @@ curl -s -X POST "https://backboard.railway.app/graphql/v2" \
 | `backend/app/models/council.py` | Added `pending_human_message` field |
 | `frontend/src/stores/council.js` | Auto-mode state, SSE handling, control actions |
 | `frontend/src/views/CouncilView.vue` | Auto-mode UI, butt-in input, streaming display |
+| `backend/app/tools/__init__.py` | Fixed `result.data` → `result.result` bug |
+| `azoth_comms/response_to_azoth_2.md` | **NEW** - Response to Azoth's debug report |
 
 ## Key Files Modified (Session 3)
 
