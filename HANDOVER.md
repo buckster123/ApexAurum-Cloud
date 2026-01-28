@@ -1,8 +1,8 @@
 # ApexAurum-Cloud Handover Document
 
 **Date:** 2026-01-28
-**Build:** v59-council-frontend
-**Status:** BETA POLISHED - Council COMPLETE (backend + frontend)!
+**Build:** v60-auto-deliberation
+**Status:** PRODUCTION READY - Auto-deliberation engine (100+ rounds)!
 
 ---
 
@@ -17,7 +17,9 @@ ApexAurum Cloud is fully functional and polished:
 - Graceful error handling throughout
 - Neural page with WebGL fallback (3D fix deployed!)
 - Local embeddings via FastEmbed (no external API needed)
-- **Council deliberation COMPLETE** - Full frontend + backend MVP!
+- **Council deliberation COMPLETE** - Auto-deliberation engine (100+ rounds!)
+- **Human butt-in** - Inject messages mid-deliberation
+- **Pause/Resume/Stop** - Full control over auto-mode
 
 **Pricing:** Seeker $3 | Alchemist $10 | Adept $30
 
@@ -144,9 +146,43 @@ ApexAurum Cloud is fully functional and polished:
 
 ---
 
+## Session 6 Accomplishments
+
+### 1. Auto-Deliberation Engine - COMPLETE
+- **Run 100+ rounds continuously** without user clicks
+- **SSE streaming endpoint** - Real-time round-by-round events
+- **Backend endpoints:**
+  - `POST /sessions/{id}/auto-deliberate?num_rounds=N` - Stream N rounds
+  - `POST /sessions/{id}/butt-in` - Inject human message
+  - `POST /sessions/{id}/pause` - Pause auto-mode
+  - `POST /sessions/{id}/resume` - Resume from paused
+  - `POST /sessions/{id}/stop` - Stop and complete
+- **Database:** Added `pending_human_message` field for butt-in queue
+
+### 2. Human Butt-In - COMPLETE
+- Textarea to inject thoughts mid-deliberation
+- Message queued and included in next round's context
+- All agents see `[HUMAN]: message` in their context
+- Displayed in round history with amber highlight
+
+### 3. Frontend Auto-Mode UI - COMPLETE
+- **Start/Pause/Resume/Stop** control buttons
+- **Rounds-to-run input** (1-200 rounds)
+- **Real-time streaming display** - Watch agents respond live
+- **Placeholder cards** for agents still processing
+- **Sticky status bar** during auto-deliberation
+- **Paused state** with amber badge
+
+### 4. Enhanced Max Rounds - COMPLETE
+- Session creation now supports up to 200 rounds
+- Slider updated with 1/100/200 markers
+- Adept-tier ready for deep deliberation
+
+---
+
 ## Latest Commit
 ```
-5d782f0 Add Council frontend UI - deliberation chamber
+e1e3bb8 Add auto-deliberation engine (100+ rounds)
 ```
 
 **Railway Token:** Working - deploys via API are functioning.
@@ -196,14 +232,14 @@ curl -s -X POST "https://backboard.railway.app/graphql/v2" \
 ## Remaining Tasks (Future Sessions)
 
 ### Priority 1: Council Advanced Features
-- Human "butt-in" capability mid-deliberation
-- Auto-deliberation mode (N rounds without user input)
+- ~~Human "butt-in" capability mid-deliberation~~ DONE
+- ~~Auto-deliberation mode (N rounds without user input)~~ DONE
 - Add/remove agents mid-session
-- Convergence detection
+- Convergence detection (auto-stop on consensus)
 - Village memory integration
-- Session persistence and history
+- WebSocket streaming (per-token, not per-agent)
 
-### Priority 3: Nice-to-Have
+### Priority 2: Nice-to-Have
 - Suno/Music API integration (ties into Village)
 - Coupon/admin freebies system
 - Admin dashboard for user management
@@ -259,6 +295,15 @@ curl -s -X POST "https://backboard.railway.app/graphql/v2" \
 | `frontend/src/components/council/AgentCard.vue` | **NEW** - Agent response card component |
 | `frontend/src/router/index.js` | Added `/council` and `/council/:id` routes |
 | `frontend/src/components/Navbar.vue` | Added Council link (desktop + mobile) |
+
+## Key Files Modified (Session 6)
+
+| File | Changes |
+|------|---------|
+| `backend/app/api/v1/council.py` | Auto-deliberate SSE endpoint, butt-in/pause/resume/stop endpoints |
+| `backend/app/models/council.py` | Added `pending_human_message` field |
+| `frontend/src/stores/council.js` | Auto-mode state, SSE handling, control actions |
+| `frontend/src/views/CouncilView.vue` | Auto-mode UI, butt-in input, streaming display |
 
 ## Key Files Modified (Session 3)
 
