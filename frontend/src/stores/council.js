@@ -270,6 +270,49 @@ export const useCouncilStore = defineStore('council', () => {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════════
+  // AGENT MANAGEMENT - Add/Remove agents mid-session
+  // ═══════════════════════════════════════════════════════════════════════════════
+
+  async function addAgentToSession(agentId) {
+    if (!currentSession.value) return null
+
+    try {
+      const response = await api.post(
+        `/api/v1/council/sessions/${currentSession.value.id}/agents`,
+        { agent_id: agentId }
+      )
+
+      // Reload session to get updated agents list
+      await loadSession(currentSession.value.id)
+
+      return response.data
+    } catch (e) {
+      console.error('Failed to add agent:', e)
+      error.value = e.response?.data?.detail || 'Failed to add agent'
+      return null
+    }
+  }
+
+  async function removeAgentFromSession(agentId) {
+    if (!currentSession.value) return null
+
+    try {
+      const response = await api.delete(
+        `/api/v1/council/sessions/${currentSession.value.id}/agents/${agentId}`
+      )
+
+      // Reload session to get updated agents list
+      await loadSession(currentSession.value.id)
+
+      return response.data
+    } catch (e) {
+      console.error('Failed to remove agent:', e)
+      error.value = e.response?.data?.detail || 'Failed to remove agent'
+      return null
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════════
   // AUTO-DELIBERATION ACTIONS
   // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -515,6 +558,9 @@ export const useCouncilStore = defineStore('council', () => {
     clearMemorial,
     toggleAgent,
     clearError,
+    // Agent management actions
+    addAgentToSession,
+    removeAgentFromSession,
     // Auto-deliberation actions
     startAutoDeliberation,
     stopAutoDeliberation,

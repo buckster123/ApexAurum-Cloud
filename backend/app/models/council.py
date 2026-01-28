@@ -67,10 +67,14 @@ class SessionAgent(Base):
     session_id: Mapped[UUID] = mapped_column(ForeignKey("deliberation_sessions.id", ondelete="CASCADE"))
 
     # Agent info
-    agent_id: Mapped[str] = mapped_column(String(50))  # AZOTH, VAJRA, ELYSIAN, KETHER, CLAUDE, or custom ID
+    agent_id: Mapped[str] = mapped_column(String(50))  # AZOTH, VAJRA, ELYSIAN, KETHER, or custom ID
     display_name: Mapped[Optional[str]] = mapped_column(String(100))
     persona_override: Mapped[Optional[str]] = mapped_column(Text)  # Override system prompt for this session
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    # Mid-session join/leave tracking
+    joined_at_round: Mapped[Optional[int]] = mapped_column(Integer, default=0)  # Round when agent joined (0 = from start)
+    left_at_round: Mapped[Optional[int]] = mapped_column(Integer)  # Round when agent left (None = still active)
 
     # Per-agent cost tracking
     input_tokens: Mapped[int] = mapped_column(Integer, default=0)

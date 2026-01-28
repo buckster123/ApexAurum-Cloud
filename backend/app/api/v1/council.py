@@ -180,6 +180,17 @@ class ButtInRequest(BaseModel):
     message: str
 
 
+class AddAgentRequest(BaseModel):
+    agent_id: str
+
+
+class AgentModifyResponse(BaseModel):
+    session_id: UUID
+    agent_id: str
+    action: str  # "added" or "removed"
+    active_agents: list[str]
+
+
 # ============================================================================
 # Endpoints
 # ============================================================================
@@ -696,6 +707,158 @@ async def delete_session(
     await db.commit()
 
     return {"status": "deleted"}
+
+
+# ============================================================================
+# Agent Management Endpoints (Add/Remove Mid-Session)
+# ============================================================================
+
+@router.post("/sessions/{session_id}/agents", response_model=AgentModifyResponse)
+async def add_agent_to_session(
+    session_id: UUID,
+    request: AddAgentRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Add an agent to an active deliberation session.
+
+    The new agent will participate in future rounds. They receive
+    context about previous discussion through the round history.
+    """
+    # Validate agent ID
+    native_agents = ["AZOTH", "ELYSIAN", "VAJRA", "KETHER"]
+    if request.agent_id not in native_agents:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid agent: {request.agent_id}. Available agents: {native_agents}"
+        )
+
+    # Get session with agents
+    result = await db.execute(
+        select(DeliberationSession)
+        .options(selectinload(DeliberationSession.agents))
+        .where(DeliberationSession.id == session_id)
+        .where(DeliberationSession.user_id == user.id)
+    )
+    session = result.scalar_one_or_none()
+
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    if session.state == "complete":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot add agents to a completed session"
+        )
+
+    # Check if agent already in session
+    existing_agent_ids = [a.agent_id for a in session.agents]
+    if request.agent_id in existing_agent_ids:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"{request.agent_id} is already in this session"
+        )
+
+    # Add the new agent
+    new_agent = SessionAgent(
+        session_id=session.id,
+        agent_id=request.agent_id,
+        display_name=request.agent_id,
+        is_active=True,
+        joined_at_round=session.current_round,  # Track when they joined
+    )
+    db.add(new_agent)
+    await db.commit()
+
+    # Get updated agent list
+    result = await db.execute(
+        select(SessionAgent)
+        .where(SessionAgent.session_id == session_id)
+        .where(SessionAgent.is_active == True)
+    )
+    active_agents = [a.agent_id for a in result.scalars().all()]
+
+    return AgentModifyResponse(
+        session_id=session_id,
+        agent_id=request.agent_id,
+        action="added",
+        active_agents=active_agents,
+    )
+
+
+@router.delete("/sessions/{session_id}/agents/{agent_id}", response_model=AgentModifyResponse)
+async def remove_agent_from_session(
+    session_id: UUID,
+    agent_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Remove an agent from an active deliberation session.
+
+    The agent is marked as inactive (soft delete) so their previous
+    contributions remain in the round history.
+    """
+    # Get session with agents
+    result = await db.execute(
+        select(DeliberationSession)
+        .options(selectinload(DeliberationSession.agents))
+        .where(DeliberationSession.id == session_id)
+        .where(DeliberationSession.user_id == user.id)
+    )
+    session = result.scalar_one_or_none()
+
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    if session.state == "complete":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot remove agents from a completed session"
+        )
+
+    # Find the agent in session
+    target_agent = None
+    active_count = 0
+    for agent in session.agents:
+        if agent.is_active:
+            active_count += 1
+        if agent.agent_id == agent_id and agent.is_active:
+            target_agent = agent
+
+    if not target_agent:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"{agent_id} is not an active agent in this session"
+        )
+
+    # Don't allow removing the last agent
+    if active_count <= 1:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot remove the last agent from a session"
+        )
+
+    # Soft delete - mark as inactive
+    target_agent.is_active = False
+    target_agent.left_at_round = session.current_round
+    await db.commit()
+
+    # Get updated agent list
+    result = await db.execute(
+        select(SessionAgent)
+        .where(SessionAgent.session_id == session_id)
+        .where(SessionAgent.is_active == True)
+    )
+    active_agents = [a.agent_id for a in result.scalars().all()]
+
+    return AgentModifyResponse(
+        session_id=session_id,
+        agent_id=agent_id,
+        action="removed",
+        active_agents=active_agents,
+    )
 
 
 # ============================================================================

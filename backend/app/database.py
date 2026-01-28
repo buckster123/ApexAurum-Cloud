@@ -383,6 +383,29 @@ async def init_db():
                 RAISE NOTICE 'Council model migration skipped';
             END $$;
             """,
+            # ═══════════════════════════════════════════════════════════════════════
+            # COUNCIL DELIBERATION - v75: Mid-session agent management
+            # Add joined_at_round and left_at_round columns to session_agents
+            # ═══════════════════════════════════════════════════════════════════════
+            """
+            DO $$
+            BEGIN
+                IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'session_agents') THEN
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                                   WHERE table_name = 'session_agents' AND column_name = 'joined_at_round') THEN
+                        ALTER TABLE session_agents ADD COLUMN joined_at_round INTEGER DEFAULT 0;
+                        RAISE NOTICE 'Added joined_at_round column to session_agents';
+                    END IF;
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                                   WHERE table_name = 'session_agents' AND column_name = 'left_at_round') THEN
+                        ALTER TABLE session_agents ADD COLUMN left_at_round INTEGER;
+                        RAISE NOTICE 'Added left_at_round column to session_agents';
+                    END IF;
+                END IF;
+            EXCEPTION WHEN OTHERS THEN
+                RAISE NOTICE 'Council agent management migration skipped';
+            END $$;
+            """,
         ]
 
         from sqlalchemy import text

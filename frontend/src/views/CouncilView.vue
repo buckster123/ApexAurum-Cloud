@@ -19,9 +19,19 @@ const council = useCouncilStore()
 const showNewSession = ref(false)
 const sidebarCollapsed = ref(false)
 const autoRoundsToRun = ref(10)  // Rounds to run in auto mode
+const showAddAgentDropdown = ref(false)
 
 // Computed
 const hasSession = computed(() => council.currentSession !== null)
+
+// Agents available to add (not already in session)
+const availableAgentsToAdd = computed(() => {
+  if (!council.currentSession) return []
+  const activeAgentIds = council.currentSession.agents
+    .filter(a => a.is_active)
+    .map(a => a.agent_id)
+  return AVAILABLE_AGENTS.filter(a => !activeAgentIds.includes(a.id))
+})
 
 const canStartAuto = computed(() => {
   if (!council.currentSession) return false
@@ -91,6 +101,17 @@ async function handleStopSession() {
 
 async function handleSubmitButtIn() {
   await council.submitButtIn()
+}
+
+async function handleAddAgent(agentId) {
+  showAddAgentDropdown.value = false
+  await council.addAgentToSession(agentId)
+}
+
+async function handleRemoveAgent(agentId) {
+  if (confirm(`Remove ${agentId} from the deliberation?`)) {
+    await council.removeAgentFromSession(agentId)
+  }
 }
 
 function handleNewSession() {
@@ -485,16 +506,56 @@ function getStateClass(state) {
             ></div>
           </div>
 
-          <!-- Agent Roster -->
-          <div class="flex gap-2 mt-3">
+          <!-- Agent Roster (with add/remove controls) -->
+          <div class="flex flex-wrap gap-2 mt-3 items-center">
+            <!-- Current agents -->
             <div
-              v-for="agent in council.currentSession.agents"
+              v-for="agent in council.currentSession.agents.filter(a => a.is_active)"
               :key="agent.agent_id"
-              class="flex items-center gap-2 px-3 py-1 rounded-full text-sm"
+              class="flex items-center gap-2 px-3 py-1 rounded-full text-sm group"
               :style="{ backgroundColor: getAgentColor(agent.agent_id) + '20', color: getAgentColor(agent.agent_id) }"
             >
               <span class="font-medium">{{ agent.agent_id }}</span>
               <span class="text-xs opacity-70">{{ agent.input_tokens + agent.output_tokens }} tok</span>
+              <!-- Remove button (only if not complete and more than 1 active agent) -->
+              <button
+                v-if="council.currentSession.state !== 'complete' && council.currentSession.agents.filter(a => a.is_active).length > 1"
+                @click="handleRemoveAgent(agent.agent_id)"
+                class="opacity-0 group-hover:opacity-100 ml-1 hover:text-red-400 transition-opacity"
+                title="Remove from session"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                  <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
+                </svg>
+              </button>
+            </div>
+
+            <!-- Add agent dropdown (if not complete and agents available) -->
+            <div v-if="council.currentSession.state !== 'complete' && availableAgentsToAdd.length > 0" class="relative">
+              <button
+                @click="showAddAgentDropdown = !showAddAgentDropdown"
+                class="flex items-center gap-1 px-3 py-1 rounded-full text-sm bg-apex-dark/50 text-gray-400 hover:text-gold hover:bg-apex-dark transition-colors border border-dashed border-apex-border hover:border-gold"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                  <path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd" />
+                </svg>
+                Add Agent
+              </button>
+              <!-- Dropdown -->
+              <div
+                v-if="showAddAgentDropdown"
+                class="absolute top-full left-0 mt-1 bg-apex-card border border-apex-border rounded-lg shadow-xl z-10 py-1 min-w-[150px]"
+              >
+                <button
+                  v-for="agent in availableAgentsToAdd"
+                  :key="agent.id"
+                  @click="handleAddAgent(agent.id)"
+                  class="w-full px-3 py-2 text-left text-sm hover:bg-apex-dark/50 flex items-center gap-2"
+                  :style="{ color: getAgentColor(agent.id) }"
+                >
+                  <span class="font-medium">{{ agent.name }}</span>
+                </button>
+              </div>
             </div>
           </div>
         </header>
