@@ -16,6 +16,7 @@ from app.models.memory import Memory
 from app.models.music import MusicTask
 from app.models.agent_memory import AgentMemory
 from app.models.billing import Subscription, CreditBalance, CreditTransaction, WebhookEvent
+from app.models.council import DeliberationSession, SessionAgent, DeliberationRound, SessionMessage
 
 # User references all of the above, so import LAST
 from app.models.user import User
@@ -35,5 +36,9 @@ __all__ = [
     "CreditBalance",
     "CreditTransaction",
     "WebhookEvent",
+    "DeliberationSession",
+    "SessionAgent",
+    "DeliberationRound",
+    "SessionMessage",
     # "UserVector",  # Temp disabled
 ]

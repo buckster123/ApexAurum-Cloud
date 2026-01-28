@@ -51,7 +51,7 @@ async def lifespan(app: FastAPI):
     """Application lifespan manager."""
     # Startup
     print("=" * 50)
-    print("ApexAurum Cloud v57 - Local Embeddings")
+    print("ApexAurum Cloud v58 - Council Deliberation")
     print("=" * 50)
 
     # Import all models before database init to ensure SQLAlchemy
@@ -120,7 +120,7 @@ async def health_check():
     return {
         "status": "healthy",
         "version": "0.1.0",
-        "build": "v57-local-embeddings",
+        "build": "v58-council-deliberation",
         "agents": {
             "native": 5,
             "pac": 4,
@@ -157,6 +157,7 @@ async def health_check():
             "billing-credits",
             "stripe-integration",
             "local-embeddings",
+            "council-deliberation",
         ],
     }
 

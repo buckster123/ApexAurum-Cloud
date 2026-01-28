@@ -1,0 +1,559 @@
+"""
+Council API - The Deliberation Chamber
+
+Multi-agent deliberation with parallel execution and streaming.
+"""
+
+import asyncio
+import logging
+from datetime import datetime
+from typing import Optional
+from uuid import UUID, uuid4
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+
+from app.database import get_db
+from app.models.user import User
+from app.models.council import (
+    DeliberationSession, SessionAgent, DeliberationRound, SessionMessage
+)
+from app.auth.deps import get_current_user
+from app.services.claude import ClaudeService
+from app.services.billing import BillingService
+from app.config import get_settings
+from app.api.v1.chat import load_native_prompt  # Reuse prompt loading
+
+settings = get_settings()
+logger = logging.getLogger(__name__)
+router = APIRouter(prefix="/council", tags=["Council"])
+
+# Use Haiku for fast deliberation
+COUNCIL_MODEL = "claude-haiku-4-5-20251001"
+
+# Agent colors for UI
+AGENT_COLORS = {
+    "AZOTH": "#00ffaa",
+    "ELYSIAN": "#ff69b4",
+    "VAJRA": "#ffcc00",
+    "KETHER": "#9370db",
+    "CLAUDE": "#4fc3f7",
+}
+
+# Get Claude service singleton
+_claude_service = None
+
+def get_claude_service() -> ClaudeService:
+    global _claude_service
+    if _claude_service is None:
+        _claude_service = ClaudeService()
+    return _claude_service
+
+
+# ============================================================================
+# Schemas
+# ============================================================================
+
+class CreateSessionRequest(BaseModel):
+    topic: str
+    agents: list[str] = ["AZOTH", "VAJRA", "ELYSIAN"]
+    max_rounds: int = 10
+    use_tools: bool = False
+
+
+class AgentInfo(BaseModel):
+    agent_id: str
+    display_name: Optional[str]
+    is_active: bool
+    input_tokens: int
+    output_tokens: int
+
+
+class SessionResponse(BaseModel):
+    id: UUID
+    topic: str
+    state: str
+    mode: str
+    current_round: int
+    max_rounds: int
+    convergence_score: float
+    agents: list[AgentInfo]
+    total_cost_usd: float
+    created_at: str
+
+    class Config:
+        from_attributes = True
+
+
+class MessageResponse(BaseModel):
+    id: UUID
+    role: str
+    agent_id: Optional[str]
+    content: str
+    input_tokens: int
+    output_tokens: int
+    created_at: str
+
+
+class RoundResponse(BaseModel):
+    round_number: int
+    human_message: Optional[str]
+    convergence_score: float
+    messages: list[MessageResponse]
+    started_at: str
+    completed_at: Optional[str]
+
+
+class SessionDetailResponse(SessionResponse):
+    rounds: list[RoundResponse]
+
+
+class ExecuteRoundResponse(BaseModel):
+    round_number: int
+    messages: list[MessageResponse]
+    convergence_score: float
+    state: str  # running, complete
+
+
+# ============================================================================
+# Endpoints
+# ============================================================================
+
+@router.post("/sessions", response_model=SessionResponse)
+async def create_session(
+    request: CreateSessionRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Create a new deliberation session with selected agents."""
+    # Validate agents
+    valid_agents = ["AZOTH", "ELYSIAN", "VAJRA", "KETHER", "CLAUDE"]
+    for agent_id in request.agents:
+        if agent_id not in valid_agents:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid agent: {agent_id}. Valid agents: {valid_agents}"
+            )
+
+    if len(request.agents) < 1:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="At least one agent required"
+        )
+
+    # Create session
+    session = DeliberationSession(
+        user_id=user.id,
+        topic=request.topic,
+        max_rounds=request.max_rounds,
+        use_tools=request.use_tools,
+        state="pending",
+        mode="manual",
+    )
+    db.add(session)
+
+    # Add agents
+    for agent_id in request.agents:
+        agent = SessionAgent(
+            session_id=session.id,
+            agent_id=agent_id,
+            display_name=agent_id,  # Could enhance with custom names
+            is_active=True,
+        )
+        db.add(agent)
+        session.agents.append(agent)
+
+    await db.commit()
+    await db.refresh(session)
+
+    return SessionResponse(
+        id=session.id,
+        topic=session.topic,
+        state=session.state,
+        mode=session.mode,
+        current_round=session.current_round,
+        max_rounds=session.max_rounds,
+        convergence_score=session.convergence_score,
+        agents=[
+            AgentInfo(
+                agent_id=a.agent_id,
+                display_name=a.display_name,
+                is_active=a.is_active,
+                input_tokens=a.input_tokens,
+                output_tokens=a.output_tokens,
+            )
+            for a in session.agents
+        ],
+        total_cost_usd=session.total_cost_usd,
+        created_at=session.created_at.isoformat(),
+    )
+
+
+@router.get("/sessions", response_model=list[SessionResponse])
+async def list_sessions(
+    limit: int = 20,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """List user's deliberation sessions."""
+    result = await db.execute(
+        select(DeliberationSession)
+        .options(selectinload(DeliberationSession.agents))
+        .where(DeliberationSession.user_id == user.id)
+        .order_by(DeliberationSession.created_at.desc())
+        .limit(limit)
+    )
+    sessions = result.scalars().all()
+
+    return [
+        SessionResponse(
+            id=s.id,
+            topic=s.topic,
+            state=s.state,
+            mode=s.mode,
+            current_round=s.current_round,
+            max_rounds=s.max_rounds,
+            convergence_score=s.convergence_score,
+            agents=[
+                AgentInfo(
+                    agent_id=a.agent_id,
+                    display_name=a.display_name,
+                    is_active=a.is_active,
+                    input_tokens=a.input_tokens,
+                    output_tokens=a.output_tokens,
+                )
+                for a in s.agents
+            ],
+            total_cost_usd=s.total_cost_usd,
+            created_at=s.created_at.isoformat(),
+        )
+        for s in sessions
+    ]
+
+
+@router.get("/sessions/{session_id}", response_model=SessionDetailResponse)
+async def get_session(
+    session_id: UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get session details including all rounds and messages."""
+    result = await db.execute(
+        select(DeliberationSession)
+        .options(
+            selectinload(DeliberationSession.agents),
+            selectinload(DeliberationSession.rounds).selectinload(DeliberationRound.messages),
+        )
+        .where(DeliberationSession.id == session_id)
+        .where(DeliberationSession.user_id == user.id)
+    )
+    session = result.scalar_one_or_none()
+
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    return SessionDetailResponse(
+        id=session.id,
+        topic=session.topic,
+        state=session.state,
+        mode=session.mode,
+        current_round=session.current_round,
+        max_rounds=session.max_rounds,
+        convergence_score=session.convergence_score,
+        agents=[
+            AgentInfo(
+                agent_id=a.agent_id,
+                display_name=a.display_name,
+                is_active=a.is_active,
+                input_tokens=a.input_tokens,
+                output_tokens=a.output_tokens,
+            )
+            for a in session.agents
+        ],
+        total_cost_usd=session.total_cost_usd,
+        created_at=session.created_at.isoformat(),
+        rounds=[
+            RoundResponse(
+                round_number=r.round_number,
+                human_message=r.human_message,
+                convergence_score=r.convergence_score,
+                messages=[
+                    MessageResponse(
+                        id=m.id,
+                        role=m.role,
+                        agent_id=m.agent_id,
+                        content=m.content,
+                        input_tokens=m.input_tokens,
+                        output_tokens=m.output_tokens,
+                        created_at=m.created_at.isoformat(),
+                    )
+                    for m in sorted(r.messages, key=lambda x: x.created_at)
+                ],
+                started_at=r.started_at.isoformat(),
+                completed_at=r.completed_at.isoformat() if r.completed_at else None,
+            )
+            for r in sorted(session.rounds, key=lambda x: x.round_number)
+        ],
+    )
+
+
+@router.post("/sessions/{session_id}/round", response_model=ExecuteRoundResponse)
+async def execute_round(
+    session_id: UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Execute a single round of deliberation with all active agents."""
+    # Get session with agents
+    result = await db.execute(
+        select(DeliberationSession)
+        .options(
+            selectinload(DeliberationSession.agents),
+            selectinload(DeliberationSession.rounds).selectinload(DeliberationRound.messages),
+        )
+        .where(DeliberationSession.id == session_id)
+        .where(DeliberationSession.user_id == user.id)
+    )
+    session = result.scalar_one_or_none()
+
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    if session.state == "complete":
+        raise HTTPException(status_code=400, detail="Session already complete")
+
+    if session.current_round >= session.max_rounds:
+        session.state = "complete"
+        session.termination_reason = "max_rounds"
+        await db.commit()
+        raise HTTPException(status_code=400, detail="Max rounds reached")
+
+    # Create new round
+    round_number = session.current_round + 1
+    round_record = DeliberationRound(
+        session_id=session.id,
+        round_number=round_number,
+        started_at=datetime.utcnow(),
+    )
+    db.add(round_record)
+    await db.flush()  # Get round ID
+
+    # Build context from previous rounds
+    context = build_round_context(session, round_number)
+
+    # Get active agents
+    active_agents = [a for a in session.agents if a.is_active]
+
+    # Execute all agents in parallel
+    claude = get_claude_service()
+    tasks = []
+    for agent in active_agents:
+        tasks.append(
+            execute_agent_turn(
+                claude, session, round_record, agent, context, db
+            )
+        )
+
+    # Await all agents
+    agent_results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    # Process results and create messages
+    messages = []
+    total_round_input = 0
+    total_round_output = 0
+
+    for i, result in enumerate(agent_results):
+        agent = active_agents[i]
+        if isinstance(result, Exception):
+            logger.error(f"Agent {agent.agent_id} failed: {result}")
+            content = f"[Error: {str(result)}]"
+            input_tokens = 0
+            output_tokens = 0
+        else:
+            content = result["content"]
+            input_tokens = result["input_tokens"]
+            output_tokens = result["output_tokens"]
+
+        # Create message record
+        msg = SessionMessage(
+            session_id=session.id,
+            round_id=round_record.id,
+            role="agent",
+            agent_id=agent.agent_id,
+            content=content,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+        )
+        db.add(msg)
+        messages.append(msg)
+
+        # Update agent token counts
+        agent.input_tokens += input_tokens
+        agent.output_tokens += output_tokens
+        total_round_input += input_tokens
+        total_round_output += output_tokens
+
+    # Update session
+    session.current_round = round_number
+    session.total_input_tokens += total_round_input
+    session.total_output_tokens += total_round_output
+    session.state = "running"
+
+    # Simple cost estimate (Haiku pricing: $0.25/1M input, $1.25/1M output)
+    session.total_cost_usd += (total_round_input * 0.25 + total_round_output * 1.25) / 1_000_000
+
+    # Complete round
+    round_record.completed_at = datetime.utcnow()
+
+    # Check if max rounds reached
+    new_state = session.state
+    if session.current_round >= session.max_rounds:
+        session.state = "complete"
+        session.termination_reason = "max_rounds"
+        new_state = "complete"
+
+    await db.commit()
+
+    # Record billing
+    if settings.stripe_secret_key and (total_round_input > 0 or total_round_output > 0):
+        try:
+            billing = BillingService(db)
+            await billing.record_message_usage(
+                user_id=user.id,
+                provider="anthropic",
+                model=COUNCIL_MODEL,
+                input_tokens=total_round_input,
+                output_tokens=total_round_output,
+            )
+            await db.commit()
+        except Exception as e:
+            logger.error(f"Failed to record council billing: {e}")
+
+    return ExecuteRoundResponse(
+        round_number=round_number,
+        messages=[
+            MessageResponse(
+                id=m.id,
+                role=m.role,
+                agent_id=m.agent_id,
+                content=m.content,
+                input_tokens=m.input_tokens,
+                output_tokens=m.output_tokens,
+                created_at=m.created_at.isoformat(),
+            )
+            for m in messages
+        ],
+        convergence_score=round_record.convergence_score,
+        state=new_state,
+    )
+
+
+@router.delete("/sessions/{session_id}")
+async def delete_session(
+    session_id: UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete a deliberation session."""
+    result = await db.execute(
+        select(DeliberationSession)
+        .where(DeliberationSession.id == session_id)
+        .where(DeliberationSession.user_id == user.id)
+    )
+    session = result.scalar_one_or_none()
+
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    await db.delete(session)
+    await db.commit()
+
+    return {"status": "deleted"}
+
+
+# ============================================================================
+# Helper Functions
+# ============================================================================
+
+def build_round_context(session: DeliberationSession, round_number: int) -> str:
+    """Build context from previous rounds for agent prompts."""
+    if round_number == 1:
+        return ""
+
+    context_parts = []
+    for round_rec in sorted(session.rounds, key=lambda r: r.round_number):
+        if round_rec.round_number >= round_number:
+            continue
+
+        round_messages = []
+        for msg in sorted(round_rec.messages, key=lambda m: m.created_at):
+            if msg.role == "agent":
+                round_messages.append(f"[{msg.agent_id}]: {msg.content}")
+            elif msg.role == "human":
+                round_messages.append(f"[HUMAN]: {msg.content}")
+
+        if round_messages:
+            context_parts.append(f"=== Round {round_rec.round_number} ===\n" + "\n\n".join(round_messages))
+
+    return "\n\n".join(context_parts)
+
+
+async def execute_agent_turn(
+    claude: ClaudeService,
+    session: DeliberationSession,
+    round_record: DeliberationRound,
+    agent: SessionAgent,
+    context: str,
+    db: AsyncSession,
+) -> dict:
+    """Execute a single agent's turn in the deliberation."""
+    # Get agent's base prompt
+    base_prompt = load_native_prompt(agent.agent_id, use_pac=False)
+
+    # Build deliberation system prompt
+    other_agents = [a.agent_id for a in session.agents if a.is_active and a.agent_id != agent.agent_id]
+    other_agents_str = ", ".join(other_agents) if other_agents else "none"
+
+    system_prompt = f"""{base_prompt}
+
+=== DELIBERATION MODE ===
+You are participating in a group deliberation on this topic:
+"{session.topic}"
+
+Other agents in this discussion: {other_agents_str}
+
+Guidelines:
+- Be concise but substantive (2-3 paragraphs)
+- Reference other agents' points by name when relevant
+- Clearly state agreements and disagreements
+- Move the discussion forward with new insights
+- If consensus seems possible, propose specific wording
+
+{f"Previous discussion:{chr(10)}{context}" if context else "This is Round 1. Share your initial thoughts on the topic."}
+"""
+
+    # Call Claude
+    user_message = f"Round {round_record.round_number}: Share your perspective on the current state of the discussion."
+
+    response = await claude.chat(
+        messages=[{"role": "user", "content": user_message}],
+        model=COUNCIL_MODEL,
+        system=system_prompt,
+    )
+
+    # Extract content
+    content = ""
+    for block in response.get("content", []):
+        if block.get("text"):
+            content += block["text"]
+
+    usage = response.get("usage", {})
+
+    return {
+        "content": content,
+        "input_tokens": usage.get("input_tokens", 0),
+        "output_tokens": usage.get("output_tokens", 0),
+    }

@@ -55,6 +55,9 @@ class User(Base):
     folders = relationship("Folder", back_populates="user", cascade="all, delete-orphan")
     files = relationship("File", back_populates="user", cascade="all, delete-orphan")
 
+    # The Council - Deliberation Sessions
+    deliberation_sessions = relationship("DeliberationSession", back_populates="user", cascade="all, delete-orphan")
+
     # The Remembering Deep - Vector Storage
     # TODO: Re-enable after fixing import order
     # vectors = relationship("UserVector", cascade="all, delete-orphan", passive_deletes=True)
