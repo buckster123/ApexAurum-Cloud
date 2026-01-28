@@ -365,6 +365,24 @@ async def init_db():
                 RAISE NOTICE 'Council migration skipped';
             END $$;
             """,
+            # ═══════════════════════════════════════════════════════════════════════
+            # COUNCIL DELIBERATION - v71: Model selector
+            # Add model column for per-session model selection
+            # ═══════════════════════════════════════════════════════════════════════
+            """
+            DO $$
+            BEGIN
+                IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'deliberation_sessions') THEN
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                                   WHERE table_name = 'deliberation_sessions' AND column_name = 'model') THEN
+                        ALTER TABLE deliberation_sessions ADD COLUMN model VARCHAR(100) DEFAULT 'claude-haiku-4-5-20251001';
+                        RAISE NOTICE 'Added model column to deliberation_sessions';
+                    END IF;
+                END IF;
+            EXCEPTION WHEN OTHERS THEN
+                RAISE NOTICE 'Council model migration skipped';
+            END $$;
+            """,
         ]
 
         from sqlalchemy import text
