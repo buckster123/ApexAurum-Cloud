@@ -1,8 +1,8 @@
 # ApexAurum-Cloud Handover Document
 
 **Date:** 2026-01-28
-**Build:** v76-village-memory
-**Status:** PRODUCTION READY - Council P1 Complete! 🏛️
+**Build:** v78-admin-panel
+**Status:** PRODUCTION READY - Admin Panel + Coupons + Council P1 Complete! 🔥
 
 ---
 
@@ -21,6 +21,8 @@ ApexAurum Cloud is fully functional and polished:
 - **Human butt-in** - Inject messages mid-deliberation
 - **Pause/Resume/Stop** - Full control over auto-mode
 - **Graceful sessions** - Long wanders with friendly expiry handling
+- **Coupon System** - Promo codes for credits/tier upgrades
+- **Admin Panel** - Separate service for user/coupon management
 
 **Pricing:** Seeker $3 | Alchemist $10 | Adept $30
 
@@ -329,8 +331,8 @@ curl -s -X POST "https://backboard.railway.app/graphql/v2" \
 
 ### Priority 2: Nice-to-Have
 - Suno/Music API integration (ties into Village)
-- Coupon/admin freebies system
-- Admin dashboard for user management
+- ~~Coupon/admin freebies system~~ DONE (v77)
+- ~~Admin dashboard for user management~~ DONE (v78)
 
 ---
 
@@ -518,21 +520,66 @@ curl -s -X POST "https://backboard.railway.app/graphql/v2" \
 - Council agents now receive Village memories in system prompt
 - Agents can reference past council discussions and fellow agents' insights
 
+### Coupon System (v77) - COMPLETE
+- **Coupon + CouponRedemption models** in billing.py
+- **Coupon types:**
+  - `credit_bonus` - Add free credits to user balance
+  - `tier_upgrade` - Grant temporary tier access (X days of Adept)
+  - `subscription_discount` - % off (future Stripe integration)
+- **API endpoints:**
+  - `GET /billing/coupon/{code}` - Check validity
+  - `POST /billing/coupon/redeem` - Redeem coupon
+  - `POST /admin/coupons` - Create (admin only)
+  - `GET /admin/coupons` - List (admin only)
+  - `DELETE /admin/coupons/{code}` - Deactivate (admin only)
+- **User.is_admin** flag added for admin-only access
+- **Frontend:** Coupon input in BillingView with success/error feedback
+
+### Admin Panel (v78) - COMPLETE
+- **Separate service** in `admin/` folder - keeps admin hidden from users
+- **Deployment:** Own Railway service with secret/obscure URL
+- **Features:**
+  - Login with existing auth (requires is_admin=True)
+  - **Coupons tab:** Create, list, deactivate coupons
+  - **Users tab:** List, search, toggle admin, change tier directly
+  - **Stats tab:** User count, message count, tier breakdown
+- **Tech:** HTML + Tailwind CDN + vanilla JS (no build step)
+- **Backend endpoints:**
+  - `GET /admin/users` - List users with subscription info
+  - `PATCH /admin/users/{id}/admin` - Toggle admin status
+  - `PATCH /admin/users/{id}/tier` - Change user tier
+  - `GET /admin/stats` - System statistics
+
+### Admin Panel Deployment (Railway)
+1. Create new service → GitHub Repo → ApexAurum-Cloud
+2. Set **Root Directory:** `admin`
+3. Railway auto-detects Dockerfile, deploys nginx
+4. Note the secret URL (don't share publicly)
+5. Make yourself admin: `UPDATE users SET is_admin = TRUE WHERE email = 'you@email.com';`
+
 ### Key Files Modified (Session 10)
 
 | File | Changes |
 |------|---------|
-| `backend/app/main.py` | v74→v75→v76 |
+| `backend/app/main.py` | v74→v78 |
 | `backend/app/services/claude.py` | DEPRECATED_MODELS registry, memorial helpers |
 | `backend/app/services/neural_memory.py` | get_village_memories(), format_village_memories_for_prompt() |
 | `backend/app/api/v1/chat.py` | 410 Gone for deprecated models |
-| `backend/app/api/v1/council.py` | Deprecated check, add/remove agents endpoints, Village memory injection |
+| `backend/app/api/v1/council.py` | Deprecated check, add/remove agents, Village memory injection |
+| `backend/app/api/v1/billing.py` | Coupon endpoints (check, redeem, admin CRUD) |
+| `backend/app/api/v1/admin.py` | NEW - User management, stats endpoints |
+| `backend/app/models/billing.py` | Coupon, CouponRedemption models |
 | `backend/app/models/council.py` | joined_at_round, left_at_round columns |
-| `backend/app/database.py` | Migration for agent management columns |
-| `backend/app/config.py` | Updated Adept tier models |
-| `frontend/src/stores/council.js` | DEPRECATED_MODELS, memorial state, addAgent/removeAgent actions |
+| `backend/app/models/user.py` | is_admin flag |
+| `backend/app/schemas/billing.py` | Coupon request/response schemas |
+| `backend/app/database.py` | Migrations for coupons, is_admin |
+| `frontend/src/stores/billing.js` | checkCoupon, redeemCoupon actions |
+| `frontend/src/views/BillingView.vue` | Coupon input UI |
+| `frontend/src/stores/council.js` | DEPRECATED_MODELS, memorial state, addAgent/removeAgent |
 | `frontend/src/views/CouncilView.vue` | Memorial modal, agent management UI |
-| `docs/models-legacy-and-1M.md` | Available vs deprecated categorization |
+| `admin/index.html` | NEW - Admin panel SPA |
+| `admin/Dockerfile` | NEW - nginx container |
+| `admin/nginx.conf` | NEW - SPA routing config |
 
 ---
 
