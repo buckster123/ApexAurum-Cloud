@@ -1,7 +1,8 @@
 # Council Perfection Plan
 
 **Created:** 2026-01-28 (Session 8)
-**Status:** READY FOR EXECUTION
+**Updated:** 2026-01-28 (Session 9)
+**Status:** PHASE 1 COMPLETE
 **Goal:** Polish council to beta-ready perfection
 
 ---
@@ -23,7 +24,7 @@ Council is functional:
 
 ---
 
-## Phase 1: Tool Feedback (Priority 1)
+## Phase 1: Tool Feedback (Priority 1) ✅ COMPLETE
 
 ### 1.1 SSE Events for Tool Calls
 
@@ -328,12 +329,12 @@ if convergence_score > 0.8:
 
 ## Testing Checklist
 
-- [ ] Create session → succeeds
-- [ ] Run round with tools → tool calls visible in UI
-- [ ] Agent uses tool → result displayed
+- [x] Create session → succeeds (v66)
+- [x] Run round with tools → tool calls visible in UI (v67)
+- [x] Agent uses tool → result displayed (v67)
 - [ ] Memory injection → agent references user facts
 - [ ] Village access → agent references shared knowledge
-- [ ] Auto-deliberation → tools stream in real-time
+- [x] Auto-deliberation → tools stream in real-time (v67)
 - [ ] All 4 agents emerge (including Vajra with tools)
 
 ---

@@ -44,7 +44,7 @@ export const useCouncilStore = defineStore('council', () => {
   const isAutoDeliberating = ref(false)
   const autoDeliberationAbort = ref(null)  // AbortController
   const streamingRound = ref(null)  // Current round being streamed
-  const streamingAgents = ref({})  // {agentId: {content, tokens}} for real-time display
+  const streamingAgents = ref({})  // {agentId: {content, tokens, tools}} for real-time display
   const pendingButtIn = ref('')  // Human message to inject
 
   // ═══════════════════════════════════════════════════════════════════════════════
@@ -280,7 +280,22 @@ export const useCouncilStore = defineStore('council', () => {
                 content: data.content,
                 input_tokens: data.input_tokens,
                 output_tokens: data.output_tokens,
+                tools: [],  // Initialize tools array
               }
+            } else if (data.type === 'tool_call') {
+              // Add tool call to agent's tools array
+              if (!streamingAgents.value[data.agent_id]) {
+                streamingAgents.value[data.agent_id] = { content: '', tools: [] }
+              }
+              if (!streamingAgents.value[data.agent_id].tools) {
+                streamingAgents.value[data.agent_id].tools = []
+              }
+              streamingAgents.value[data.agent_id].tools.push({
+                name: data.tool,
+                input: data.input,
+                result: data.result,
+              })
+              console.log(`Agent ${data.agent_id} used tool: ${data.tool}`)
             } else if (data.type === 'human_message_injected') {
               console.log('Human message injected:', data.content)
               pendingButtIn.value = ''  // Clear the input

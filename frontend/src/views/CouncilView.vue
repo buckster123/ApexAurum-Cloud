@@ -497,6 +497,7 @@ function getStateClass(state) {
                 :output-tokens="data.output_tokens"
                 :color="getAgentColor(agentId)"
                 :is-streaming="true"
+                :tools="data.tools"
               />
               <!-- Placeholder cards for agents still processing -->
               <div
@@ -557,6 +558,7 @@ function getStateClass(state) {
                 :input-tokens="message.input_tokens"
                 :output-tokens="message.output_tokens"
                 :color="getAgentColor(message.agent_id)"
+                :tools="message.tool_calls"
               />
             </div>
           </div>

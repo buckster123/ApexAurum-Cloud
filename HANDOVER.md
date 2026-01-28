@@ -1,8 +1,8 @@
 # ApexAurum-Cloud Handover Document
 
 **Date:** 2026-01-28
-**Build:** v66-council-tools
-**Status:** PRODUCTION READY - Council with tools! Dev/Prod split ready.
+**Build:** v67-council-tool-feedback
+**Status:** PRODUCTION READY - Council tool feedback visible!
 
 ---
 
@@ -406,6 +406,42 @@ curl -s -X POST "https://backboard.railway.app/graphql/v2" \
 | `backend/app/auth/deps.py` | Error handling for malformed token payloads |
 | `frontend/src/services/api.js` | Graceful refresh retry, session-expired event |
 | `frontend/src/views/LoginView.vue` | Friendly amber notice on session expiry |
+
+## Session 9 Accomplishments
+
+### 1. Council Tool Feedback (Phase 1) - COMPLETE
+- **Tool calls now visible in UI!** No more invisible tool execution
+- `execute_agent_turn` returns tool_calls array with name/input/result
+- SSE events emitted: `tool_call` event after each `agent_complete`
+- Tool calls stored in SessionMessage `tool_calls` JSONB field
+- Frontend handles `tool_call` events in streaming state
+- AgentCard displays tools with cyan highlighting
+- Round history shows tools used by each agent
+
+### Backend Changes:
+- Added `ToolCallInfo` schema for API responses
+- `MessageResponse` now includes `tool_calls` array
+- Tool execution tracked: name, input, result (truncated to 500 chars)
+- Logger changed from `debug` to `info` for tool use visibility
+
+### Frontend Changes:
+- `council.js`: Handles `tool_call` SSE events, stores in `streamingAgents.tools`
+- `AgentCard.vue`: New `tools` prop, displays tool usage section
+- `CouncilView.vue`: Passes tools to AgentCard (streaming and history)
+
+---
+
+## Key Files Modified (Session 9)
+
+| File | Changes |
+|------|---------|
+| `backend/app/main.py` | v67-council-tool-feedback |
+| `backend/app/api/v1/council.py` | ToolCallInfo schema, tool tracking in execute_agent_turn, tool_call SSE events, tool_calls storage |
+| `frontend/src/stores/council.js` | Handle tool_call events, tools array in streamingAgents |
+| `frontend/src/components/council/AgentCard.vue` | tools prop, tool display UI |
+| `frontend/src/views/CouncilView.vue` | Pass tools prop to AgentCard |
+
+---
 
 ## Key Files Modified (Session 8)
 

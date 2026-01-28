@@ -32,6 +32,10 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  tools: {
+    type: Array,
+    default: () => [],
+  },
 })
 
 const totalTokens = computed(() => props.inputTokens + props.outputTokens)
@@ -76,6 +80,31 @@ const formattedContent = computed(() => {
       class="flex-1 text-sm text-gray-300 leading-relaxed prose prose-invert prose-sm max-w-none"
       v-html="formattedContent"
     ></div>
+
+    <!-- Tools Used -->
+    <div v-if="tools?.length" class="mt-3 pt-3 border-t border-apex-border/50">
+      <div class="flex items-center gap-1 mb-2 text-xs text-gray-500">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
+          <path fill-rule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clip-rule="evenodd" />
+        </svg>
+        <span>Tools used: {{ tools.length }}</span>
+      </div>
+      <div class="space-y-1">
+        <div
+          v-for="(tool, idx) in tools"
+          :key="idx"
+          class="text-xs bg-apex-dark/50 rounded px-2 py-1.5"
+        >
+          <div class="flex items-center gap-1">
+            <span class="text-cyan-400 font-mono">{{ tool.name }}</span>
+            <span v-if="tool.result" class="text-gray-500">→</span>
+            <span v-if="tool.result" class="text-gray-400 truncate flex-1" :title="tool.result">
+              {{ tool.result.length > 60 ? tool.result.slice(0, 60) + '...' : tool.result }}
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <!-- Footer -->
     <div class="flex items-center justify-between mt-3 pt-3 border-t border-apex-border text-xs text-gray-500">

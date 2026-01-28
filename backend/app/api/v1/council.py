@@ -91,6 +91,13 @@ class SessionResponse(BaseModel):
         from_attributes = True
 
 
+class ToolCallInfo(BaseModel):
+    """Info about a tool call made by an agent."""
+    name: str
+    input: Optional[dict] = None
+    result: Optional[str] = None
+
+
 class MessageResponse(BaseModel):
     id: UUID
     role: str
@@ -98,6 +105,7 @@ class MessageResponse(BaseModel):
     content: str
     input_tokens: int
     output_tokens: int
+    tool_calls: Optional[list[ToolCallInfo]] = None
     created_at: str
 
 
@@ -377,6 +385,14 @@ async def get_session(
                         content=m.content,
                         input_tokens=m.input_tokens,
                         output_tokens=m.output_tokens,
+                        tool_calls=[
+                            ToolCallInfo(
+                                name=tc.get("name"),
+                                input=tc.get("input"),
+                                result=tc.get("result"),
+                            )
+                            for tc in (m.tool_calls or [])
+                        ] if m.tool_calls else None,
                         created_at=m.created_at.isoformat(),
                     )
                     for m in sorted(r.messages, key=lambda x: x.created_at)
@@ -461,10 +477,12 @@ async def execute_round(
             content = f"[Error: {str(result)}]"
             input_tokens = 0
             output_tokens = 0
+            tool_calls = None
         else:
             content = result["content"]
             input_tokens = result["input_tokens"]
             output_tokens = result["output_tokens"]
+            tool_calls = result.get("tool_calls")
 
         # Create message record
         msg = SessionMessage(
@@ -473,6 +491,7 @@ async def execute_round(
             role="agent",
             agent_id=agent.agent_id,
             content=content,
+            tool_calls=tool_calls,  # Store tool calls
             input_tokens=input_tokens,
             output_tokens=output_tokens,
         )
@@ -531,6 +550,14 @@ async def execute_round(
                 content=m.content,
                 input_tokens=m.input_tokens,
                 output_tokens=m.output_tokens,
+                tool_calls=[
+                    ToolCallInfo(
+                        name=tc.get("name"),
+                        input=tc.get("input"),
+                        result=tc.get("result"),
+                    )
+                    for tc in (m.tool_calls or [])
+                ] if m.tool_calls else None,
                 created_at=m.created_at.isoformat(),
             )
             for m in messages
@@ -680,10 +707,12 @@ async def auto_deliberate(
                     content = f"[Error: {str(result)}]"
                     input_tokens = 0
                     output_tokens = 0
+                    tool_calls = None
                 else:
                     content = result["content"]
                     input_tokens = result["input_tokens"]
                     output_tokens = result["output_tokens"]
+                    tool_calls = result.get("tool_calls")
 
                 # Create message record
                 msg = SessionMessage(
@@ -692,6 +721,7 @@ async def auto_deliberate(
                     role="agent",
                     agent_id=agent.agent_id,
                     content=content,
+                    tool_calls=tool_calls,  # Store tool calls in message
                     input_tokens=input_tokens,
                     output_tokens=output_tokens,
                 )
@@ -705,6 +735,11 @@ async def auto_deliberate(
 
                 # Yield agent complete event
                 yield f"data: {json.dumps({'type': 'agent_complete', 'agent_id': agent.agent_id, 'content': content, 'input_tokens': input_tokens, 'output_tokens': output_tokens})}\n\n"
+
+                # Yield tool call events (for UI feedback)
+                if tool_calls:
+                    for tc in tool_calls:
+                        yield f"data: {json.dumps({'type': 'tool_call', 'agent_id': agent.agent_id, 'tool': tc['name'], 'input': tc.get('input'), 'result': tc.get('result')})}\n\n"
 
             # Update session
             session.current_round = round_number
@@ -998,6 +1033,7 @@ Guidelines:
     total_input_tokens = 0
     total_output_tokens = 0
     full_content = ""
+    all_tool_calls = []  # Track all tool calls for feedback
     max_tool_turns = 3  # Limit tool turns per agent per round
 
     for turn in range(max_tool_turns):
@@ -1030,7 +1066,28 @@ Guidelines:
         for tool_use in tool_uses:
             result = await tool_executor.execute_tool_use(tool_use)
             tool_results.append(result)
-            logger.debug(f"Agent {agent.agent_id} used tool {tool_use.get('name')}")
+
+            # Track tool call for feedback
+            # Extract result text from the tool_result structure
+            result_text = ""
+            if result.get("type") == "tool_result":
+                result_content = result.get("content", "")
+                if isinstance(result_content, str):
+                    result_text = result_content
+                elif isinstance(result_content, list):
+                    # Handle structured content
+                    for item in result_content:
+                        if isinstance(item, dict) and item.get("type") == "text":
+                            result_text += item.get("text", "")
+                        elif isinstance(item, str):
+                            result_text += item
+
+            all_tool_calls.append({
+                "name": tool_use.get("name"),
+                "input": tool_use.get("input"),
+                "result": result_text[:500] if result_text else None,  # Truncate long results
+            })
+            logger.info(f"Agent {agent.agent_id} used tool: {tool_use.get('name')}")
 
         messages.append({"role": "user", "content": tool_results})
 
@@ -1038,4 +1095,5 @@ Guidelines:
         "content": full_content,
         "input_tokens": total_input_tokens,
         "output_tokens": total_output_tokens,
+        "tool_calls": all_tool_calls if all_tool_calls else None,
     }
