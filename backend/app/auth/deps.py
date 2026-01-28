@@ -38,8 +38,17 @@ async def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    # Parse user ID from payload (with error handling for malformed tokens)
+    try:
+        user_id = UUID(payload["sub"])
+    except (KeyError, ValueError, TypeError):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token format",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
     # Get user from database
-    user_id = UUID(payload["sub"])
     result = await db.execute(
         select(User).where(User.id == user_id)
     )
