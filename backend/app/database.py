@@ -347,6 +347,24 @@ async def init_db():
                 RAISE NOTICE 'Neo-Cortex indexes skipped';
             END $$;
             """,
+            # ═══════════════════════════════════════════════════════════════════════
+            # COUNCIL DELIBERATION - v60: Butt-in support
+            # Add pending_human_message column for human intervention during auto-deliberation
+            # ═══════════════════════════════════════════════════════════════════════
+            """
+            DO $$
+            BEGIN
+                IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'deliberation_sessions') THEN
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                                   WHERE table_name = 'deliberation_sessions' AND column_name = 'pending_human_message') THEN
+                        ALTER TABLE deliberation_sessions ADD COLUMN pending_human_message TEXT;
+                        RAISE NOTICE 'Added pending_human_message column to deliberation_sessions';
+                    END IF;
+                END IF;
+            EXCEPTION WHEN OTHERS THEN
+                RAISE NOTICE 'Council migration skipped';
+            END $$;
+            """,
         ]
 
         from sqlalchemy import text
