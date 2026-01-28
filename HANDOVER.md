@@ -1,8 +1,8 @@
 # ApexAurum-Cloud Handover Document
 
 **Date:** 2026-01-28
-**Build:** v62-council-debug
-**Status:** PRODUCTION READY - Council fully operational!
+**Build:** v66-council-tools
+**Status:** PRODUCTION READY - Council with tools! Dev/Prod split ready.
 
 ---
 
@@ -229,9 +229,48 @@ ApexAurum Cloud is fully functional and polished:
 
 ---
 
+## Session 8 Accomplishments
+
+### 1. Council Async Bug Fix - COMPLETE
+- Fixed SQLAlchemy async lazy loading error in `create_session`
+- Changed from `session.agents.append()` to explicit flush + reload
+- Council sessions now create successfully
+
+### 2. Council Preamble for Model Acceptance - COMPLETE
+- Added legitimizing preamble before agent prompts
+- Establishes context as "product feature" not "roleplay"
+- Frames agents as "perspectives" for multi-angle analysis
+- 3/4 agents (Azoth, Elysian, Kether) now emerge properly
+
+### 3. Council Tools (The Athanor's Hands) - COMPLETE
+- `execute_agent_turn` now supports full tool calling loop
+- Tools enabled by default for all council sessions
+- Max 3 tool turns per agent per round (prevents infinite loops)
+- Should help remaining agent (Vajra) emerge with purpose
+
+### 4. Debranding (Removed "Claude") - COMPLETE
+- Model names: "Opus 4.5", "Sonnet 4.5", "Haiku 4.5" (no Claude prefix)
+- Removed CLAUDE from native agents - only 4 alchemical remain
+- Default agent: CLAUDE → AZOTH everywhere
+- Billing tier descriptions updated
+- Frontend cleaned of all CLAUDE agent references
+
+### 5. HTTPException CORS Handler - COMPLETE
+- HTTPException responses now include CORS headers
+- Frontend can see actual error details (not blocked by CORS)
+- Global exception handler shows error type for debugging
+
+### 6. Dev/Prod Environment Split - READY
+- Created `dev` branch for development deployments
+- Guide prepared for Railway project setup
+- Workflow: dev branch → Dev env, main branch → Prod env
+- Environment variables template ready
+
+---
+
 ## Latest Commit
 ```
-0f81b08 Enhance council diagnostic to show columns
+d35224d Add tools for council agents, remove Claude branding
 ```
 
 **Railway Token:** Working - deploys via API are functioning.
@@ -367,6 +406,23 @@ curl -s -X POST "https://backboard.railway.app/graphql/v2" \
 | `backend/app/auth/deps.py` | Error handling for malformed token payloads |
 | `frontend/src/services/api.js` | Graceful refresh retry, session-expired event |
 | `frontend/src/views/LoginView.vue` | Friendly amber notice on session expiry |
+
+## Key Files Modified (Session 8)
+
+| File | Changes |
+|------|---------|
+| `backend/app/main.py` | HTTPException CORS handler, v66-council-tools |
+| `backend/app/api/v1/council.py` | Async fix, tools support, preamble, user_id pass-through |
+| `backend/app/api/v1/chat.py` | Default agent CLAUDE→AZOTH, fallback prompt renamed |
+| `backend/app/api/v1/billing.py` | Model names debranded (Claude X → X) |
+| `backend/app/api/v1/prompts.py` | Removed CLAUDE from native agents |
+| `backend/app/services/claude.py` | Model names debranded |
+| `backend/app/services/llm_provider.py` | Model names debranded |
+| `frontend/src/stores/chat.js` | Default agent AZOTH |
+| `frontend/src/stores/council.js` | Removed CLAUDE, use_tools: true |
+| `frontend/src/views/ChatView.vue` | Removed CLAUDE from nativeAgents |
+| `frontend/src/views/SettingsView.vue` | Removed CLAUDE from agents |
+| `frontend/src/views/VillageView.vue` | Removed CLAUDE from agents |
 
 ## Key Files Modified (Session 3)
 
