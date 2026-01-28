@@ -120,7 +120,7 @@ async def health_check():
     return {
         "status": "healthy",
         "version": "0.1.0",
-        "build": "v58-council-deliberation",
+        "build": "v59-council-frontend",
         "agents": {
             "native": 5,
             "pac": 4,
