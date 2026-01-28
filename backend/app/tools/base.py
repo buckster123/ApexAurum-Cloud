@@ -23,6 +23,7 @@ class ToolCategory(str, Enum):
     AGENT = "agent"
     MUSIC = "music"
     BROWSER = "browser"
+    CREATIVE = "creative"  # Suno compiler, prompt engineering
 
 
 class ToolResult(BaseModel):

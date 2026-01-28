@@ -51,7 +51,7 @@ async def lifespan(app: FastAPI):
     """Application lifespan manager."""
     # Startup
     print("=" * 50)
-    print("ApexAurum Cloud v81 - !MUSIC Trigger")
+    print("ApexAurum Cloud v82 - Suno Compiler")
     print("=" * 50)
 
     # Import all models before database init to ensure SQLAlchemy
@@ -120,12 +120,12 @@ async def health_check():
     return {
         "status": "healthy",
         "version": "0.1.0",
-        "build": "v81-music-trigger",
+        "build": "v82-suno-compiler",
         "agents": {
             "native": 5,
             "pac": 4,
         },
-        "tools": 46,  # 11 Tiers! Neo-Cortex unified memory!
+        "tools": 48,  # 12 Tiers! Suno Compiler!
         "features": [
             "streaming",
             "pac-mode",
@@ -160,6 +160,7 @@ async def health_check():
             "council-deliberation",
             "suno-music",
             "apexXuno-frontend",
+            "suno-compiler",
         ],
     }
 
