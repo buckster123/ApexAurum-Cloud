@@ -51,7 +51,7 @@ async def lifespan(app: FastAPI):
     """Application lifespan manager."""
     # Startup
     print("=" * 50)
-    print("ApexAurum Cloud v63 - HTTPException CORS")
+    print("ApexAurum Cloud v64 - Council async fix")
     print("=" * 50)
 
     # Import all models before database init to ensure SQLAlchemy
@@ -120,7 +120,7 @@ async def health_check():
     return {
         "status": "healthy",
         "version": "0.1.0",
-        "build": "v63-httpexception-cors",
+        "build": "v64-council-async-fix",
         "agents": {
             "native": 5,
             "pac": 4,

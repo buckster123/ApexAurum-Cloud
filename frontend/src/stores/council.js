@@ -14,16 +14,14 @@ export const AGENT_COLORS = {
   ELYSIAN: '#ff69b4',
   VAJRA: '#ffcc00',
   KETHER: '#9370db',
-  CLAUDE: '#4fc3f7',
 }
 
-// Available agents for selection
+// Available agents for selection (4 native alchemical agents)
 export const AVAILABLE_AGENTS = [
   { id: 'AZOTH', name: 'Azoth', description: 'The Alchemist - Transformation & synthesis' },
   { id: 'VAJRA', name: 'Vajra', description: 'The Thunderbolt - Direct truth & clarity' },
   { id: 'ELYSIAN', name: 'Elysian', description: 'The Muse - Creativity & inspiration' },
   { id: 'KETHER', name: 'Kether', description: 'The Crown - Wisdom & higher perspective' },
-  { id: 'CLAUDE', name: 'Claude', description: 'The Assistant - Balanced reasoning' },
 ]
 
 export const useCouncilStore = defineStore('council', () => {

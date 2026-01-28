@@ -43,7 +43,6 @@ AGENT_COLORS = {
     "ELYSIAN": "#ff69b4",
     "VAJRA": "#ffcc00",
     "KETHER": "#9370db",
-    "CLAUDE": "#4fc3f7",
 }
 
 # Get Claude service singleton
@@ -192,13 +191,15 @@ async def create_session(
 ):
     """Create a new deliberation session with selected agents."""
     try:
-        # Validate agents
-        valid_agents = ["AZOTH", "ELYSIAN", "VAJRA", "KETHER", "CLAUDE"]
+        # Native agents (4 core + custom slots for emergent agents)
+        native_agents = ["AZOTH", "ELYSIAN", "VAJRA", "KETHER"]
+
+        # For now, only allow native agents (custom agents coming later)
         for agent_id in request.agents:
-            if agent_id not in valid_agents:
+            if agent_id not in native_agents:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Invalid agent: {agent_id}. Valid agents: {valid_agents}"
+                    detail=f"Invalid agent: {agent_id}. Available agents: {native_agents}"
                 )
 
         if len(request.agents) < 1:
@@ -217,20 +218,29 @@ async def create_session(
             mode="manual",
         )
         db.add(session)
+        await db.flush()  # Get session.id assigned
 
-        # Add agents
+        # Add agents (don't use relationship append - causes lazy loading in async)
+        agents_data = []
         for agent_id in request.agents:
             agent = SessionAgent(
                 session_id=session.id,
                 agent_id=agent_id,
-                display_name=agent_id,  # Could enhance with custom names
+                display_name=agent_id,
                 is_active=True,
             )
             db.add(agent)
-            session.agents.append(agent)
+            agents_data.append(agent)
 
         await db.commit()
-        await db.refresh(session)
+
+        # Reload session with agents eagerly loaded
+        result = await db.execute(
+            select(DeliberationSession)
+            .options(selectinload(DeliberationSession.agents))
+            .where(DeliberationSession.id == session.id)
+        )
+        session = result.scalar_one()
 
         return SessionResponse(
             id=session.id,
