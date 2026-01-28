@@ -39,6 +39,43 @@ router = APIRouter(prefix="/council", tags=["Council"])
 # Use Haiku for fast deliberation
 COUNCIL_MODEL = "claude-haiku-4-5-20251001"
 
+# Consensus detection phrases
+CONSENSUS_PHRASES = [
+    "we all agree",
+    "consensus reached",
+    "unanimous",
+    "we're aligned",
+    "we've reached agreement",
+    "common ground",
+    "we concur",
+    "agreement reached",
+    "shared conclusion",
+]
+
+
+def check_convergence(messages: list) -> float:
+    """
+    Check if agents are converging toward consensus.
+
+    Returns a score from 0.0 to 1.0:
+    - 0.0: No consensus indicators
+    - 1.0: All agents show consensus indicators
+
+    Simple keyword detection for now. Could be enhanced with
+    semantic similarity or LLM-based analysis.
+    """
+    if not messages:
+        return 0.0
+
+    agreement_count = 0
+    for msg in messages:
+        content = msg.content if hasattr(msg, 'content') else str(msg)
+        content_lower = content.lower()
+        if any(phrase in content_lower for phrase in CONSENSUS_PHRASES):
+            agreement_count += 1
+
+    return agreement_count / len(messages)
+
 # Agent colors for UI
 AGENT_COLORS = {
     "AZOTH": "#00ffaa",
@@ -517,12 +554,22 @@ async def execute_round(
     # Complete round
     round_record.completed_at = datetime.utcnow()
 
+    # Check for convergence (consensus detection)
+    convergence_score = check_convergence(messages)
+    round_record.convergence_score = convergence_score
+    session.convergence_score = convergence_score
+
     # Check if max rounds reached
     new_state = session.state
     if session.current_round >= session.max_rounds:
         session.state = "complete"
         session.termination_reason = "max_rounds"
         new_state = "complete"
+    elif convergence_score >= 0.8:
+        session.state = "complete"
+        session.termination_reason = "consensus"
+        new_state = "complete"
+        logger.info(f"Council {session.id} reached consensus at round {round_number} (score: {convergence_score})")
 
     await db.commit()
 
@@ -772,10 +819,24 @@ async def auto_deliberate(
             # Complete round
             round_record.completed_at = datetime.utcnow()
 
+            # Check for convergence (consensus detection)
+            convergence_score = check_convergence(round_messages)
+            round_record.convergence_score = convergence_score
+            session.convergence_score = convergence_score
+
             await db.commit()
 
             # Yield round complete event
-            yield f"data: {json.dumps({'type': 'round_complete', 'round_number': round_number, 'convergence_score': round_record.convergence_score, 'cost_usd': round_cost, 'total_cost_usd': session.total_cost_usd})}\n\n"
+            yield f"data: {json.dumps({'type': 'round_complete', 'round_number': round_number, 'convergence_score': convergence_score, 'cost_usd': round_cost, 'total_cost_usd': session.total_cost_usd})}\n\n"
+
+            # Check for consensus (auto-stop if high convergence)
+            if convergence_score >= 0.8:
+                session.state = "complete"
+                session.termination_reason = "consensus"
+                await db.commit()
+                yield f"data: {json.dumps({'type': 'consensus', 'score': convergence_score, 'round_number': round_number})}\n\n"
+                logger.info(f"Council {session.id} reached consensus at round {round_number} (score: {convergence_score})")
+                break
 
             # Store council messages in Neural memory (The Village)
             try:

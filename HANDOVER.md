@@ -1,8 +1,8 @@
 # ApexAurum-Cloud Handover Document
 
 **Date:** 2026-01-28
-**Build:** v69-council-neural-storage
-**Status:** PRODUCTION READY - Council with memory + neural storage!
+**Build:** v70-council-convergence
+**Status:** PRODUCTION READY - Council perfected (4/6 phases)!
 
 ---
 
@@ -431,6 +431,14 @@ curl -s -X POST "https://backboard.railway.app/graphql/v2" \
 - Session ID used as conversation_thread for grouping
 - Both manual and auto-deliberation store memories
 - NeuralMemoryService updated with visibility/collection params
+
+### 4. Convergence Detection (Phase 6) - COMPLETE
+- Auto-stop when agents reach consensus (80% threshold)
+- CONSENSUS_PHRASES keyword detection
+- `check_convergence()` function scores agent agreement
+- SSE 'consensus' event emitted when detected
+- Session terminated with `termination_reason='consensus'`
+- Works in both manual and auto-deliberation modes
 
 ### Backend Changes (Phase 1):
 - Added `ToolCallInfo` schema for API responses

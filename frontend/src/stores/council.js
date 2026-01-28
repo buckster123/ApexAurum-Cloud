@@ -316,6 +316,13 @@ export const useCouncilStore = defineStore('council', () => {
               }
             } else if (data.type === 'stopped') {
               console.log('Deliberation stopped at round:', data.round_number)
+            } else if (data.type === 'consensus') {
+              console.log('Consensus reached!', data)
+              if (currentSession.value) {
+                currentSession.value.state = 'complete'
+                currentSession.value.convergence_score = data.score
+              }
+              // Auto-deliberation will end after this
             } else if (data.type === 'end') {
               console.log('Auto-deliberation ended:', data)
               if (currentSession.value) {

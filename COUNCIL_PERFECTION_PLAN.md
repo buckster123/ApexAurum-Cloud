@@ -2,7 +2,7 @@
 
 **Created:** 2026-01-28 (Session 8)
 **Updated:** 2026-01-28 (Session 9)
-**Status:** PHASE 1+2+4 COMPLETE (Phase 3 skipped - agents have cortex_recall)
+**Status:** PHASE 1+2+4+6 COMPLETE! Only model selector remains.
 **Goal:** Polish council to beta-ready perfection
 
 ---
@@ -268,7 +268,7 @@ Add dropdown in CouncilView session creation form.
 
 ---
 
-## Phase 6: Convergence Detection (Nice to Have)
+## Phase 6: Convergence Detection (Nice to Have) ✅ COMPLETE
 
 ### 6.1 Simple Keyword Detection
 
