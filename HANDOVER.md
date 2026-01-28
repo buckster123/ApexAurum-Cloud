@@ -1,8 +1,8 @@
 # ApexAurum-Cloud Handover Document
 
 **Date:** 2026-01-28
-**Build:** v80-apexXuno-frontend
-**Status:** PRODUCTION READY - apexXuno Music Studio! The Athanor Sings!
+**Build:** v81-music-trigger
+**Status:** PRODUCTION READY - apexXuno with !MUSIC Trigger! The Athanor Sings!
 
 ---
 
@@ -337,7 +337,7 @@ curl -s -X POST "https://backboard.railway.app/graphql/v2" \
 
 ### Priority 3: Future Enhancements
 - ~~Music Frontend UI (library, player, generation form)~~ DONE (v80)
-- !MUSIC trigger in chat (agent creative mode)
+- ~~!MUSIC trigger in chat (agent creative mode)~~ DONE (v81)
 - Suno Prompt Compiler (advanced prompt engineering from OG ApexAurum)
 - MIDI → Suno composition pipeline (music_compose from OG)
 - Music → Village memory posting (cultural transmission)
@@ -687,6 +687,16 @@ curl -s -X POST "https://backboard.railway.app/graphql/v2" \
 - **Volume control** with persistence (localStorage)
 - **Example prompts** - Inspirational starting points
 
+### !MUSIC Trigger (v81) - COMPLETE
+- **`!MUSIC` command** in chat activates agent creative mode
+- **Auto-enables tools** when !MUSIC detected (no need to toggle)
+- **MUSIC_CREATION_CONTEXT** injection with composition guidelines
+- **Two modes:**
+  - `!MUSIC` alone → Full creative freedom, agent decides everything
+  - `!MUSIC ambient rain` → Agent expands user's prompt with rich details
+- Agent composes detailed prompts, style tags, and poetic titles
+- Uses `music_generate` tool automatically
+
 ### Key Files Created/Modified (Session 12):
 
 | File | Changes |
@@ -695,8 +705,9 @@ curl -s -X POST "https://backboard.railway.app/graphql/v2" \
 | `frontend/src/components/music/MusicPlayer.vue` | **NEW** - Sticky bottom player |
 | `frontend/src/views/MusicView.vue` | Upgraded with store, filters, SSE progress |
 | `frontend/src/App.vue` | Added MusicPlayer, bottom padding when active |
-| `backend/app/main.py` | v80-apexXuno-frontend |
-| `docs/SUNO_MASTERPLAN.md` | Updated status to Phase 1 Complete |
+| `backend/app/api/v1/chat.py` | !MUSIC trigger detection, MUSIC_CREATION_CONTEXT |
+| `backend/app/main.py` | v81-music-trigger |
+| `docs/SUNO_MASTERPLAN.md` | Updated status to Phase 1+2 Complete |
 
 ---
 

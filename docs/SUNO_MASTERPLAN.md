@@ -40,11 +40,17 @@ apexXuno transforms ApexAurum Cloud into a creative music platform where:
 - Real-time generation progress display
 - Audio playback with waveform animation
 
+### !MUSIC Trigger - COMPLETE (v81)
+- `!MUSIC` detected in chat messages
+- Auto-enables tools for music generation
+- MUSIC_CREATION_CONTEXT injection with creative guidelines
+- Full creative mode (no prompt) or expansion mode (user prompt)
+- Agent composes detailed prompts with style tags
+
 ### What's Missing
-- `!MUSIC` trigger in chat
 - Prompt compiler as tool
 - Village memory auto-injection
-- Agent creative expansion
+- Agent creative expansion (beyond basic)
 
 ---
 
@@ -455,7 +461,7 @@ the Athanor's voice now echoes through the digital realm.
 
 **Created:** Session 11 (2026-01-28)
 **Updated:** Session 12 (2026-01-28)
-**Status:** Phase 1 Complete (Frontend Music UI)
-**Next:** Phase 2 (!MUSIC Trigger in Chat)
+**Status:** Phase 1 + Phase 2 Complete (Frontend + !MUSIC Trigger)
+**Next:** Phase 3 (Prompt Compiler as Tool)
 
 *"The Council convenes. The Athanor blazes. The gold multiplies. The Athanor sings."*

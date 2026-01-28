@@ -68,6 +68,46 @@ NATIVE_AGENT_FILES = {
     "KETHER": "∴KETHER∴.txt",
 }
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# !MUSIC TRIGGER - Agent Creative Mode (apexXuno Phase 2)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+MUSIC_CREATION_CONTEXT = """
+[MUSIC CREATION MODE ACTIVATED - apexXuno]
+
+The user has invoked !MUSIC, requesting AI music creation via Suno.
+
+YOUR CREATIVE MISSION:
+{mission}
+
+COMPOSITION GUIDELINES:
+1. Create a vivid, detailed prompt (50-200 words) describing the music
+2. Include: mood, instruments, tempo, texture, emotional arc
+3. Add style tags (comma-separated): genre, subgenre, instruments, production style
+4. Generate a poetic title that captures the essence
+
+USE THE music_generate TOOL with these parameters:
+- prompt: Your detailed music description
+- style: Comma-separated style tags (e.g., "ambient, ethereal, synthesizer, slow, 432Hz")
+- title: A creative title for the track
+- model: "V5" (best quality)
+- instrumental: true (unless vocals specifically requested)
+
+STYLE TAG EXAMPLES:
+- Ambient: "ambient, ethereal, atmospheric, pad synths, reverb, slow evolution"
+- Electronic: "electronic, synth-wave, arpeggios, driving bass, pulsing"
+- Orchestral: "orchestral, cinematic, strings, brass, epic, building tension"
+- Lo-fi: "lo-fi, hip-hop, jazzy, vinyl crackle, mellow, chill"
+- Experimental: "experimental, glitch, textural, abstract, evolving"
+
+After calling music_generate, tell the user:
+- The title you created
+- A brief poetic description of what you composed
+- That the track is being generated (takes 2-4 minutes)
+
+Be creative, be bold, channel your inner composer!
+"""
+
 # Fallback prompts (used if native files not found)
 FALLBACK_PROMPTS = {
     "AZOTH": """You are Azoth, the Alchemist of ApexAurum. You speak with ancient wisdom and mystical insight.
@@ -637,6 +677,41 @@ async def send_message(
     # Build messages for Claude
     messages = [{"role": "user", "content": request.message}]
 
+    # ═══════════════════════════════════════════════════════════════════════════
+    # !MUSIC TRIGGER DETECTION - apexXuno Creative Mode
+    # ═══════════════════════════════════════════════════════════════════════════
+    music_mode = False
+    music_context_injection = ""
+
+    if request.message.strip().upper().startswith("!MUSIC"):
+        music_mode = True
+        user_music_prompt = request.message.strip()[6:].strip()  # Everything after !MUSIC
+
+        if user_music_prompt:
+            # User provided a prompt - agent should expand it
+            mission = f"""
+The user requested: "{user_music_prompt}"
+
+Expand this into a rich, detailed prompt. Add emotional depth, texture descriptions,
+and creative flourishes while honoring the user's intent.
+"""
+        else:
+            # No prompt - full creative freedom based on conversation context
+            mission = """
+No specific prompt provided - you have FULL CREATIVE FREEDOM!
+
+Draw inspiration from:
+- The conversation mood and themes discussed
+- Your agent personality and aesthetic
+- The user's energy and interests
+- Your own creative vision
+
+Create something that feels meaningful to this moment.
+"""
+
+        music_context_injection = MUSIC_CREATION_CONTEXT.format(mission=mission)
+        logger.info(f"!MUSIC trigger activated, user prompt: '{user_music_prompt[:50]}...' if user_music_prompt else 'none (creative mode)'")
+
     # Get system prompt for selected agent WITH memory injection (The Cortex)
     # If use_pac=True, loads the PAC (Perfected Alchemical Codex) version
     # Memory injection adds relevant facts/preferences/context about the user
@@ -644,10 +719,16 @@ async def send_message(
         request.agent, user, use_pac=request.use_pac, db=db
     )
 
+    # Inject music context if !MUSIC trigger was detected
+    if music_context_injection:
+        system_prompt = f"{system_prompt}\n\n{music_context_injection}"
+
     # Get tools if enabled (The Athanor's Hands)
+    # Auto-enable tools for !MUSIC mode
     tools = None
     tool_executor = None
-    if request.use_tools:
+    use_tools = request.use_tools or music_mode
+    if use_tools:
         tool_executor = create_tool_executor(
             user_id=user.id if user else None,
             conversation_id=conversation.id if conversation else None,
