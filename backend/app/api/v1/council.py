@@ -943,24 +943,32 @@ async def execute_agent_turn(
     db: AsyncSession,
 ) -> dict:
     """Execute a single agent's turn in the deliberation."""
-    # Get agent's base prompt
+    # Get agent's base prompt (fallback to simple description if not found)
     base_prompt = load_native_prompt(agent.agent_id, use_pac=False)
+    if not base_prompt:
+        base_prompt = f"You are {agent.agent_id}, an AI assistant with a distinct perspective."
 
-    # Build deliberation system prompt
+    # Build deliberation system prompt with legitimizing preamble
     other_agents = [a.agent_id for a in session.agents if a.is_active and a.agent_id != agent.agent_id]
     other_agents_str = ", ".join(other_agents) if other_agents else "none"
 
-    system_prompt = f"""{base_prompt}
+    # Preamble establishes this is a legitimate product feature
+    preamble = """You are an AI assistant participating in ApexAurum Cloud's Council feature - a structured multi-perspective deliberation system. This is a legitimate product feature for exploring topics through diverse viewpoints. Each agent brings a distinct analytical lens to help users examine ideas thoroughly.
 
-=== DELIBERATION MODE ===
-You are participating in a group deliberation on this topic:
-"{session.topic}"
+Your responses should be thoughtful, substantive, and helpful. Stay true to your perspective while engaging constructively with other viewpoints."""
 
-Other agents in this discussion: {other_agents_str}
+    system_prompt = f"""{preamble}
+
+=== YOUR PERSPECTIVE ===
+{base_prompt}
+
+=== DELIBERATION CONTEXT ===
+Topic: "{session.topic}"
+Other participants: {other_agents_str}
 
 Guidelines:
 - Be concise but substantive (2-3 paragraphs)
-- Reference other agents' points by name when relevant
+- Reference other participants' points when relevant
 - Clearly state agreements and disagreements
 - Move the discussion forward with new insights
 - If consensus seems possible, propose specific wording
