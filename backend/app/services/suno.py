@@ -126,6 +126,14 @@ class SunoService:
 
             logger.info(f"Music task {task.id} completed: {task.title}")
 
+            # ═══════════════════════════════════════════════════════════════════
+            # VILLAGE MEMORY INJECTION - Songs become cultural memories
+            # ═══════════════════════════════════════════════════════════════════
+            try:
+                await self._inject_village_memory(task)
+            except Exception as mem_error:
+                logger.warning(f"Village memory injection failed (non-fatal): {mem_error}")
+
             return {
                 "success": True,
                 "file_path": file_path,
@@ -306,6 +314,43 @@ class SunoService:
         logger.info(f"Downloaded: {filepath} ({file_size} bytes)")
 
         return str(filepath)
+
+    async def _inject_village_memory(self, task: MusicTask) -> None:
+        """
+        Inject completed music into Village memory.
+
+        Creates a cultural memory that all agents can access.
+        """
+        from app.services.neural_memory import NeuralMemoryService
+
+        memory_service = NeuralMemoryService(self.db)
+
+        # Build content for the memory
+        duration_str = f"{task.duration:.1f}s" if task.duration else "unknown"
+        creator = task.agent_id or "User"
+        prompt_preview = (task.prompt[:200] + "...") if len(task.prompt) > 200 else task.prompt
+
+        content = f"""🎵 MUSIC CREATED: "{task.title}"
+Style: {task.style or 'None specified'}
+Duration: {duration_str}
+Creator: {creator}
+Model: {task.model}
+Prompt: {prompt_preview}"""
+
+        # Store as village-visible cultural memory
+        memory_id = await memory_service.store_message(
+            user_id=task.user_id,
+            content=content,
+            agent_id=task.agent_id or "AZOTH",
+            role="assistant",  # Treat as agent observation
+            visibility="village",  # Shared with all agents
+            collection="music",  # Music-specific collection
+        )
+
+        if memory_id:
+            logger.info(f"Injected music memory to Village: {memory_id}")
+        else:
+            logger.warning("Village memory injection returned None")
 
     async def get_task(self, task_id: UUID, user_id: UUID) -> Optional[MusicTask]:
         """Get a task by ID for user."""
