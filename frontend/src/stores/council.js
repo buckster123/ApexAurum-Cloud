@@ -24,6 +24,13 @@ export const AVAILABLE_AGENTS = [
   { id: 'KETHER', name: 'Kether', description: 'The Crown - Wisdom & higher perspective' },
 ]
 
+// Available models for deliberation
+export const AVAILABLE_MODELS = [
+  { id: 'claude-haiku-4-5-20251001', name: 'Haiku 4.5', description: 'Fast & efficient (default)' },
+  { id: 'claude-sonnet-4-5-20250929', name: 'Sonnet 4.5', description: 'Balanced performance' },
+  { id: 'claude-opus-4-5-20251101', name: 'Opus 4.5', description: 'Maximum capability' },
+]
+
 export const useCouncilStore = defineStore('council', () => {
   // ═══════════════════════════════════════════════════════════════════════════════
   // STATE - The Chamber's Memory
@@ -39,6 +46,7 @@ export const useCouncilStore = defineStore('council', () => {
   const newSessionTopic = ref('')
   const newSessionAgents = ref(['AZOTH', 'VAJRA', 'ELYSIAN'])
   const newSessionMaxRounds = ref(10)
+  const newSessionModel = ref('claude-haiku-4-5-20251001')
 
   // Auto-deliberation state
   const isAutoDeliberating = ref(false)
@@ -132,6 +140,7 @@ export const useCouncilStore = defineStore('council', () => {
         topic: newSessionTopic.value.trim(),
         agents: newSessionAgents.value,
         max_rounds: newSessionMaxRounds.value,
+        model: newSessionModel.value,
         use_tools: true,  // Tools always on for native agents
       })
       const session = response.data
@@ -436,6 +445,7 @@ export const useCouncilStore = defineStore('council', () => {
     newSessionTopic,
     newSessionAgents,
     newSessionMaxRounds,
+    newSessionModel,
     // Auto-deliberation state
     isAutoDeliberating,
     streamingRound,

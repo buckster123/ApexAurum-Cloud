@@ -1,8 +1,8 @@
 # ApexAurum-Cloud Handover Document
 
 **Date:** 2026-01-28
-**Build:** v70-council-convergence
-**Status:** PRODUCTION READY - Council perfected (4/6 phases)!
+**Build:** v71-council-model-selector
+**Status:** PRODUCTION READY - Council PERFECTED! All 6 phases complete! 🔥
 
 ---
 
@@ -440,6 +440,14 @@ curl -s -X POST "https://backboard.railway.app/graphql/v2" \
 - Session terminated with `termination_reason='consensus'`
 - Works in both manual and auto-deliberation modes
 
+### 5. Model Selector (Phase 5) - COMPLETE
+- Users can select Haiku, Sonnet, or Opus for deliberation
+- Model field added to DeliberationSession model
+- CreateSessionRequest includes model parameter
+- Model selector UI in session creation form
+- Session header shows current model
+- execute_agent_turn uses session.model
+
 ### Backend Changes (Phase 1):
 - Added `ToolCallInfo` schema for API responses
 - `MessageResponse` now includes `tool_calls` array
@@ -457,12 +465,13 @@ curl -s -X POST "https://backboard.railway.app/graphql/v2" \
 
 | File | Changes |
 |------|---------|
-| `backend/app/main.py` | v69-council-neural-storage |
-| `backend/app/api/v1/council.py` | ToolCallInfo schema, tool tracking, tool_call SSE, memory injection, neural storage |
+| `backend/app/main.py` | v71-council-model-selector |
+| `backend/app/api/v1/council.py` | ToolCallInfo, tool tracking, memory injection, neural storage, convergence detection, model selector |
+| `backend/app/models/council.py` | Added model field to DeliberationSession |
 | `backend/app/services/neural_memory.py` | Added visibility and collection params to store_message |
-| `frontend/src/stores/council.js` | Handle tool_call events, tools array in streamingAgents |
+| `frontend/src/stores/council.js` | tool_call events, consensus events, model state, AVAILABLE_MODELS |
 | `frontend/src/components/council/AgentCard.vue` | tools prop, tool display UI |
-| `frontend/src/views/CouncilView.vue` | Pass tools prop to AgentCard |
+| `frontend/src/views/CouncilView.vue` | tools prop, model selector UI, model display in header |
 
 ---
 

@@ -51,7 +51,7 @@ async def lifespan(app: FastAPI):
     """Application lifespan manager."""
     # Startup
     print("=" * 50)
-    print("ApexAurum Cloud v70 - Council convergence detection")
+    print("ApexAurum Cloud v71 - Council model selector")
     print("=" * 50)
 
     # Import all models before database init to ensure SQLAlchemy
@@ -120,7 +120,7 @@ async def health_check():
     return {
         "status": "healthy",
         "version": "0.1.0",
-        "build": "v70-council-convergence",
+        "build": "v71-council-model-selector",
         "agents": {
             "native": 5,
             "pac": 4,

@@ -103,6 +103,7 @@ class CreateSessionRequest(BaseModel):
     agents: list[str] = ["AZOTH", "VAJRA", "ELYSIAN"]
     max_rounds: int = 10
     use_tools: bool = True  # Tools always on for native agents (The Athanor's Hands)
+    model: str = "claude-haiku-4-5-20251001"  # Default to fast Haiku
 
 
 class AgentInfo(BaseModel):
@@ -118,6 +119,7 @@ class SessionResponse(BaseModel):
     topic: str
     state: str
     mode: str
+    model: str
     current_round: int
     max_rounds: int
     convergence_score: float
@@ -255,12 +257,21 @@ async def create_session(
                 detail="At least one agent required"
             )
 
+        # Validate model
+        valid_models = [
+            "claude-haiku-4-5-20251001",
+            "claude-sonnet-4-5-20250929",
+            "claude-opus-4-5-20251101",
+        ]
+        model = request.model if request.model in valid_models else COUNCIL_MODEL
+
         # Create session
         session = DeliberationSession(
             user_id=user.id,
             topic=request.topic,
             max_rounds=request.max_rounds,
             use_tools=request.use_tools,
+            model=model,
             state="pending",
             mode="manual",
         )
@@ -294,6 +305,7 @@ async def create_session(
             topic=session.topic,
             state=session.state,
             mode=session.mode,
+            model=session.model or COUNCIL_MODEL,
             current_round=session.current_round,
             max_rounds=session.max_rounds,
             convergence_score=session.convergence_score,
@@ -343,6 +355,7 @@ async def list_sessions(
                 topic=s.topic,
                 state=s.state,
                 mode=s.mode,
+                model=s.model or COUNCIL_MODEL,
                 current_round=s.current_round,
                 max_rounds=s.max_rounds,
                 convergence_score=s.convergence_score,
@@ -395,6 +408,7 @@ async def get_session(
         topic=session.topic,
         state=session.state,
         mode=session.mode,
+        model=session.model or COUNCIL_MODEL,
         current_round=session.current_round,
         max_rounds=session.max_rounds,
         convergence_score=session.convergence_score,
@@ -580,7 +594,7 @@ async def execute_round(
             await billing.record_message_usage(
                 user_id=user.id,
                 provider="anthropic",
-                model=COUNCIL_MODEL,
+                model=session.model or COUNCIL_MODEL,
                 input_tokens=total_round_input,
                 output_tokens=total_round_output,
             )
@@ -883,7 +897,7 @@ async def auto_deliberate(
                 await billing.record_message_usage(
                     user_id=user.id,
                     provider="anthropic",
-                    model=COUNCIL_MODEL,
+                    model=session.model or COUNCIL_MODEL,
                     input_tokens=total_session_input,
                     output_tokens=total_session_output,
                 )
@@ -1182,10 +1196,13 @@ Guidelines:
     all_tool_calls = []  # Track all tool calls for feedback
     max_tool_turns = 3  # Limit tool turns per agent per round
 
+    # Use session's model (falls back to COUNCIL_MODEL if not set)
+    model = getattr(session, 'model', None) or COUNCIL_MODEL
+
     for turn in range(max_tool_turns):
         response = await claude.chat(
             messages=messages,
-            model=COUNCIL_MODEL,
+            model=model,
             system=system_prompt,
             tools=tools,
         )

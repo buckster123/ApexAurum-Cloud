@@ -8,7 +8,7 @@
 
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { useCouncilStore, AGENT_COLORS, AVAILABLE_AGENTS } from '@/stores/council'
+import { useCouncilStore, AGENT_COLORS, AVAILABLE_AGENTS, AVAILABLE_MODELS } from '@/stores/council'
 import AgentCard from '@/components/council/AgentCard.vue'
 
 const router = useRouter()
@@ -101,6 +101,11 @@ function handleNewSession() {
 
 function getAgentColor(agentId) {
   return AGENT_COLORS[agentId] || '#888888'
+}
+
+function getModelName(modelId) {
+  const model = AVAILABLE_MODELS.find(m => m.id === modelId)
+  return model ? model.name : 'Haiku 4.5'
 }
 
 function formatDate(dateStr) {
@@ -292,6 +297,29 @@ function getStateClass(state) {
               </div>
             </div>
 
+            <!-- Model Selection -->
+            <div>
+              <label class="block text-sm font-medium text-gray-300 mb-2">
+                Model for Deliberation
+              </label>
+              <div class="grid grid-cols-3 gap-2">
+                <button
+                  v-for="model in AVAILABLE_MODELS"
+                  :key="model.id"
+                  @click="council.newSessionModel = model.id"
+                  :class="[
+                    'p-2 rounded-lg border text-center transition-all text-sm',
+                    council.newSessionModel === model.id
+                      ? 'border-gold bg-gold/10 text-gold'
+                      : 'border-apex-border hover:border-gray-600 text-gray-400'
+                  ]"
+                >
+                  <div class="font-medium">{{ model.name }}</div>
+                  <div class="text-xs opacity-70">{{ model.description }}</div>
+                </button>
+              </div>
+            </div>
+
             <!-- Max Rounds -->
             <div>
               <label class="block text-sm font-medium text-gray-300 mb-2">
@@ -344,6 +372,9 @@ function getStateClass(state) {
                 </span>
                 <span class="text-sm text-gray-400">
                   Round {{ council.currentSession.current_round }} of {{ council.currentSession.max_rounds }}
+                </span>
+                <span class="text-xs px-2 py-0.5 bg-apex-dark rounded text-gray-400">
+                  {{ getModelName(council.currentSession.model) }}
                 </span>
                 <span class="text-sm text-gray-500">
                   ${{ council.currentSession.total_cost_usd.toFixed(4) }}
