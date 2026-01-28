@@ -28,7 +28,7 @@ from app.config import get_settings
 from app.database import get_db
 from app.models.user import User
 from app.models.music import MusicTask
-from app.auth.deps import get_current_user
+from app.auth.deps import get_current_user, get_current_user_optional
 from app.services.suno import SunoService
 
 logger = logging.getLogger(__name__)
@@ -329,14 +329,37 @@ async def get_task(
 @router.get("/tasks/{task_id}/file")
 async def get_audio_file(
     task_id: UUID,
-    user: User = Depends(get_current_user),
+    token: Optional[str] = Query(None, description="JWT token for audio playback (alt to header)"),
+    user: User = Depends(get_current_user_optional),
     db: AsyncSession = Depends(get_db)
 ):
     """
     Get the audio file for a completed task.
 
     Returns the MP3 file directly for playback.
+
+    Accepts auth via:
+    - Authorization header (standard)
+    - ?token= query param (for HTML audio elements)
     """
+    # Handle token query param auth (for audio elements that can't send headers)
+    if user is None and token:
+        from app.auth.jwt import verify_token
+        from sqlalchemy import select
+        payload = verify_token(token, token_type="access")
+        if payload:
+            try:
+                user_id = UUID(payload["sub"])
+                result = await db.execute(select(User).where(User.id == user_id))
+                user = result.scalar_one_or_none()
+            except (KeyError, ValueError, TypeError):
+                pass
+
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required"
+        )
     result = await db.execute(
         select(MusicTask)
         .where(MusicTask.id == task_id)
