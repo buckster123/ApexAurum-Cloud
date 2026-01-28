@@ -2,7 +2,7 @@
 
 **Created:** 2026-01-28 (Session 8)
 **Updated:** 2026-01-28 (Session 9)
-**Status:** PHASE 1+2 COMPLETE
+**Status:** PHASE 1+2+4 COMPLETE (Phase 3 skipped - agents have cortex_recall)
 **Goal:** Polish council to beta-ready perfection
 
 ---
@@ -157,7 +157,7 @@ Update callers in `execute_round` and `auto_deliberate` to pass `user`.
 
 ---
 
-## Phase 3: Village Protocol Access
+## Phase 3: Village Protocol Access (SKIPPED - agents can use cortex_recall)
 
 ### 3.1 Inject Village Context
 
@@ -214,7 +214,7 @@ if session.current_round % 5 == 0:  # Every 5 rounds
 
 ---
 
-## Phase 4: Neural Memory Storage
+## Phase 4: Neural Memory Storage ✅ COMPLETE
 
 ### 4.1 Store Council Messages as Memories
 

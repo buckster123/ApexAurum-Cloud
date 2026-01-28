@@ -1,8 +1,8 @@
 # ApexAurum-Cloud Handover Document
 
 **Date:** 2026-01-28
-**Build:** v68-council-memory-injection
-**Status:** PRODUCTION READY - Council with memory + tool feedback!
+**Build:** v69-council-neural-storage
+**Status:** PRODUCTION READY - Council with memory + neural storage!
 
 ---
 
@@ -424,6 +424,14 @@ curl -s -X POST "https://backboard.railway.app/graphql/v2" \
 - User object passed through (not just user_id)
 - Agents get memory context like chat agents do
 
+### 3. Neural Memory Storage (Phase 4) - COMPLETE
+- Council discussions now stored in Neural memory (The Village)
+- Messages stored with `visibility='village'` for sharing
+- Collection='council' distinguishes from regular chat
+- Session ID used as conversation_thread for grouping
+- Both manual and auto-deliberation store memories
+- NeuralMemoryService updated with visibility/collection params
+
 ### Backend Changes (Phase 1):
 - Added `ToolCallInfo` schema for API responses
 - `MessageResponse` now includes `tool_calls` array
@@ -441,8 +449,9 @@ curl -s -X POST "https://backboard.railway.app/graphql/v2" \
 
 | File | Changes |
 |------|---------|
-| `backend/app/main.py` | v67-council-tool-feedback |
-| `backend/app/api/v1/council.py` | ToolCallInfo schema, tool tracking in execute_agent_turn, tool_call SSE events, tool_calls storage |
+| `backend/app/main.py` | v69-council-neural-storage |
+| `backend/app/api/v1/council.py` | ToolCallInfo schema, tool tracking, tool_call SSE, memory injection, neural storage |
+| `backend/app/services/neural_memory.py` | Added visibility and collection params to store_message |
 | `frontend/src/stores/council.js` | Handle tool_call events, tools array in streamingAgents |
 | `frontend/src/components/council/AgentCard.vue` | tools prop, tool display UI |
 | `frontend/src/views/CouncilView.vue` | Pass tools prop to AgentCard |

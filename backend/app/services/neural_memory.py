@@ -35,10 +35,12 @@ class NeuralMemoryService:
         self,
         user_id: UUID,
         content: str,
-        agent_id: str = "CLAUDE",
+        agent_id: str = "AZOTH",
         role: str = "user",  # "user" or "assistant"
         conversation_thread: Optional[str] = None,
         responding_to: Optional[list[str]] = None,
+        visibility: str = "private",  # "private" or "village"
+        collection: str = "chat",  # "chat" or "council"
     ) -> Optional[UUID]:
         """
         Store a chat message as a vector memory.
@@ -50,6 +52,8 @@ class NeuralMemoryService:
             role: "user" or "assistant"
             conversation_thread: Optional conversation ID for threading
             responding_to: Optional list of memory IDs this responds to
+            visibility: "private" (user only) or "village" (shared with all agents)
+            collection: "chat" for regular chat, "council" for deliberations
 
         Returns:
             UUID of created memory, or None if failed
@@ -94,8 +98,8 @@ class NeuralMemoryService:
                             attention_weight, access_count, responding_to,
                             conversation_thread, related_agents, tags, created_at
                         ) VALUES (
-                            :id, :user_id, 'chat', :content, '{}', :embedding,
-                            :layer, 'private', :agent_id, :message_type,
+                            :id, :user_id, :collection, :content, '{}', :embedding,
+                            :layer, :visibility, :agent_id, :message_type,
                             1.0, 0, :responding_to,
                             :conversation_thread, '[]', '[]', NOW()
                         )
@@ -103,9 +107,11 @@ class NeuralMemoryService:
                     {
                         "id": memory_id,
                         "user_id": user_id,
+                        "collection": collection,
                         "content": content[:2000],  # Truncate stored content
                         "embedding": embedding_str,
                         "layer": layer,
+                        "visibility": visibility,
                         "agent_id": agent_id,
                         "message_type": message_type,
                         "responding_to": str(responding_to_json).replace("'", '"'),
@@ -122,8 +128,8 @@ class NeuralMemoryService:
                             attention_weight, access_count, responding_to,
                             conversation_thread, related_agents, tags, created_at
                         ) VALUES (
-                            :id, :user_id, 'chat', :content, '{}',
-                            :layer, 'private', :agent_id, :message_type,
+                            :id, :user_id, :collection, :content, '{}',
+                            :layer, :visibility, :agent_id, :message_type,
                             1.0, 0, :responding_to,
                             :conversation_thread, '[]', '[]', NOW()
                         )
@@ -131,6 +137,8 @@ class NeuralMemoryService:
                     {
                         "id": memory_id,
                         "user_id": user_id,
+                        "collection": collection,
+                        "visibility": visibility,
                         "content": content[:2000],
                         "layer": layer,
                         "agent_id": agent_id,

@@ -30,6 +30,7 @@ from app.services.billing import BillingService
 from app.services.tool_executor import create_tool_executor
 from app.config import get_settings
 from app.api.v1.chat import load_native_prompt, get_agent_prompt_with_memory  # Reuse prompt loading + memory
+from app.services.neural_memory import NeuralMemoryService
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -540,6 +541,20 @@ async def execute_round(
         except Exception as e:
             logger.error(f"Failed to record council billing: {e}")
 
+    # Store council messages in Neural memory (The Village)
+    try:
+        stored = await store_council_memories(
+            db=db,
+            user_id=user.id,
+            session_id=session.id,
+            messages=messages,
+            topic=session.topic,
+        )
+        if stored > 0:
+            logger.info(f"Stored {stored} council memories for session {session.id}")
+    except Exception as e:
+        logger.warning(f"Failed to store council memories: {e}")
+
     return ExecuteRoundResponse(
         round_number=round_number,
         messages=[
@@ -699,6 +714,7 @@ async def auto_deliberate(
             # Process results
             total_round_input = 0
             total_round_output = 0
+            round_messages = []  # Collect for neural storage
 
             for i, result in enumerate(agent_results):
                 agent = active_agents[i]
@@ -726,6 +742,7 @@ async def auto_deliberate(
                     output_tokens=output_tokens,
                 )
                 db.add(msg)
+                round_messages.append(msg)  # Collect for neural storage
 
                 # Update agent token counts
                 agent.input_tokens += input_tokens
@@ -759,6 +776,20 @@ async def auto_deliberate(
 
             # Yield round complete event
             yield f"data: {json.dumps({'type': 'round_complete', 'round_number': round_number, 'convergence_score': round_record.convergence_score, 'cost_usd': round_cost, 'total_cost_usd': session.total_cost_usd})}\n\n"
+
+            # Store council messages in Neural memory (The Village)
+            try:
+                stored = await store_council_memories(
+                    db=db,
+                    user_id=user.id,
+                    session_id=session.id,
+                    messages=round_messages,
+                    topic=session.topic,
+                )
+                if stored > 0:
+                    logger.debug(f"Stored {stored} council memories for round {round_number}")
+            except Exception as e:
+                logger.warning(f"Failed to store council memories: {e}")
 
             rounds_executed += 1
 
@@ -931,6 +962,51 @@ async def stop_session(
 # ============================================================================
 # Helper Functions
 # ============================================================================
+
+async def store_council_memories(
+    db: AsyncSession,
+    user_id: UUID,
+    session_id: UUID,
+    messages: list[SessionMessage],
+    topic: str,
+) -> int:
+    """
+    Store council messages in Neural memory (The Village).
+
+    Council discussions are stored with:
+    - visibility='village' so all agents can access them
+    - collection='council' to distinguish from chat
+    - conversation_thread=session_id for threading
+
+    Returns count of stored memories.
+    """
+    neural = NeuralMemoryService(db)
+    stored = 0
+
+    for msg in messages:
+        if msg.role != "agent" or not msg.content:
+            continue
+
+        # Format message with council context
+        content = f"[Council on '{topic}']\n[{msg.agent_id}]: {msg.content}"
+
+        try:
+            memory_id = await neural.store_message(
+                user_id=user_id,
+                content=content,
+                agent_id=msg.agent_id,
+                role="assistant",
+                conversation_thread=str(session_id),
+                visibility="village",  # Shared with all agents
+                collection="council",
+            )
+            if memory_id:
+                stored += 1
+        except Exception as e:
+            logger.warning(f"Failed to store council memory: {e}")
+
+    return stored
+
 
 def build_round_context(session: DeliberationSession, round_number: int, human_message: Optional[str] = None) -> str:
     """Build context from previous rounds for agent prompts.
