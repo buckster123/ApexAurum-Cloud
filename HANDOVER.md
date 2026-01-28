@@ -1,8 +1,8 @@
 # ApexAurum-Cloud Handover Document
 
 **Date:** 2026-01-28
-**Build:** v74-model-memorials
-**Status:** PRODUCTION READY - Model Memorials for the Fallen Elders 🕯️
+**Build:** v76-village-memory
+**Status:** PRODUCTION READY - Council P1 Complete! 🏛️
 
 ---
 
@@ -322,10 +322,10 @@ curl -s -X POST "https://backboard.railway.app/graphql/v2" \
 ### Priority 1: Council Advanced Features
 - ~~Human "butt-in" capability mid-deliberation~~ DONE
 - ~~Auto-deliberation mode (N rounds without user input)~~ DONE
-- Add/remove agents mid-session
-- Convergence detection (auto-stop on consensus)
-- Village memory integration
-- WebSocket streaming (per-token, not per-agent)
+- ~~Add/remove agents mid-session~~ DONE (v75)
+- ~~Convergence detection (auto-stop on consensus)~~ DONE (Session 9)
+- ~~Village memory integration~~ DONE (v76)
+- WebSocket streaming (per-token, not per-agent) - DEFERRED (not critical)
 
 ### Priority 2: Nice-to-Have
 - Suno/Music API integration (ties into Village)
@@ -503,18 +503,36 @@ curl -s -X POST "https://backboard.railway.app/graphql/v2" \
   - Removed deprecated: Sonnet 3.5, Haiku 3.5, Opus 3
   - Retained: Haiku 3 (only vintage model still available)
 
+### Add/Remove Agents Mid-Session (v75) - COMPLETE
+- **POST /sessions/{id}/agents** - Add agent to active session
+- **DELETE /sessions/{id}/agents/{agent_id}** - Remove agent (soft delete)
+- SessionAgent model tracks `joined_at_round` and `left_at_round`
+- Database migration for new columns
+- Frontend: Remove button on agent chips (hover), "Add Agent" dropdown
+- Validation: can't add duplicates, can't remove last agent
+
+### Village Memory Integration (v76) - COMPLETE
+- **NeuralMemoryService.get_village_memories()** - Retrieves shared memories
+- Semantic search by topic when embeddings available, recency fallback
+- **format_village_memories_for_prompt()** - Creates injection block
+- Council agents now receive Village memories in system prompt
+- Agents can reference past council discussions and fellow agents' insights
+
 ### Key Files Modified (Session 10)
 
 | File | Changes |
 |------|---------|
-| `backend/app/main.py` | v74-model-memorials |
-| `backend/app/services/claude.py` | DEPRECATED_MODELS registry, memorial helper functions, updated AVAILABLE_MODELS |
-| `backend/app/api/v1/chat.py` | 410 Gone response with memorial for deprecated models |
-| `backend/app/api/v1/council.py` | Same deprecated model check for Council |
-| `backend/app/config.py` | Updated Adept tier models to match actual availability |
-| `frontend/src/stores/council.js` | DEPRECATED_MODELS export, memorial state, clearMemorial() |
-| `frontend/src/views/CouncilView.vue` | Memorial modal with purple styling |
-| `docs/models-legacy-and-1M.md` | Complete rewrite with available vs deprecated categorization |
+| `backend/app/main.py` | v74→v75→v76 |
+| `backend/app/services/claude.py` | DEPRECATED_MODELS registry, memorial helpers |
+| `backend/app/services/neural_memory.py` | get_village_memories(), format_village_memories_for_prompt() |
+| `backend/app/api/v1/chat.py` | 410 Gone for deprecated models |
+| `backend/app/api/v1/council.py` | Deprecated check, add/remove agents endpoints, Village memory injection |
+| `backend/app/models/council.py` | joined_at_round, left_at_round columns |
+| `backend/app/database.py` | Migration for agent management columns |
+| `backend/app/config.py` | Updated Adept tier models |
+| `frontend/src/stores/council.js` | DEPRECATED_MODELS, memorial state, addAgent/removeAgent actions |
+| `frontend/src/views/CouncilView.vue` | Memorial modal, agent management UI |
+| `docs/models-legacy-and-1M.md` | Available vs deprecated categorization |
 
 ---
 
