@@ -1,13 +1,19 @@
 <script setup>
-import { watch } from 'vue'
+import { watch, computed } from 'vue'
 import { RouterView } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useDevMode } from '@/composables/useDevMode'
+import { useMusicStore } from '@/stores/music'
 import Navbar from '@/components/Navbar.vue'
 import AlchemicalParticles from '@/components/AlchemicalParticles.vue'
+import MusicPlayer from '@/components/music/MusicPlayer.vue'
 
 const auth = useAuthStore()
+const music = useMusicStore()
 const { pacMode, justActivatedPac } = useDevMode()
+
+// Add bottom padding when music player is visible
+const hasActivePlayer = computed(() => !!music.currentTrack)
 
 // Apply pac-mode class to body for global styling
 watch(pacMode, (active) => {
@@ -34,9 +40,18 @@ watch(pacMode, (active) => {
     <Navbar v-if="auth.isAuthenticated" />
 
     <!-- Main content -->
-    <main :class="auth.isAuthenticated ? 'pt-16' : ''" class="relative z-10">
+    <main
+      :class="[
+        auth.isAuthenticated ? 'pt-16' : '',
+        hasActivePlayer ? 'pb-20' : ''
+      ]"
+      class="relative z-10"
+    >
       <RouterView />
     </main>
+
+    <!-- Persistent Music Player -->
+    <MusicPlayer v-if="auth.isAuthenticated" />
   </div>
 </template>
 

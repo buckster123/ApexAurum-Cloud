@@ -51,7 +51,7 @@ async def lifespan(app: FastAPI):
     """Application lifespan manager."""
     # Startup
     print("=" * 50)
-    print("ApexAurum Cloud v79 - Suno Music Integration")
+    print("ApexAurum Cloud v80 - apexXuno Frontend")
     print("=" * 50)
 
     # Import all models before database init to ensure SQLAlchemy
@@ -120,7 +120,7 @@ async def health_check():
     return {
         "status": "healthy",
         "version": "0.1.0",
-        "build": "v79-suno-music",
+        "build": "v80-apexXuno-frontend",
         "agents": {
             "native": 5,
             "pac": 4,
@@ -159,6 +159,7 @@ async def health_check():
             "local-embeddings",
             "council-deliberation",
             "suno-music",
+            "apexXuno-frontend",
         ],
     }
 
