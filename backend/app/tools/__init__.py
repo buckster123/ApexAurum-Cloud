@@ -130,7 +130,7 @@ class ToolRegistry:
             # Broadcast tool complete to Village GUI
             await broadcaster.broadcast_tool_complete(
                 name,
-                result.data if result.success else result.error,
+                result.result if result.success else result.error,
                 success=result.success,
                 agent_id=agent_id
             )
