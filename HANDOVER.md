@@ -1,8 +1,8 @@
 # ApexAurum-Cloud Handover Document
 
 **Date:** 2026-01-28
-**Build:** v83-village-music
-**Status:** PRODUCTION READY - apexXuno COMPLETE! All 4 Phases!
+**Build:** v84-compiler-integration
+**Status:** PRODUCTION READY - apexXuno with Compiler Integration!
 
 ---
 
@@ -711,6 +711,13 @@ curl -s -X POST "https://backboard.railway.app/graphql/v2" \
 - **Collection:** "music" with "village" visibility
 - Agents can reference: *"The ambient track Azoth composed yesterday"*
 
+### Audio Playback Fix + Compiler Integration (v84) - COMPLETE
+- **Fixed audio playback** - Added ?token= query param support for HTML audio elements
+- **!MUSIC now uses compiler** - Agents guided to call suno_compile first
+- **Full workflow:** suno_compile → emotional cartography → music_generate
+- **18 moods listed** organized by positive/neutral/negative
+- **5 purposes documented:** sfx, ambient, loop, song, jingle
+
 ### Key Files Created/Modified (Session 12):
 
 | File | Changes |
@@ -725,7 +732,8 @@ curl -s -X POST "https://backboard.railway.app/graphql/v2" \
 | `backend/app/tools/base.py` | Added CREATIVE category |
 | `backend/app/tools/__init__.py` | Register suno_compiler tools (Tier 12) |
 | `backend/app/services/suno.py` | Village memory injection after completion |
-| `backend/app/main.py` | v83-village-music |
+| `backend/app/api/v1/music.py` | Token query param for audio playback |
+| `backend/app/main.py` | v84-compiler-integration |
 | `docs/SUNO_MASTERPLAN.md` | All 4 Phases COMPLETE |
 
 ---
