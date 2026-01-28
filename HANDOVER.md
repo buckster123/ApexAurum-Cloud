@@ -1,8 +1,8 @@
 # ApexAurum-Cloud Handover Document
 
 **Date:** 2026-01-28
-**Build:** v67-council-tool-feedback
-**Status:** PRODUCTION READY - Council tool feedback visible!
+**Build:** v68-council-memory-injection
+**Status:** PRODUCTION READY - Council with memory + tool feedback!
 
 ---
 
@@ -418,7 +418,13 @@ curl -s -X POST "https://backboard.railway.app/graphql/v2" \
 - AgentCard displays tools with cyan highlighting
 - Round history shows tools used by each agent
 
-### Backend Changes:
+### 2. Council Memory Injection (Phase 2) - COMPLETE
+- Council agents now remember the user via The Cortex
+- `execute_agent_turn` now uses `get_agent_prompt_with_memory`
+- User object passed through (not just user_id)
+- Agents get memory context like chat agents do
+
+### Backend Changes (Phase 1):
 - Added `ToolCallInfo` schema for API responses
 - `MessageResponse` now includes `tool_calls` array
 - Tool execution tracked: name, input, result (truncated to 500 chars)

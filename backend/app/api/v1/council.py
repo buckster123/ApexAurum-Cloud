@@ -29,7 +29,7 @@ from app.services.claude import ClaudeService
 from app.services.billing import BillingService
 from app.services.tool_executor import create_tool_executor
 from app.config import get_settings
-from app.api.v1.chat import load_native_prompt  # Reuse prompt loading
+from app.api.v1.chat import load_native_prompt, get_agent_prompt_with_memory  # Reuse prompt loading + memory
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -458,7 +458,7 @@ async def execute_round(
     for agent in active_agents:
         tasks.append(
             execute_agent_turn(
-                claude, session, round_record, agent, context, db, user_id=user.id
+                claude, session, round_record, agent, context, db, user=user
             )
         )
 
@@ -690,7 +690,7 @@ async def auto_deliberate(
             for agent in active_agents:
                 tasks.append(
                     execute_agent_turn(
-                        claude, session, round_record, agent, context, db, user_id=user.id
+                        claude, session, round_record, agent, context, db, user=user
                     )
                 )
 
@@ -977,11 +977,20 @@ async def execute_agent_turn(
     agent: SessionAgent,
     context: str,
     db: AsyncSession,
-    user_id: UUID = None,
+    user: User = None,
 ) -> dict:
-    """Execute a single agent's turn in the deliberation with tool support."""
-    # Get agent's base prompt (fallback to simple description if not found)
-    base_prompt = load_native_prompt(agent.agent_id, use_pac=False)
+    """Execute a single agent's turn in the deliberation with tool support and memory."""
+    # Get agent's base prompt WITH memory injection (The Cortex remembers)
+    if user and db:
+        base_prompt = await get_agent_prompt_with_memory(
+            agent_id=agent.agent_id,
+            user=user,
+            use_pac=False,
+            db=db,
+        )
+    else:
+        base_prompt = load_native_prompt(agent.agent_id, use_pac=False)
+
     if not base_prompt:
         base_prompt = f"You are {agent.agent_id}, an AI assistant with a distinct perspective."
 
@@ -1017,9 +1026,9 @@ Guidelines:
     # Set up tools for native agents (The Athanor's Hands)
     tools = None
     tool_executor = None
-    if session.use_tools and user_id:
+    if session.use_tools and user:
         tool_executor = create_tool_executor(
-            user_id=user_id,
+            user_id=user.id,
             conversation_id=None,
             agent_id=agent.agent_id,
         )

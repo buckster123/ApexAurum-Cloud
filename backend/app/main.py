@@ -51,7 +51,7 @@ async def lifespan(app: FastAPI):
     """Application lifespan manager."""
     # Startup
     print("=" * 50)
-    print("ApexAurum Cloud v67 - Council tool feedback")
+    print("ApexAurum Cloud v68 - Council memory injection")
     print("=" * 50)
 
     # Import all models before database init to ensure SQLAlchemy
@@ -120,7 +120,7 @@ async def health_check():
     return {
         "status": "healthy",
         "version": "0.1.0",
-        "build": "v67-council-tool-feedback",
+        "build": "v68-council-memory-injection",
         "agents": {
             "native": 5,
             "pac": 4,
