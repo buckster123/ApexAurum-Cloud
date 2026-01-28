@@ -1,8 +1,8 @@
 # ApexAurum-Cloud Handover Document
 
 **Date:** 2026-01-28
-**Build:** v72-council-model-migration
-**Status:** PRODUCTION READY - Council PERFECTED! All 6 phases complete! 🔥
+**Build:** v73-legacy-models
+**Status:** PRODUCTION READY - Council PERFECTED + Legacy models for Adepts! 🔥
 
 ---
 
@@ -448,6 +448,15 @@ curl -s -X POST "https://backboard.railway.app/graphql/v2" \
 - Session header shows current model
 - execute_agent_turn uses session.model
 
+### 6. Legacy Models for Adept Tier - COMPLETE
+- Nostalgic users can chat with classic Claude models
+- Claude 3.5 family: Sonnet 3.5, Haiku 3.5 (Legacy)
+- Claude 3.0 family: Opus 3, Haiku 3 (Vintage)
+- Purple highlighting for legacy models in UI
+- Tier-gated: Only Adept ($30/mo) can access
+- Note: Some vintage models deprecated by Anthropic - memorial error messages planned
+- See `docs/models-legacy-and-1M.md` for current Anthropic availability
+
 ### Backend Changes (Phase 1):
 - Added `ToolCallInfo` schema for API responses
 - `MessageResponse` now includes `tool_calls` array
@@ -465,14 +474,17 @@ curl -s -X POST "https://backboard.railway.app/graphql/v2" \
 
 | File | Changes |
 |------|---------|
-| `backend/app/main.py` | v72-council-model-migration |
-| `backend/app/api/v1/council.py` | ToolCallInfo, tool tracking, memory injection, neural storage, convergence detection, model selector |
+| `backend/app/main.py` | v73-legacy-models |
+| `backend/app/api/v1/council.py` | ToolCallInfo, tool tracking, memory injection, neural storage, convergence, model selector, legacy models |
 | `backend/app/models/council.py` | Added model field to DeliberationSession |
 | `backend/app/database.py` | Migration for model column on deliberation_sessions |
+| `backend/app/services/claude.py` | Added legacy models to AVAILABLE_MODELS with legacy flag |
 | `backend/app/services/neural_memory.py` | Added visibility and collection params to store_message |
-| `frontend/src/stores/council.js` | tool_call events, consensus events, model state, AVAILABLE_MODELS |
+| `backend/app/config.py` | Added legacy models to Adept tier |
+| `frontend/src/stores/council.js` | tool_call events, consensus events, model state, AVAILABLE_MODELS with legacy |
 | `frontend/src/components/council/AgentCard.vue` | tools prop, tool display UI |
-| `frontend/src/views/CouncilView.vue` | tools prop, model selector UI, model display in header |
+| `frontend/src/views/CouncilView.vue` | tools prop, model selector with legacy section, purple styling |
+| `docs/models-legacy-and-1M.md` | Documentation of available legacy models |
 
 ---
 
