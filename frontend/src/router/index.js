@@ -87,6 +87,18 @@ const router = createRouter({
       meta: { requiresAuth: false }  // Allow viewing pricing without auth
     },
     {
+      path: '/council',
+      name: 'council',
+      component: () => import('@/views/CouncilView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/council/:id',
+      name: 'council-session',
+      component: () => import('@/views/CouncilView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
       path: '/billing/success',
       name: 'billing-success',
       component: () => import('@/views/BillingView.vue'),
