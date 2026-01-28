@@ -1,15 +1,15 @@
 # ApexAurum-Cloud Handover Document
 
 **Date:** 2026-01-28
-**Build:** v60-auto-deliberation
-**Status:** PRODUCTION READY - Auto-deliberation engine (100+ rounds)!
+**Build:** v61-graceful-sessions
+**Status:** PRODUCTION READY - Long wanders with graceful sessions!
 
 ---
 
 ## Current State
 
 ApexAurum Cloud is fully functional and polished:
-- Auth system working correctly
+- Auth system working correctly with **2-hour sessions**
 - Chat with all agents operational
 - Billing/Stripe integration live
 - Tier-based feature visibility working
@@ -20,6 +20,7 @@ ApexAurum Cloud is fully functional and polished:
 - **Council deliberation COMPLETE** - Auto-deliberation engine (100+ rounds!)
 - **Human butt-in** - Inject messages mid-deliberation
 - **Pause/Resume/Stop** - Full control over auto-mode
+- **Graceful sessions** - Long wanders with friendly expiry handling
 
 **Pricing:** Seeker $3 | Alchemist $10 | Adept $30
 
@@ -189,9 +190,29 @@ ApexAurum Cloud is fully functional and polished:
 
 ---
 
+## Session 7 Accomplishments
+
+### 1. Extended Token Lifetime - COMPLETE
+- **Access token:** 15 min → 2 hours (built for long wanders)
+- **Refresh token:** 7 days → 30 days (a full moon cycle)
+- Adepts can now work for hours without interruption
+
+### 2. CORS on Exception Handler - COMPLETE
+- Global exception handler now includes CORS headers
+- Error responses (500s) no longer blocked by browser
+- Council API errors now visible in frontend console
+
+### 3. Graceful Session Expiry - COMPLETE
+- **Retry with backoff:** Network hiccups get one retry before failing
+- **Custom event:** `session-expired` dispatched for app-level handling
+- **Friendly message:** Amber notice on login page: "Your session has ended. Please sign in to continue your journey."
+- **No hard redirects:** Graceful degradation instead of abrupt logout
+
+---
+
 ## Latest Commit
 ```
-50340f3 Fix ToolResult attribute access bug
+b412fbb Extend token lifetime and add graceful session handling
 ```
 
 **Railway Token:** Working - deploys via API are functioning.
@@ -315,6 +336,15 @@ curl -s -X POST "https://backboard.railway.app/graphql/v2" \
 | `frontend/src/views/CouncilView.vue` | Auto-mode UI, butt-in input, streaming display |
 | `backend/app/tools/__init__.py` | Fixed `result.data` → `result.result` bug |
 | `azoth_comms/response_to_azoth_2.md` | **NEW** - Response to Azoth's debug report |
+
+## Key Files Modified (Session 7)
+
+| File | Changes |
+|------|---------|
+| `backend/app/config.py` | Token lifetime: 15min→2hr access, 7d→30d refresh |
+| `backend/app/main.py` | CORS headers on global exception handler, v61 |
+| `frontend/src/services/api.js` | Graceful refresh retry, session-expired event |
+| `frontend/src/views/LoginView.vue` | Friendly amber notice on session expiry |
 
 ## Key Files Modified (Session 3)
 
