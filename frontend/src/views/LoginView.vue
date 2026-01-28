@@ -1,5 +1,5 @@
 <script setup>
-import { ref, nextTick } from 'vue'
+import { ref, nextTick, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 
@@ -11,6 +11,16 @@ const email = ref('')
 const password = ref('')
 const error = ref('')
 const loading = ref(false)
+const sessionMessage = ref('')
+
+// Check for session expiry redirect
+onMounted(() => {
+  if (route.query.expired === 'true') {
+    sessionMessage.value = 'Your session has ended. Please sign in to continue your journey.'
+    // Clean up the URL
+    router.replace({ query: { ...route.query, expired: undefined } })
+  }
+})
 
 // Parse login errors into friendly messages
 function parseLoginError(e) {
@@ -83,6 +93,11 @@ async function handleSubmit() {
       <!-- Login Form -->
       <div class="card">
         <form @submit.prevent="handleSubmit" class="space-y-6">
+          <!-- Session Expired Notice (friendly) -->
+          <div v-if="sessionMessage" class="bg-amber-500/10 border border-amber-500/50 rounded-lg p-3 text-amber-300 text-sm">
+            {{ sessionMessage }}
+          </div>
+
           <!-- Error -->
           <div v-if="error" class="bg-red-500/10 border border-red-500/50 rounded-lg p-3 text-red-400 text-sm">
             {{ error }}

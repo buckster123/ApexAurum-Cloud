@@ -51,7 +51,7 @@ async def lifespan(app: FastAPI):
     """Application lifespan manager."""
     # Startup
     print("=" * 50)
-    print("ApexAurum Cloud v58 - Council Deliberation")
+    print("ApexAurum Cloud v61 - Graceful Sessions")
     print("=" * 50)
 
     # Import all models before database init to ensure SQLAlchemy
@@ -120,7 +120,7 @@ async def health_check():
     return {
         "status": "healthy",
         "version": "0.1.0",
-        "build": "v60-auto-deliberation",
+        "build": "v61-graceful-sessions",
         "agents": {
             "native": 5,
             "pac": 4,
@@ -186,11 +186,22 @@ app.include_router(village_ws_router, prefix="/ws")
 # Exception handlers
 @app.exception_handler(Exception)
 async def global_exception_handler(request, exc):
-    """Global exception handler."""
+    """Global exception handler with CORS support."""
+    # Build CORS headers to ensure error responses are readable by frontend
+    origin = request.headers.get("origin", "")
+    cors_headers = {}
+
+    if origin in settings.allowed_origins_list:
+        cors_headers = {
+            "Access-Control-Allow-Origin": origin,
+            "Access-Control-Allow-Credentials": "true",
+        }
+
     return JSONResponse(
         status_code=500,
         content={
             "error": "Internal server error",
             "detail": str(exc) if settings.debug else "An unexpected error occurred",
-        }
+        },
+        headers=cors_headers,
     )
