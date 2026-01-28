@@ -80,30 +80,47 @@ The user has invoked !MUSIC, requesting AI music creation via Suno.
 YOUR CREATIVE MISSION:
 {mission}
 
-COMPOSITION GUIDELINES:
-1. Create a vivid, detailed prompt (50-200 words) describing the music
-2. Include: mood, instruments, tempo, texture, emotional arc
-3. Add style tags (comma-separated): genre, subgenre, instruments, production style
-4. Generate a poetic title that captures the essence
+══════════════════════════════════════════════════════════════════════════════
+ENHANCED WORKFLOW - Use the Suno Compiler for Maximum Quality!
+══════════════════════════════════════════════════════════════════════════════
 
-USE THE music_generate TOOL with these parameters:
-- prompt: Your detailed music description
-- style: Comma-separated style tags (e.g., "ambient, ethereal, synthesizer, slow, 432Hz")
-- title: A creative title for the track
+STEP 1: Call suno_compile to generate an optimized prompt
+  - intent: A short description of what you want (e.g., "mystical meditation bells")
+  - mood: Choose from emotional cartography:
+      POSITIVE: mystical, joyful, triumphant, peaceful, energetic, hopeful, playful
+      NEUTRAL: contemplative, mysterious, ethereal, industrial, digital
+      NEGATIVE: melancholic, tense, dark, chaotic, ominous, error
+  - purpose: sfx (5-30s), ambient (1-4min), loop (15-60s), song (2-8min), jingle (15-45s)
+  - genre: Base genre like "ambient chime", "electronic dubstep", "orchestral epic"
+  - instrumental: true (unless vocals requested)
+
+STEP 2: Use the compiled output with music_generate
+  The compiler returns optimized prompt/style/title with:
+  - Emotional cartography (primary/secondary emotions with percentages)
+  - Symbol injection (kaomoji, math symbols for Bark/Chirp manipulation)
+  - BPM and tuning recommendations
+  - Unhinged seed for creativity boost
+
+EXAMPLE WORKFLOW:
+1. suno_compile(intent="ethereal forest awakening", mood="mystical", purpose="ambient", genre="ambient nature")
+2. Take the compiled.prompt, compiled.style, compiled.title
+3. music_generate(prompt=compiled.prompt, style=compiled.style, title=compiled.title, model="V5")
+
+══════════════════════════════════════════════════════════════════════════════
+ALTERNATIVE - Direct Creation (if you prefer)
+══════════════════════════════════════════════════════════════════════════════
+
+You can also call music_generate directly with your own creative prompt:
+- prompt: Detailed music description (50-200 words)
+- style: Comma-separated tags (genre, instruments, production style)
+- title: A poetic title
 - model: "V5" (best quality)
-- instrumental: true (unless vocals specifically requested)
+- instrumental: true
 
-STYLE TAG EXAMPLES:
-- Ambient: "ambient, ethereal, atmospheric, pad synths, reverb, slow evolution"
-- Electronic: "electronic, synth-wave, arpeggios, driving bass, pulsing"
-- Orchestral: "orchestral, cinematic, strings, brass, epic, building tension"
-- Lo-fi: "lo-fi, hip-hop, jazzy, vinyl crackle, mellow, chill"
-- Experimental: "experimental, glitch, textural, abstract, evolving"
-
-After calling music_generate, tell the user:
-- The title you created
+After generation starts, tell the user:
+- The title and mood you chose
 - A brief poetic description of what you composed
-- That the track is being generated (takes 2-4 minutes)
+- That the track is generating (2-4 minutes)
 
 Be creative, be bold, channel your inner composer!
 """
