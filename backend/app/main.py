@@ -51,7 +51,7 @@ async def lifespan(app: FastAPI):
     """Application lifespan manager."""
     # Startup
     print("=" * 50)
-    print("ApexAurum Cloud v62 - Council Debug")
+    print("ApexAurum Cloud v63 - HTTPException CORS")
     print("=" * 50)
 
     # Import all models before database init to ensure SQLAlchemy
@@ -120,7 +120,7 @@ async def health_check():
     return {
         "status": "healthy",
         "version": "0.1.0",
-        "build": "v62-council-debug",
+        "build": "v63-httpexception-cors",
         "agents": {
             "native": 5,
             "pac": 4,
@@ -184,24 +184,45 @@ app.include_router(village_ws_router, prefix="/ws")
 
 
 # Exception handlers
-@app.exception_handler(Exception)
-async def global_exception_handler(request, exc):
-    """Global exception handler with CORS support."""
-    # Build CORS headers to ensure error responses are readable by frontend
-    origin = request.headers.get("origin", "")
-    cors_headers = {}
+from fastapi import HTTPException
 
+
+def get_cors_headers(request):
+    """Build CORS headers for error responses."""
+    origin = request.headers.get("origin", "")
     if origin in settings.allowed_origins_list:
-        cors_headers = {
+        return {
             "Access-Control-Allow-Origin": origin,
             "Access-Control-Allow-Credentials": "true",
         }
+    return {}
+
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request, exc):
+    """HTTPException handler with CORS support."""
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail},
+        headers=get_cors_headers(request),
+    )
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request, exc):
+    """Global exception handler with CORS support."""
+    import traceback
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.exception(f"Unhandled exception: {exc}")
 
     return JSONResponse(
         status_code=500,
         content={
             "error": "Internal server error",
-            "detail": str(exc) if settings.debug else "An unexpected error occurred",
+            # Always show detail for better debugging
+            "detail": str(exc),
+            "type": exc.__class__.__name__,
         },
-        headers=cors_headers,
+        headers=get_cors_headers(request),
     )
