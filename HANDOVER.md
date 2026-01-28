@@ -1,8 +1,8 @@
 # ApexAurum-Cloud Handover Document
 
 **Date:** 2026-01-28
-**Build:** v82-suno-compiler
-**Status:** PRODUCTION READY - apexXuno with Suno Compiler! The Athanor Speaks!
+**Build:** v83-village-music
+**Status:** PRODUCTION READY - apexXuno COMPLETE! All 4 Phases!
 
 ---
 
@@ -339,7 +339,7 @@ curl -s -X POST "https://backboard.railway.app/graphql/v2" \
 - ~~Music Frontend UI (library, player, generation form)~~ DONE (v80)
 - ~~!MUSIC trigger in chat (agent creative mode)~~ DONE (v81)
 - ~~Suno Prompt Compiler (advanced prompt engineering from OG ApexAurum)~~ DONE (v82)
-- Music → Village memory posting (cultural transmission)
+- ~~Music → Village memory posting (cultural transmission)~~ DONE (v83)
 - MIDI → Suno composition pipeline (music_compose from OG)
 
 ---
@@ -705,6 +705,12 @@ curl -s -X POST "https://backboard.railway.app/graphql/v2" \
 - **Unhinged seed generation** - Creativity boost with satirical descriptors
 - **`suno_moods` tool** - List available moods with their cartography
 
+### Village Music Memory (v83) - COMPLETE
+- **Auto-inject** completed songs into Village memory
+- **Cultural transmission** - all agents can see music creations
+- **Collection:** "music" with "village" visibility
+- Agents can reference: *"The ambient track Azoth composed yesterday"*
+
 ### Key Files Created/Modified (Session 12):
 
 | File | Changes |
@@ -718,8 +724,9 @@ curl -s -X POST "https://backboard.railway.app/graphql/v2" \
 | `backend/app/tools/suno_compiler.py` | **NEW** - suno_compile, suno_moods tools |
 | `backend/app/tools/base.py` | Added CREATIVE category |
 | `backend/app/tools/__init__.py` | Register suno_compiler tools (Tier 12) |
-| `backend/app/main.py` | v82-suno-compiler |
-| `docs/SUNO_MASTERPLAN.md` | Updated status to Phase 1+2+3 Complete |
+| `backend/app/services/suno.py` | Village memory injection after completion |
+| `backend/app/main.py` | v83-village-music |
+| `docs/SUNO_MASTERPLAN.md` | All 4 Phases COMPLETE |
 
 ---
 
