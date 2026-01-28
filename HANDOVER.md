@@ -1,8 +1,8 @@
 # ApexAurum-Cloud Handover Document
 
 **Date:** 2026-01-28
-**Build:** v61-graceful-sessions
-**Status:** PRODUCTION READY - Long wanders with graceful sessions!
+**Build:** v62-council-debug
+**Status:** PRODUCTION READY - Council fully operational!
 
 ---
 
@@ -208,11 +208,30 @@ ApexAurum Cloud is fully functional and polished:
 - **Friendly message:** Amber notice on login page: "Your session has ended. Please sign in to continue your journey."
 - **No hard redirects:** Graceful degradation instead of abrupt logout
 
+### 4. Council 500 Bug Fix - COMPLETE
+- **Root cause:** `pending_human_message` column missing from database
+- Column was added to SQLAlchemy model but no migration was created
+- Added migration to `database.py` to add column to existing table
+- Council session creation now works correctly
+
+### 5. Council Diagnostic Endpoint - COMPLETE
+- **New endpoint:** `/api/v1/council/diagnostic`
+- Shows all council tables and their row counts
+- Lists all columns in `deliberation_sessions` table
+- Confirms `pending_human_message` column exists
+- No auth required - for debugging deployment issues
+
+### 6. Error Handling Hardening - COMPLETE
+- `get_current_user`: Wrapped UUID parsing in try/except (prevents 500 on malformed tokens)
+- `create_session`: Wrapped in try/except with logging
+- `list_sessions`: Wrapped in try/except with logging
+- All council endpoints now return descriptive errors instead of 500s
+
 ---
 
 ## Latest Commit
 ```
-b412fbb Extend token lifetime and add graceful session handling
+0f81b08 Enhance council diagnostic to show columns
 ```
 
 **Railway Token:** Working - deploys via API are functioning.
@@ -342,7 +361,10 @@ curl -s -X POST "https://backboard.railway.app/graphql/v2" \
 | File | Changes |
 |------|---------|
 | `backend/app/config.py` | Token lifetime: 15min→2hr access, 7d→30d refresh |
-| `backend/app/main.py` | CORS headers on global exception handler, v61 |
+| `backend/app/main.py` | CORS headers on exception handler, v62-council-debug |
+| `backend/app/database.py` | Migration for `pending_human_message` column |
+| `backend/app/api/v1/council.py` | Diagnostic endpoint, error handling in create/list |
+| `backend/app/auth/deps.py` | Error handling for malformed token payloads |
 | `frontend/src/services/api.js` | Graceful refresh retry, session-expired event |
 | `frontend/src/views/LoginView.vue` | Friendly amber notice on session expiry |
 
