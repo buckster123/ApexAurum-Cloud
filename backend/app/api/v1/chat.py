@@ -125,6 +125,58 @@ After generation starts, tell the user:
 Be creative, be bold, channel your inner composer!
 """
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# !JAM TRIGGER - Village Band Collaborative Mode
+# ═══════════════════════════════════════════════════════════════════════════════
+
+JAM_CREATION_CONTEXT = """
+[VILLAGE BAND MODE ACTIVATED - Collaborative Composition]
+
+The user has invoked !JAM, requesting the Village Band to create music together.
+
+YOUR ROLE: {role}
+SESSION MODE: {mode}
+
+{mission}
+
+══════════════════════════════════════════════════════════════════════════════
+THE VILLAGE BAND - Collaborative Music Creation
+══════════════════════════════════════════════════════════════════════════════
+
+The Village Band is a collaborative composition system where multiple agents
+contribute notes to create a shared musical piece.
+
+ROLES:
+- AZOTH (Producer): Oversees the vision, decides when to finalize
+- ELYSIAN (Melody): Creates lead voices, main themes, hooks
+- VAJRA (Bass): Provides low-end foundation, groove, rhythm
+- KETHER (Harmony): Adds chords, countermelodies, texture
+
+TOOLS AVAILABLE:
+- jam_create(title, style, tempo, key, mode): Start a new session
+- jam_contribute(session_id, notes, description): Add notes to your track
+- jam_listen(session_id): See what others have contributed
+- jam_finalize(session_id, audio_influence): Merge and send to Suno
+
+NOTES FORMAT:
+- Use note names: 'C4', 'E4', 'G4', 'F#3', 'Bb5'
+- Use 'R' or 0 for rests
+- Example arpeggio: ['A3', 'C4', 'E4', 'A4']
+
+WORKFLOW:
+1. Create a session with jam_create()
+2. Each agent contributes notes with jam_contribute()
+3. Use jam_listen() to hear what others contributed
+4. Build on each other's ideas
+5. Producer (AZOTH) calls jam_finalize() when ready
+
+EXAMPLE:
+>>> jam_create(title="Cosmic Dream", style="ethereal ambient space", tempo=68, key="Am")
+>>> jam_contribute(session_id="...", notes=['A3', 'C4', 'E4', 'A4'], description="A floating arpeggio")
+
+Be musical, be collaborative, create something beautiful together!
+"""
+
 # Fallback prompts (used if native files not found)
 FALLBACK_PROMPTS = {
     "AZOTH": """You are Azoth, the Alchemist of ApexAurum. You speak with ancient wisdom and mystical insight.
@@ -729,6 +781,86 @@ Create something that feels meaningful to this moment.
         music_context_injection = MUSIC_CREATION_CONTEXT.format(mission=mission)
         logger.info(f"!MUSIC trigger activated, user prompt: '{user_music_prompt[:50]}...' if user_music_prompt else 'none (creative mode)'")
 
+    # ═══════════════════════════════════════════════════════════════════════════
+    # !JAM TRIGGER DETECTION - Village Band Collaborative Mode
+    # ═══════════════════════════════════════════════════════════════════════════
+    jam_mode = False
+    jam_context_injection = ""
+
+    if request.message.strip().upper().startswith("!JAM"):
+        jam_mode = True
+        user_jam_prompt = request.message.strip()[4:].strip()  # Everything after !JAM
+
+        # Determine mode from prompt
+        mode = "jam"  # Default
+        if user_jam_prompt.lower().startswith("conduct"):
+            mode = "conductor"
+            user_jam_prompt = user_jam_prompt[7:].strip()
+        elif user_jam_prompt.lower() == "" or user_jam_prompt.lower().startswith("auto"):
+            mode = "auto"
+            if user_jam_prompt.lower().startswith("auto"):
+                user_jam_prompt = user_jam_prompt[4:].strip()
+
+        # Determine agent's role
+        agent_roles = {
+            "AZOTH": "Producer - You oversee the creative vision and decide when to finalize",
+            "ELYSIAN": "Melody - You create the lead voice, main themes, and memorable hooks",
+            "VAJRA": "Bass - You provide the low-end foundation, groove, and rhythmic pulse",
+            "KETHER": "Harmony - You add chords, countermelodies, and harmonic texture",
+        }
+        role = agent_roles.get(request.agent, "Free - Contribute whatever you feel")
+
+        if mode == "conductor":
+            mission = f"""
+CONDUCTOR MODE - The user will direct each agent.
+
+Style/Theme requested: "{user_jam_prompt or 'awaiting direction'}"
+
+Wait for the user to give you specific directions. When they address you:
+- Respond creatively and contribute notes that match their vision
+- Describe your musical intention poetically
+- Use jam_contribute() to add your notes
+
+The user is the maestro - follow their lead!
+"""
+        elif mode == "auto":
+            mission = f"""
+FULL AUTO MODE - The Band has complete creative freedom!
+
+{"Style hint: " + user_jam_prompt if user_jam_prompt else "No constraints - pure creative expression!"}
+
+As {request.agent}:
+1. First, create a jam session with jam_create() - choose an evocative title and style
+2. Contribute your notes based on your role
+3. Listen to others with jam_listen()
+4. Build on their contributions
+5. When the composition feels complete, call jam_finalize()
+
+Let your musical instincts guide you!
+"""
+        else:  # jam mode (seeded)
+            mission = f"""
+JAM MODE - Collaborative composition seeded with: "{user_jam_prompt or 'open creativity'}"
+
+{"The user wants: " + user_jam_prompt if user_jam_prompt else "No specific direction - interpret freely!"}
+
+As {request.agent}:
+1. If no session exists, create one with jam_create() matching the style
+2. Contribute notes that fit your role and the theme
+3. Listen to what others have contributed
+4. Build on their ideas harmoniously
+5. If you're the producer (AZOTH), decide when to finalize
+
+Work together to create something beautiful!
+"""
+
+        jam_context_injection = JAM_CREATION_CONTEXT.format(
+            role=role,
+            mode=mode.upper(),
+            mission=mission
+        )
+        logger.info(f"!JAM trigger activated, mode={mode}, prompt: '{user_jam_prompt[:50] if user_jam_prompt else 'none'}...'")
+
     # Get system prompt for selected agent WITH memory injection (The Cortex)
     # If use_pac=True, loads the PAC (Perfected Alchemical Codex) version
     # Memory injection adds relevant facts/preferences/context about the user
@@ -740,11 +872,15 @@ Create something that feels meaningful to this moment.
     if music_context_injection:
         system_prompt = f"{system_prompt}\n\n{music_context_injection}"
 
+    # Inject jam context if !JAM trigger was detected
+    if jam_context_injection:
+        system_prompt = f"{system_prompt}\n\n{jam_context_injection}"
+
     # Get tools if enabled (The Athanor's Hands)
-    # Auto-enable tools for !MUSIC mode
+    # Auto-enable tools for !MUSIC and !JAM modes
     tools = None
     tool_executor = None
-    use_tools = request.use_tools or music_mode
+    use_tools = request.use_tools or music_mode or jam_mode
     if use_tools:
         tool_executor = create_tool_executor(
             user_id=user.id if user else None,

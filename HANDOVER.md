@@ -1,8 +1,8 @@
 # ApexAurum-Cloud Handover Document
 
 **Date:** 2026-01-29
-**Build:** v85-midi-compose
-**Status:** PRODUCTION READY - MIDI Composition Pipeline!
+**Build:** v86-village-band
+**Status:** PRODUCTION READY - Village Band Collaborative Music!
 
 ---
 
@@ -778,6 +778,33 @@ uploadUrl + style → upload-cover API → AI-transformed track
 | `backend/requirements.txt` | Added midiutil, midi2audio |
 | `backend/Dockerfile` | Added fluidsynth, fluid-soundfont-gm, ffmpeg |
 | `backend/app/main.py` | v85-midi-compose, 51 tools |
+
+### Village Band - Collaborative Composition (v86) - COMPLETE
+- **Database models:** JamSession, JamParticipant, JamTrack, JamMessage
+- **API endpoints:** `/jam/sessions/*` for full session management
+- **Agent tools:** `jam_create`, `jam_contribute`, `jam_listen`, `jam_finalize` (Tier 14)
+- **`!JAM` trigger** in chat with three modes:
+  - **Conductor mode** (`!JAM conduct [style]`) - User directs each agent
+  - **Jam mode** (`!JAM [style]`) - Style-seeded collaboration
+  - **Auto mode** (`!JAM` or `!JAM auto`) - Full creative freedom
+
+### Agent Roles in Village Band:
+| Agent | Role | Musical Contribution |
+|-------|------|---------------------|
+| AZOTH | Producer | Oversees vision, decides when to finalize |
+| ELYSIAN | Melody | Lead voice, main themes, hooks |
+| VAJRA | Bass | Low-end foundation, groove |
+| KETHER | Harmony | Chords, countermelodies, texture |
+
+### Key Files Created (Session 13 - Village Band):
+
+| File | Changes |
+|------|---------|
+| `backend/app/models/jam.py` | **NEW** - JamSession, JamParticipant, JamTrack, JamMessage models |
+| `backend/app/api/v1/jam.py` | **NEW** - Full REST API for jam sessions |
+| `backend/app/tools/jam.py` | **NEW** - jam_create, jam_contribute, jam_listen, jam_finalize tools |
+| `backend/app/api/v1/chat.py` | Added !JAM trigger with mode detection |
+| `backend/app/main.py` | v86-village-band, 55 tools |
 
 ---
 
