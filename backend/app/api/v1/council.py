@@ -140,6 +140,7 @@ async def council_diagnostic(db: AsyncSession = Depends(get_db)):
     diagnostics = {
         "status": "checking",
         "tables": {},
+        "columns": {},
         "model": COUNCIL_MODEL,
     }
 
@@ -160,6 +161,21 @@ async def council_diagnostic(db: AsyncSession = Depends(get_db)):
             diagnostics["tables"][table] = {"exists": True, "count": count}
         except Exception as e:
             diagnostics["tables"][table] = {"exists": False, "error": str(e)}
+
+    # Check critical columns exist
+    try:
+        result = await db.execute(
+            text("""
+                SELECT column_name FROM information_schema.columns
+                WHERE table_name = 'deliberation_sessions'
+                ORDER BY ordinal_position
+            """)
+        )
+        columns = [row[0] for row in result.fetchall()]
+        diagnostics["columns"]["deliberation_sessions"] = columns
+        diagnostics["pending_human_message_exists"] = "pending_human_message" in columns
+    except Exception as e:
+        diagnostics["columns"]["error"] = str(e)
 
     # Check overall status
     all_exist = all(t.get("exists", False) for t in diagnostics["tables"].values())
