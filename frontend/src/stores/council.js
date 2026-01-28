@@ -26,9 +26,16 @@ export const AVAILABLE_AGENTS = [
 
 // Available models for deliberation
 export const AVAILABLE_MODELS = [
-  { id: 'claude-haiku-4-5-20251001', name: 'Haiku 4.5', description: 'Fast & efficient (default)' },
-  { id: 'claude-sonnet-4-5-20250929', name: 'Sonnet 4.5', description: 'Balanced performance' },
-  { id: 'claude-opus-4-5-20251101', name: 'Opus 4.5', description: 'Maximum capability' },
+  // Current 4.5 family
+  { id: 'claude-haiku-4-5-20251001', name: 'Haiku 4.5', description: 'Fast & efficient (default)', legacy: false },
+  { id: 'claude-sonnet-4-5-20250929', name: 'Sonnet 4.5', description: 'Balanced performance', legacy: false },
+  { id: 'claude-opus-4-5-20251101', name: 'Opus 4.5', description: 'Maximum capability', legacy: false },
+  // Legacy 3.5 family (Adept only)
+  { id: 'claude-3-5-sonnet-20241022', name: 'Sonnet 3.5', description: 'Legacy - The beloved one', legacy: true },
+  { id: 'claude-3-5-haiku-20241022', name: 'Haiku 3.5', description: 'Legacy - Fast classic', legacy: true },
+  // Vintage 3.0 family (Adept only)
+  { id: 'claude-3-opus-20240229', name: 'Opus 3', description: 'Vintage - The wise elder', legacy: true },
+  { id: 'claude-3-haiku-20240307', name: 'Haiku 3', description: 'Vintage - Quick & charming', legacy: true },
 ]
 
 export const useCouncilStore = defineStore('council', () => {

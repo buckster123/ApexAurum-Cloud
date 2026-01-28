@@ -133,9 +133,16 @@ TIER_LIMITS = {
         "name": "Adept",
         "messages_per_month": None,  # Unlimited
         "models": [
+            # Current 4.5 family
             "claude-haiku-4-5-20251001",
             "claude-sonnet-4-5-20250929",
             "claude-opus-4-5-20251101",
+            # Legacy 3.5 family
+            "claude-3-5-sonnet-20241022",
+            "claude-3-5-haiku-20241022",
+            # Vintage 3.0 family
+            "claude-3-opus-20240229",
+            "claude-3-haiku-20240307",
         ],
         "tools_enabled": True,
         "multi_provider": True,

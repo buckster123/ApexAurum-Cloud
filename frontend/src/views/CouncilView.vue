@@ -302,9 +302,10 @@ function getStateClass(state) {
               <label class="block text-sm font-medium text-gray-300 mb-2">
                 Model for Deliberation
               </label>
-              <div class="grid grid-cols-3 gap-2">
+              <!-- Current Models -->
+              <div class="grid grid-cols-3 gap-2 mb-3">
                 <button
-                  v-for="model in AVAILABLE_MODELS"
+                  v-for="model in AVAILABLE_MODELS.filter(m => !m.legacy)"
                   :key="model.id"
                   @click="council.newSessionModel = model.id"
                   :class="[
@@ -316,6 +317,24 @@ function getStateClass(state) {
                 >
                   <div class="font-medium">{{ model.name }}</div>
                   <div class="text-xs opacity-70">{{ model.description }}</div>
+                </button>
+              </div>
+              <!-- Legacy Models (Adept only) -->
+              <div class="text-xs text-gray-500 mb-2">Legacy Models (Adept tier)</div>
+              <div class="grid grid-cols-4 gap-2">
+                <button
+                  v-for="model in AVAILABLE_MODELS.filter(m => m.legacy)"
+                  :key="model.id"
+                  @click="council.newSessionModel = model.id"
+                  :class="[
+                    'p-2 rounded-lg border text-center transition-all text-xs',
+                    council.newSessionModel === model.id
+                      ? 'border-purple-500 bg-purple-500/10 text-purple-400'
+                      : 'border-apex-border hover:border-gray-600 text-gray-500'
+                  ]"
+                >
+                  <div class="font-medium">{{ model.name }}</div>
+                  <div class="text-xs opacity-60">{{ model.description }}</div>
                 </button>
               </div>
             </div>

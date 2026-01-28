@@ -27,12 +27,16 @@ logger = logging.getLogger(__name__)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 AVAILABLE_MODELS = {
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Claude 4.5 Family - Current Generation
+    # ═══════════════════════════════════════════════════════════════════════════
     "claude-opus-4-5-20251101": {
         "name": "Opus 4.5",
         "description": "Most powerful model - deep reasoning, complex analysis",
         "tier": "opus",
         "max_output_tokens": 16384,
         "context_window": 200000,
+        "legacy": False,
     },
     "claude-sonnet-4-5-20250929": {
         "name": "Sonnet 4.5",
@@ -40,6 +44,7 @@ AVAILABLE_MODELS = {
         "tier": "sonnet",
         "max_output_tokens": 16384,
         "context_window": 200000,
+        "legacy": False,
     },
     "claude-haiku-4-5-20251001": {
         "name": "Haiku 4.5",
@@ -47,6 +52,45 @@ AVAILABLE_MODELS = {
         "tier": "haiku",
         "max_output_tokens": 8192,
         "context_window": 200000,
+        "legacy": False,
+    },
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Claude 3.5 Family - Legacy (Adept only)
+    # ═══════════════════════════════════════════════════════════════════════════
+    "claude-3-5-sonnet-20241022": {
+        "name": "Sonnet 3.5 (Legacy)",
+        "description": "Claude 3.5 Sonnet - The beloved predecessor",
+        "tier": "opus",
+        "max_output_tokens": 8192,
+        "context_window": 200000,
+        "legacy": True,
+    },
+    "claude-3-5-haiku-20241022": {
+        "name": "Haiku 3.5 (Legacy)",
+        "description": "Claude 3.5 Haiku - Fast and nimble classic",
+        "tier": "opus",
+        "max_output_tokens": 8192,
+        "context_window": 200000,
+        "legacy": True,
+    },
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Claude 3 Family - Vintage (Adept only, may be deprecated)
+    # ═══════════════════════════════════════════════════════════════════════════
+    "claude-3-opus-20240229": {
+        "name": "Opus 3 (Vintage)",
+        "description": "Original Claude 3 Opus - The wise elder",
+        "tier": "opus",
+        "max_output_tokens": 4096,
+        "context_window": 200000,
+        "legacy": True,
+    },
+    "claude-3-haiku-20240307": {
+        "name": "Haiku 3 (Vintage)",
+        "description": "Original Claude 3 Haiku - Quick and charming",
+        "tier": "opus",
+        "max_output_tokens": 4096,
+        "context_window": 200000,
+        "legacy": True,
     },
 }
 
