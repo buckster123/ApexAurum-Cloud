@@ -10,6 +10,8 @@ const auth = useAuthStore()
 
 const activeTab = ref('plans')
 const loadingAction = ref(null)
+const couponCode = ref('')
+const couponMessage = ref(null)
 
 // Check for success redirect
 const checkoutSuccess = computed(() => route.query.session_id)
@@ -55,6 +57,29 @@ async function manageSubscription() {
     await billing.openPortal()
   } catch (e) {
     console.error('Portal error:', e)
+  } finally {
+    loadingAction.value = null
+  }
+}
+
+async function redeemCoupon() {
+  if (!couponCode.value.trim()) return
+
+  couponMessage.value = null
+  loadingAction.value = 'coupon'
+
+  try {
+    const result = await billing.redeemCoupon(couponCode.value.trim())
+    couponMessage.value = {
+      success: true,
+      text: result.benefit_description,
+    }
+    couponCode.value = ''
+  } catch (e) {
+    couponMessage.value = {
+      success: false,
+      text: billing.error || 'Failed to redeem coupon',
+    }
   } finally {
     loadingAction.value = null
   }
@@ -296,6 +321,44 @@ function formatDate(dateStr) {
 
       <div class="mt-8 text-center text-sm text-gray-500">
         Credits are billed once and never expire. Use them for any model beyond your subscription limit.
+      </div>
+
+      <!-- Coupon Redemption Section -->
+      <div class="mt-12 max-w-md mx-auto">
+        <div class="bg-surface rounded-xl p-6 border border-gray-700">
+          <h3 class="text-lg font-semibold mb-4 text-center">Have a Coupon?</h3>
+
+          <div class="flex gap-2">
+            <input
+              v-model="couponCode"
+              type="text"
+              placeholder="Enter coupon code"
+              class="flex-1 px-4 py-2 bg-gray-800 border border-gray-600 rounded-lg text-white placeholder-gray-500 focus:border-gold focus:outline-none uppercase"
+              :disabled="loadingAction === 'coupon'"
+              @keyup.enter="redeemCoupon"
+            />
+            <button
+              @click="redeemCoupon"
+              :disabled="!couponCode.trim() || loadingAction === 'coupon'"
+              class="px-6 py-2 bg-gold text-black rounded-lg font-medium hover:bg-gold/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {{ loadingAction === 'coupon' ? 'Redeeming...' : 'Redeem' }}
+            </button>
+          </div>
+
+          <!-- Coupon Result Message -->
+          <div
+            v-if="couponMessage"
+            :class="[
+              'mt-3 p-3 rounded-lg text-sm',
+              couponMessage.success
+                ? 'bg-green-500/20 text-green-400 border border-green-500/30'
+                : 'bg-red-500/20 text-red-400 border border-red-500/30'
+            ]"
+          >
+            {{ couponMessage.text }}
+          </div>
+        </div>
       </div>
     </div>
 

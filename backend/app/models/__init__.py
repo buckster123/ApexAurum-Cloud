@@ -15,7 +15,7 @@ from app.models.village import VillageKnowledge
 from app.models.memory import Memory
 from app.models.music import MusicTask
 from app.models.agent_memory import AgentMemory
-from app.models.billing import Subscription, CreditBalance, CreditTransaction, WebhookEvent
+from app.models.billing import Subscription, CreditBalance, CreditTransaction, WebhookEvent, Coupon, CouponRedemption
 from app.models.council import DeliberationSession, SessionAgent, DeliberationRound, SessionMessage
 
 # User references all of the above, so import LAST
@@ -36,6 +36,8 @@ __all__ = [
     "CreditBalance",
     "CreditTransaction",
     "WebhookEvent",
+    "Coupon",
+    "CouponRedemption",
     "DeliberationSession",
     "SessionAgent",
     "DeliberationRound",

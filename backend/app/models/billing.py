@@ -210,3 +210,114 @@ class WebhookEvent(Base):
 
     def __repr__(self):
         return f"<WebhookEvent {self.id} {self.event_type}>"
+
+
+class Coupon(Base):
+    """
+    Promotional coupons for discounts, credits, and tier upgrades.
+
+    Coupon types:
+    - credit_bonus: Add free credits to user's balance
+    - tier_upgrade: Grant temporary tier access (e.g., 1 month Adept)
+    - subscription_discount: Percentage off subscription (future Stripe integration)
+    """
+
+    __tablename__ = "coupons"
+
+    id: Mapped[UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid4
+    )
+
+    # Coupon code (case-insensitive, stored uppercase)
+    code: Mapped[str] = mapped_column(String(50), unique=True, index=True, nullable=False)
+
+    # Coupon details
+    name: Mapped[str] = mapped_column(String(100), nullable=False)  # Display name
+    description: Mapped[Optional[str]] = mapped_column(Text)
+
+    # Type and value
+    coupon_type: Mapped[str] = mapped_column(String(30), nullable=False)  # credit_bonus, tier_upgrade, subscription_discount
+    value: Mapped[int] = mapped_column(Integer, nullable=False)  # Credits for credit_bonus, days for tier_upgrade, % for discount
+    tier: Mapped[Optional[str]] = mapped_column(String(20))  # Target tier for tier_upgrade (pro, opus)
+
+    # Usage limits
+    max_uses: Mapped[Optional[int]] = mapped_column(Integer)  # Total max uses (None = unlimited)
+    max_uses_per_user: Mapped[int] = mapped_column(Integer, default=1)  # Per-user limit
+    current_uses: Mapped[int] = mapped_column(Integer, default=0)
+
+    # Validity period
+    valid_from: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    valid_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))  # None = never expires
+
+    # Status
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    # Admin tracking
+    created_by: Mapped[Optional[UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"))
+
+    # Timestamps
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    redemptions: Mapped[list["CouponRedemption"]] = relationship(back_populates="coupon", cascade="all, delete-orphan")
+
+    def __repr__(self):
+        return f"<Coupon {self.code} ({self.coupon_type})>"
+
+    def is_valid(self) -> bool:
+        """Check if coupon is currently valid."""
+        if not self.is_active:
+            return False
+        now = datetime.utcnow()
+        if self.valid_from and now < self.valid_from:
+            return False
+        if self.valid_until and now > self.valid_until:
+            return False
+        if self.max_uses and self.current_uses >= self.max_uses:
+            return False
+        return True
+
+
+class CouponRedemption(Base):
+    """
+    Track which users have redeemed which coupons.
+
+    Stores the benefit granted for audit purposes.
+    """
+
+    __tablename__ = "coupon_redemptions"
+
+    id: Mapped[UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid4
+    )
+
+    # References
+    coupon_id: Mapped[UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("coupons.id", ondelete="CASCADE"),
+        index=True
+    )
+    user_id: Mapped[UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        index=True
+    )
+
+    # What was granted
+    benefit_type: Mapped[str] = mapped_column(String(30))  # credit_bonus, tier_upgrade
+    benefit_value: Mapped[int] = mapped_column(Integer)  # Credits added or days granted
+    benefit_details: Mapped[Optional[dict]] = mapped_column(JSONB)  # Extra info (tier, expiry date, etc.)
+
+    # Timestamp
+    redeemed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+
+    # Relationships
+    coupon: Mapped["Coupon"] = relationship(back_populates="redemptions")
+
+    def __repr__(self):
+        return f"<CouponRedemption {self.coupon_id} by {self.user_id}>"

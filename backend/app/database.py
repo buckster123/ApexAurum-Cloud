@@ -406,6 +406,65 @@ async def init_db():
                 RAISE NOTICE 'Council agent management migration skipped';
             END $$;
             """,
+            # ═══════════════════════════════════════════════════════════════════════
+            # COUPONS - v77: Promotional coupons system
+            # Create coupons and coupon_redemptions tables
+            # ═══════════════════════════════════════════════════════════════════════
+            """
+            CREATE TABLE IF NOT EXISTS coupons (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                code VARCHAR(50) UNIQUE NOT NULL,
+                name VARCHAR(100) NOT NULL,
+                description TEXT,
+                coupon_type VARCHAR(30) NOT NULL,
+                value INTEGER NOT NULL,
+                tier VARCHAR(20),
+                max_uses INTEGER,
+                max_uses_per_user INTEGER DEFAULT 1,
+                current_uses INTEGER DEFAULT 0,
+                valid_from TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                valid_until TIMESTAMP WITH TIME ZONE,
+                is_active BOOLEAN DEFAULT TRUE,
+                created_by UUID REFERENCES users(id) ON DELETE SET NULL,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+            );
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS idx_coupons_code ON coupons(code);
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS coupon_redemptions (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                coupon_id UUID NOT NULL REFERENCES coupons(id) ON DELETE CASCADE,
+                user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                benefit_type VARCHAR(30) NOT NULL,
+                benefit_value INTEGER NOT NULL,
+                benefit_details JSONB,
+                redeemed_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+            );
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS idx_coupon_redemptions_coupon_id ON coupon_redemptions(coupon_id);
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS idx_coupon_redemptions_user_id ON coupon_redemptions(user_id);
+            """,
+            # ═══════════════════════════════════════════════════════════════════════
+            # USER ADMIN FLAG - v77
+            # ═══════════════════════════════════════════════════════════════════════
+            """
+            DO $$
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                               WHERE table_name = 'users' AND column_name = 'is_admin') THEN
+                    ALTER TABLE users ADD COLUMN is_admin BOOLEAN DEFAULT FALSE;
+                    RAISE NOTICE 'Added is_admin column to users';
+                END IF;
+            EXCEPTION WHEN OTHERS THEN
+                RAISE NOTICE 'User admin migration skipped';
+            END $$;
+            """,
         ]
 
         from sqlalchemy import text

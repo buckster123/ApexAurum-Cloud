@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Optional
 from uuid import uuid4
 
-from sqlalchemy import String, DateTime, JSON
+from sqlalchemy import String, DateTime, JSON, Boolean
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID
 
@@ -39,6 +39,9 @@ class User(Base):
 
     # JSON settings (preferences, UI state, etc.)
     settings: Mapped[dict] = mapped_column(JSON, default=dict)
+
+    # Admin flag (for coupon management, etc.)
+    is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
 
     # Relationships
     conversations = relationship("Conversation", back_populates="user", cascade="all, delete-orphan")

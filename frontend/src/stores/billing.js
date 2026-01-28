@@ -147,6 +147,45 @@ export const useBillingStore = defineStore('billing', () => {
     return allowedModels.value.includes(modelId)
   }
 
+  // Coupon functionality
+  const couponResult = ref(null)
+  const couponLoading = ref(false)
+
+  async function checkCoupon(code) {
+    try {
+      couponLoading.value = true
+      couponResult.value = null
+      const response = await api.get(`/api/v1/billing/coupon/${encodeURIComponent(code)}`)
+      couponResult.value = response.data
+      return response.data
+    } catch (e) {
+      couponResult.value = { valid: false, error: e.response?.data?.detail || 'Failed to check coupon' }
+      return couponResult.value
+    } finally {
+      couponLoading.value = false
+    }
+  }
+
+  async function redeemCoupon(code) {
+    try {
+      couponLoading.value = true
+      error.value = null
+      const response = await api.post('/api/v1/billing/coupon/redeem', { code })
+      // Refresh status after redemption
+      await fetchStatus()
+      return response.data
+    } catch (e) {
+      error.value = e.response?.data?.detail || 'Failed to redeem coupon'
+      throw e
+    } finally {
+      couponLoading.value = false
+    }
+  }
+
+  function clearCouponResult() {
+    couponResult.value = null
+  }
+
   function reset() {
     status.value = {
       tier: 'free',
@@ -200,5 +239,11 @@ export const useBillingStore = defineStore('billing', () => {
     openPortal,
     isModelAllowed,
     reset,
+    // Coupons
+    couponResult,
+    couponLoading,
+    checkCoupon,
+    redeemCoupon,
+    clearCouponResult,
   }
 })
