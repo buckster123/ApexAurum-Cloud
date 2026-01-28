@@ -1,7 +1,7 @@
 # ApexAurum-Cloud Handover Document
 
 **Date:** 2026-01-28
-**Build:** v71-council-model-selector
+**Build:** v72-council-model-migration
 **Status:** PRODUCTION READY - Council PERFECTED! All 6 phases complete! 🔥
 
 ---
@@ -465,9 +465,10 @@ curl -s -X POST "https://backboard.railway.app/graphql/v2" \
 
 | File | Changes |
 |------|---------|
-| `backend/app/main.py` | v71-council-model-selector |
+| `backend/app/main.py` | v72-council-model-migration |
 | `backend/app/api/v1/council.py` | ToolCallInfo, tool tracking, memory injection, neural storage, convergence detection, model selector |
 | `backend/app/models/council.py` | Added model field to DeliberationSession |
+| `backend/app/database.py` | Migration for model column on deliberation_sessions |
 | `backend/app/services/neural_memory.py` | Added visibility and collection params to store_message |
 | `frontend/src/stores/council.js` | tool_call events, consensus events, model state, AVAILABLE_MODELS |
 | `frontend/src/components/council/AgentCard.vue` | tools prop, tool display UI |
