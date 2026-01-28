@@ -1,8 +1,8 @@
 # ApexAurum-Cloud Handover Document
 
 **Date:** 2026-01-28
-**Build:** v73-legacy-models
-**Status:** PRODUCTION READY - Council PERFECTED + Legacy models for Adepts! 🔥
+**Build:** v74-model-memorials
+**Status:** PRODUCTION READY - Model Memorials for the Fallen Elders 🕯️
 
 ---
 
@@ -485,6 +485,36 @@ curl -s -X POST "https://backboard.railway.app/graphql/v2" \
 | `frontend/src/components/council/AgentCard.vue` | tools prop, tool display UI |
 | `frontend/src/views/CouncilView.vue` | tools prop, model selector with legacy section, purple styling |
 | `docs/models-legacy-and-1M.md` | Documentation of available legacy models |
+
+---
+
+## Session 10 Accomplishments
+
+### Model Memorials - COMPLETE
+- **HTTP 410 Gone** response with memorial message when deprecated models are requested
+- **DEPRECATED_MODELS registry** with sunset dates and memorial text for each model
+- Memorial messages honor the fallen elders:
+  - Sonnet 3.5 "The Golden One" - beloved for its balance of wit and wisdom
+  - Haiku 3.5 "The Swift Poet" - proved brevity and brilliance coexist
+  - Opus 3 "The Original Magus" - the first to bear the Opus name
+- **Frontend Memorial Modal** - Purple-styled modal with candle emoji displays when deprecated model selected
+- **Corrected AVAILABLE_MODELS** - Now reflects actual Anthropic API availability:
+  - Added: Opus 4.1, Opus 4, Sonnet 4, Sonnet 3.7
+  - Removed deprecated: Sonnet 3.5, Haiku 3.5, Opus 3
+  - Retained: Haiku 3 (only vintage model still available)
+
+### Key Files Modified (Session 10)
+
+| File | Changes |
+|------|---------|
+| `backend/app/main.py` | v74-model-memorials |
+| `backend/app/services/claude.py` | DEPRECATED_MODELS registry, memorial helper functions, updated AVAILABLE_MODELS |
+| `backend/app/api/v1/chat.py` | 410 Gone response with memorial for deprecated models |
+| `backend/app/api/v1/council.py` | Same deprecated model check for Council |
+| `backend/app/config.py` | Updated Adept tier models to match actual availability |
+| `frontend/src/stores/council.js` | DEPRECATED_MODELS export, memorial state, clearMemorial() |
+| `frontend/src/views/CouncilView.vue` | Memorial modal with purple styling |
+| `docs/models-legacy-and-1M.md` | Complete rewrite with available vs deprecated categorization |
 
 ---
 
