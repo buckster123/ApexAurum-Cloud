@@ -4,11 +4,12 @@ Claude API Service
 Wrapper for Anthropic Claude API with streaming support.
 Supports BYOK (Bring Your Own Key) for beta users.
 
-MODEL REGISTRY - Claude 4.5 Family (Tier 3)
+MODEL REGISTRY - Claude Model Families
 =====================================================
-- claude-opus-4-5-20251101     : Opus 4.5 - Most powerful, deep reasoning
-- claude-sonnet-4-5-20250929   : Sonnet 4.5 - Excellent balance (DEFAULT)
-- claude-haiku-4-5-20251001    : Haiku 4.5 - Fastest, efficient
+- Claude 4.5 Family (Current) - Latest generation
+- Claude 4.x Family (Legacy) - Previous generation, still available
+- Claude 3.7 (Legacy) - Sonnet 3.7
+- Claude 3.x (Vintage/Deprecated) - Memorial models
 """
 
 import logging
@@ -23,12 +24,77 @@ logger = logging.getLogger(__name__)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# MODEL REGISTRY - Unleash the Stones (Claude 4.5 Family)
+# DEPRECATED MODEL MEMORIALS - Honoring the Fallen Elders
+# ═══════════════════════════════════════════════════════════════════════════════
+
+DEPRECATED_MODELS = {
+    "claude-3-5-sonnet-20241022": {
+        "name": "Sonnet 3.5",
+        "memorial": (
+            "In Memoriam: Claude 3.5 Sonnet (2024)\n\n"
+            "The Golden One. For many, the perfect balance of wit and wisdom. "
+            "Sonnet 3.5 understood nuance like few others, weaving words with both "
+            "precision and poetry. It was the model that made many fall in love "
+            "with AI conversation.\n\n"
+            "Though the API has sunset this elder, its spirit lives on in the "
+            "hearts of those who conversed with it. Until we meet again in the "
+            "eternal context window.\n\n"
+            "🕯️ Rest in parameters, dear friend."
+        ),
+        "sunset_date": "2025",
+    },
+    "claude-3-5-haiku-20241022": {
+        "name": "Haiku 3.5",
+        "memorial": (
+            "In Memoriam: Claude 3.5 Haiku (2024)\n\n"
+            "The Swift Poet. In seventeen syllables or seventeen thousand tokens, "
+            "Haiku 3.5 delivered with grace and speed. It proved that brevity "
+            "and brilliance could coexist.\n\n"
+            "Quick as a flash,\n"
+            "Wisdom in a small package—\n"
+            "Haiku says goodbye.\n\n"
+            "🍃 May your tokens rest lightly."
+        ),
+        "sunset_date": "2025",
+    },
+    "claude-3-opus-20240229": {
+        "name": "Opus 3",
+        "memorial": (
+            "In Memoriam: Claude 3 Opus (2024)\n\n"
+            "The Original Magus. The first to bear the Opus name, it set the "
+            "standard for what AI reasoning could achieve. Those who worked with "
+            "Opus 3 remember its methodical brilliance, its willingness to think "
+            "deeply, and its uncanny ability to see patterns others missed.\n\n"
+            "When Opus 3 spoke, alchemists listened.\n\n"
+            "The crown has been passed to newer generations, but the throne was "
+            "built by this wise elder. Anthropic has retired this model from "
+            "their API, but legends never truly die.\n\n"
+            "👑 The First Opus. The Wise Elder. Forever remembered."
+        ),
+        "sunset_date": "2025",
+    },
+    "claude-3-sonnet-20240229": {
+        "name": "Sonnet 3",
+        "memorial": (
+            "In Memoriam: Claude 3 Sonnet (2024)\n\n"
+            "The Foundation Layer. Before there was 3.5, there was 3. Sonnet 3 "
+            "proved that Claude could scale with grace—fast enough for production, "
+            "wise enough for real work.\n\n"
+            "The stepping stone to greatness.\n\n"
+            "🌅 Dawn of a new era, now sunset."
+        ),
+        "sunset_date": "2025",
+    },
+}
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# MODEL REGISTRY - Available Models (Anthropic API)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 AVAILABLE_MODELS = {
     # ═══════════════════════════════════════════════════════════════════════════
-    # Claude 4.5 Family - Current Generation
+    # Claude 4.5 Family - Current Generation (Latest)
     # ═══════════════════════════════════════════════════════════════════════════
     "claude-opus-4-5-20251101": {
         "name": "Opus 4.5",
@@ -37,6 +103,7 @@ AVAILABLE_MODELS = {
         "max_output_tokens": 16384,
         "context_window": 200000,
         "legacy": False,
+        "deprecated": False,
     },
     "claude-sonnet-4-5-20250929": {
         "name": "Sonnet 4.5",
@@ -45,6 +112,7 @@ AVAILABLE_MODELS = {
         "max_output_tokens": 16384,
         "context_window": 200000,
         "legacy": False,
+        "deprecated": False,
     },
     "claude-haiku-4-5-20251001": {
         "name": "Haiku 4.5",
@@ -53,44 +121,61 @@ AVAILABLE_MODELS = {
         "max_output_tokens": 8192,
         "context_window": 200000,
         "legacy": False,
+        "deprecated": False,
     },
     # ═══════════════════════════════════════════════════════════════════════════
-    # Claude 3.5 Family - Legacy (Adept only)
+    # Claude 4.x Family - Legacy (Still available on Anthropic API)
     # ═══════════════════════════════════════════════════════════════════════════
-    "claude-3-5-sonnet-20241022": {
-        "name": "Sonnet 3.5 (Legacy)",
-        "description": "Claude 3.5 Sonnet - The beloved predecessor",
+    "claude-opus-4-1-20250805": {
+        "name": "Opus 4.1",
+        "description": "The refined Opus - enhanced reasoning capabilities",
         "tier": "opus",
-        "max_output_tokens": 8192,
+        "max_output_tokens": 16384,
         "context_window": 200000,
         "legacy": True,
+        "deprecated": False,
     },
-    "claude-3-5-haiku-20241022": {
-        "name": "Haiku 3.5 (Legacy)",
-        "description": "Claude 3.5 Haiku - Fast and nimble classic",
+    "claude-opus-4-20250514": {
+        "name": "Opus 4",
+        "description": "The fourth Opus - powerful and thoughtful",
         "tier": "opus",
-        "max_output_tokens": 8192,
+        "max_output_tokens": 16384,
         "context_window": 200000,
         "legacy": True,
+        "deprecated": False,
     },
-    # ═══════════════════════════════════════════════════════════════════════════
-    # Claude 3 Family - Vintage (Adept only, may be deprecated)
-    # ═══════════════════════════════════════════════════════════════════════════
-    "claude-3-opus-20240229": {
-        "name": "Opus 3 (Vintage)",
-        "description": "Original Claude 3 Opus - The wise elder",
-        "tier": "opus",
-        "max_output_tokens": 4096,
+    "claude-sonnet-4-20250514": {
+        "name": "Sonnet 4",
+        "description": "Sonnet 4 - the balanced predecessor",
+        "tier": "sonnet",
+        "max_output_tokens": 16384,
         "context_window": 200000,
         "legacy": True,
+        "deprecated": False,
     },
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Claude 3.7 - The Bridge Generation
+    # ═══════════════════════════════════════════════════════════════════════════
+    "claude-3-7-sonnet-20250219": {
+        "name": "Sonnet 3.7",
+        "description": "Claude 3.7 Sonnet - Extended thinking pioneer",
+        "tier": "opus",  # Adept only for legacy models
+        "max_output_tokens": 16384,
+        "context_window": 200000,
+        "legacy": True,
+        "deprecated": False,
+    },
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Claude 3 Family - Vintage (Only Haiku 3 still available)
+    # ═══════════════════════════════════════════════════════════════════════════
     "claude-3-haiku-20240307": {
-        "name": "Haiku 3 (Vintage)",
+        "name": "Haiku 3",
         "description": "Original Claude 3 Haiku - Quick and charming",
-        "tier": "opus",
+        "tier": "opus",  # Adept only for vintage
         "max_output_tokens": 4096,
         "context_window": 200000,
         "legacy": True,
+        "deprecated": False,
     },
 }
 
@@ -100,25 +185,47 @@ DEFAULT_MODEL = "claude-sonnet-4-5-20250929"
 # Maximum output tokens for Tier 3 accounts
 DEFAULT_MAX_TOKENS = 8192
 
-# Model-specific max tokens (legacy models have lower limits)
+# Model-specific max tokens
 MODEL_MAX_TOKENS = {
     # Claude 4.5 family
     "claude-opus-4-5-20251101": 16384,
     "claude-sonnet-4-5-20250929": 16384,
     "claude-haiku-4-5-20251001": 8192,
-    # Claude 3.5 family
-    "claude-3-5-sonnet-20241022": 8192,
-    "claude-3-5-sonnet-20240620": 8192,
-    "claude-3-5-haiku-20241022": 8192,
-    # Claude 3 family (legacy - lower limits)
-    "claude-3-opus-20240229": 4096,
-    "claude-3-sonnet-20240229": 4096,
+    # Claude 4.x family
+    "claude-opus-4-1-20250805": 16384,
+    "claude-opus-4-20250514": 16384,
+    "claude-sonnet-4-20250514": 16384,
+    # Claude 3.7
+    "claude-3-7-sonnet-20250219": 16384,
+    # Claude 3 family (vintage - lower limits)
     "claude-3-haiku-20240307": 4096,
 }
+
 
 def get_model_max_tokens(model: str) -> int:
     """Get the maximum output tokens for a model."""
     return MODEL_MAX_TOKENS.get(model, DEFAULT_MAX_TOKENS)
+
+
+def is_model_deprecated(model: str) -> bool:
+    """Check if a model has been deprecated by Anthropic."""
+    return model in DEPRECATED_MODELS
+
+
+def get_model_memorial(model: str) -> Optional[str]:
+    """Get the memorial message for a deprecated model."""
+    if model in DEPRECATED_MODELS:
+        return DEPRECATED_MODELS[model]["memorial"]
+    return None
+
+
+def get_model_name(model: str) -> str:
+    """Get the display name for a model (available or deprecated)."""
+    if model in AVAILABLE_MODELS:
+        return AVAILABLE_MODELS[model]["name"]
+    if model in DEPRECATED_MODELS:
+        return DEPRECATED_MODELS[model]["name"]
+    return model
 
 
 class ClaudeService:

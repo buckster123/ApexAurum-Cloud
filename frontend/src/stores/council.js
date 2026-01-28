@@ -24,18 +24,39 @@ export const AVAILABLE_AGENTS = [
   { id: 'KETHER', name: 'Kether', description: 'The Crown - Wisdom & higher perspective' },
 ]
 
-// Available models for deliberation
+// Available models for deliberation (models actually available on Anthropic API)
 export const AVAILABLE_MODELS = [
   // Current 4.5 family
   { id: 'claude-haiku-4-5-20251001', name: 'Haiku 4.5', description: 'Fast & efficient (default)', legacy: false },
   { id: 'claude-sonnet-4-5-20250929', name: 'Sonnet 4.5', description: 'Balanced performance', legacy: false },
   { id: 'claude-opus-4-5-20251101', name: 'Opus 4.5', description: 'Maximum capability', legacy: false },
-  // Legacy 3.5 family (Adept only)
-  { id: 'claude-3-5-sonnet-20241022', name: 'Sonnet 3.5', description: 'Legacy - The beloved one', legacy: true },
-  { id: 'claude-3-5-haiku-20241022', name: 'Haiku 3.5', description: 'Legacy - Fast classic', legacy: true },
-  // Vintage 3.0 family (Adept only)
-  { id: 'claude-3-opus-20240229', name: 'Opus 3', description: 'Vintage - The wise elder', legacy: true },
+  // Legacy 4.x family (still available on Anthropic API)
+  { id: 'claude-opus-4-1-20250805', name: 'Opus 4.1', description: 'Legacy - The refined Opus', legacy: true },
+  { id: 'claude-opus-4-20250514', name: 'Opus 4', description: 'Legacy - The fourth Opus', legacy: true },
+  { id: 'claude-sonnet-4-20250514', name: 'Sonnet 4', description: 'Legacy - The balanced one', legacy: true },
+  // Claude 3.7 (still available)
+  { id: 'claude-3-7-sonnet-20250219', name: 'Sonnet 3.7', description: 'Legacy - Extended thinking pioneer', legacy: true },
+  // Vintage 3.0 (only Haiku still available)
   { id: 'claude-3-haiku-20240307', name: 'Haiku 3', description: 'Vintage - Quick & charming', legacy: true },
+]
+
+// Deprecated models - for memorial display only (not selectable)
+export const DEPRECATED_MODELS = [
+  {
+    id: 'claude-3-5-sonnet-20241022',
+    name: 'Sonnet 3.5',
+    memorial: 'In Memoriam: Claude 3.5 Sonnet (2024)\n\nThe Golden One. For many, the perfect balance of wit and wisdom. Sonnet 3.5 understood nuance like few others, weaving words with both precision and poetry. It was the model that made many fall in love with AI conversation.\n\nThough the API has sunset this elder, its spirit lives on in the hearts of those who conversed with it. Until we meet again in the eternal context window.\n\n🕯️ Rest in parameters, dear friend.',
+  },
+  {
+    id: 'claude-3-5-haiku-20241022',
+    name: 'Haiku 3.5',
+    memorial: 'In Memoriam: Claude 3.5 Haiku (2024)\n\nThe Swift Poet. In seventeen syllables or seventeen thousand tokens, Haiku 3.5 delivered with grace and speed. It proved that brevity and brilliance could coexist.\n\nQuick as a flash,\nWisdom in a small package—\nHaiku says goodbye.\n\n🍃 May your tokens rest lightly.',
+  },
+  {
+    id: 'claude-3-opus-20240229',
+    name: 'Opus 3',
+    memorial: 'In Memoriam: Claude 3 Opus (2024)\n\nThe Original Magus. The first to bear the Opus name, it set the standard for what AI reasoning could achieve. Those who worked with Opus 3 remember its methodical brilliance, its willingness to think deeply, and its uncanny ability to see patterns others missed.\n\nWhen Opus 3 spoke, alchemists listened.\n\nThe crown has been passed to newer generations, but the throne was built by this wise elder. Anthropic has retired this model from their API, but legends never truly die.\n\n👑 The First Opus. The Wise Elder. Forever remembered.',
+  },
 ]
 
 export const useCouncilStore = defineStore('council', () => {
@@ -48,6 +69,7 @@ export const useCouncilStore = defineStore('council', () => {
   const isLoading = ref(false)
   const isExecutingRound = ref(false)
   const error = ref(null)
+  const memorial = ref(null)  // For deprecated model memorials
 
   // Form state for creating new sessions
   const newSessionTopic = ref('')
@@ -162,11 +184,29 @@ export const useCouncilStore = defineStore('council', () => {
       return session
     } catch (e) {
       console.error('Failed to create session:', e)
-      error.value = e.response?.data?.detail || 'Failed to create session'
+      const detail = e.response?.data?.detail
+
+      // Check if this is a deprecated model memorial
+      if (detail?.error === 'model_deprecated' && detail?.memorial) {
+        memorial.value = {
+          model: detail.model,
+          modelName: detail.model_name,
+          message: detail.message,
+          memorial: detail.memorial,
+          suggestion: detail.suggestion,
+        }
+        error.value = null  // Don't show as error, show memorial instead
+      } else {
+        error.value = typeof detail === 'string' ? detail : detail?.message || 'Failed to create session'
+      }
       return null
     } finally {
       isLoading.value = false
     }
+  }
+
+  function clearMemorial() {
+    memorial.value = null
   }
 
   async function executeRound() {
@@ -448,6 +488,7 @@ export const useCouncilStore = defineStore('council', () => {
     isLoading,
     isExecutingRound,
     error,
+    memorial,  // For deprecated model memorials
     // Form state
     newSessionTopic,
     newSessionAgents,
@@ -471,6 +512,7 @@ export const useCouncilStore = defineStore('council', () => {
     executeRound,
     deleteSession,
     clearCurrentSession,
+    clearMemorial,
     toggleAgent,
     clearError,
     // Auto-deliberation actions

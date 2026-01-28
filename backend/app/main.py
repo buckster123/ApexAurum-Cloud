@@ -51,7 +51,7 @@ async def lifespan(app: FastAPI):
     """Application lifespan manager."""
     # Startup
     print("=" * 50)
-    print("ApexAurum Cloud v73 - Legacy models for Adept")
+    print("ApexAurum Cloud v74 - Model Memorials")
     print("=" * 50)
 
     # Import all models before database init to ensure SQLAlchemy
@@ -120,7 +120,7 @@ async def health_check():
     return {
         "status": "healthy",
         "version": "0.1.0",
-        "build": "v73-legacy-models",
+        "build": "v74-model-memorials",
         "agents": {
             "native": 5,
             "pac": 4,

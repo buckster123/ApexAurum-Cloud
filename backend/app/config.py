@@ -137,12 +137,21 @@ TIER_LIMITS = {
             "claude-haiku-4-5-20251001",
             "claude-sonnet-4-5-20250929",
             "claude-opus-4-5-20251101",
-            # Legacy 3.5 family
+            # Legacy 4.x family (still available on Anthropic API)
+            "claude-opus-4-1-20250805",
+            "claude-opus-4-20250514",
+            "claude-sonnet-4-20250514",
+            # Claude 3.7 (still available)
+            "claude-3-7-sonnet-20250219",
+            # Vintage 3.0 (only Haiku still available)
+            "claude-3-haiku-20240307",
+        ],
+        # Deprecated models - kept for memorial messages
+        "deprecated_models": [
             "claude-3-5-sonnet-20241022",
             "claude-3-5-haiku-20241022",
-            # Vintage 3.0 family
             "claude-3-opus-20240229",
-            "claude-3-haiku-20240307",
+            "claude-3-sonnet-20240229",
         ],
         "tools_enabled": True,
         "multi_provider": True,

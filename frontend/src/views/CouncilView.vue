@@ -8,7 +8,7 @@
 
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { useCouncilStore, AGENT_COLORS, AVAILABLE_AGENTS, AVAILABLE_MODELS } from '@/stores/council'
+import { useCouncilStore, AGENT_COLORS, AVAILABLE_AGENTS, AVAILABLE_MODELS, DEPRECATED_MODELS } from '@/stores/council'
 import AgentCard from '@/components/council/AgentCard.vue'
 
 const router = useRouter()
@@ -642,6 +642,48 @@ function getStateClass(state) {
         </div>
       </template>
     </main>
+
+    <!-- Memorial Modal for Deprecated Models -->
+    <Teleport to="body">
+      <div
+        v-if="council.memorial"
+        class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80"
+        @click.self="council.clearMemorial()"
+      >
+        <div class="bg-apex-card border border-purple-500/30 rounded-2xl max-w-lg w-full p-6 shadow-2xl">
+          <!-- Header -->
+          <div class="flex items-center gap-3 mb-4">
+            <div class="w-12 h-12 rounded-full bg-purple-500/20 flex items-center justify-center">
+              <span class="text-2xl">🕯️</span>
+            </div>
+            <div>
+              <h2 class="text-xl font-bold text-purple-300">Model Memorial</h2>
+              <p class="text-sm text-gray-400">{{ council.memorial.modelName }}</p>
+            </div>
+          </div>
+
+          <!-- Memorial Text -->
+          <div class="prose prose-invert max-w-none">
+            <pre class="whitespace-pre-wrap text-sm text-gray-300 leading-relaxed font-sans bg-apex-dark/50 p-4 rounded-lg border border-purple-500/20">{{ council.memorial.memorial }}</pre>
+          </div>
+
+          <!-- Suggestion -->
+          <div class="mt-4 p-3 bg-gold/10 border border-gold/30 rounded-lg">
+            <p class="text-sm text-gold">{{ council.memorial.suggestion }}</p>
+          </div>
+
+          <!-- Close Button -->
+          <div class="mt-6 flex justify-end">
+            <button
+              @click="council.clearMemorial()"
+              class="px-6 py-2 bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 rounded-lg transition-colors"
+            >
+              Return to the Living
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 

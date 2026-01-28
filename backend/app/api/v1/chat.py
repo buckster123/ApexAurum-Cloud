@@ -26,8 +26,12 @@ from app.services.claude import (
     ClaudeService,
     create_claude_service,
     AVAILABLE_MODELS,
+    DEPRECATED_MODELS,
     DEFAULT_MODEL,
     DEFAULT_MAX_TOKENS,
+    is_model_deprecated,
+    get_model_memorial,
+    get_model_name,
 )
 from app.services.llm_provider import (
     PROVIDERS,
@@ -500,6 +504,24 @@ async def send_message(
     # Determine which provider to use
     provider = request.provider or "anthropic"
     model = request.model or get_default_model(provider)
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # DEPRECATED MODEL CHECK - Return memorial messages for sunset models
+    # ═══════════════════════════════════════════════════════════════════════════
+    if provider == "anthropic" and is_model_deprecated(model):
+        memorial = get_model_memorial(model)
+        model_name = get_model_name(model)
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE,  # 410 Gone - appropriate for sunset services
+            detail={
+                "error": "model_deprecated",
+                "model": model,
+                "model_name": model_name,
+                "memorial": memorial,
+                "message": f"{model_name} has been retired by Anthropic. This model is no longer available via the API.",
+                "suggestion": "Please select a currently available model from the model selector.",
+            }
+        )
 
     # ═══════════════════════════════════════════════════════════════════════════
     # TIER-BASED ACCESS CHECKS (only if Stripe is configured)

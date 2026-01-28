@@ -25,7 +25,14 @@ from app.models.council import (
     DeliberationSession, SessionAgent, DeliberationRound, SessionMessage
 )
 from app.auth.deps import get_current_user
-from app.services.claude import ClaudeService
+from app.services.claude import (
+    ClaudeService,
+    AVAILABLE_MODELS,
+    DEPRECATED_MODELS,
+    is_model_deprecated,
+    get_model_memorial,
+    get_model_name,
+)
 from app.services.billing import BillingService
 from app.services.tool_executor import create_tool_executor
 from app.config import get_settings
@@ -257,17 +264,35 @@ async def create_session(
                 detail="At least one agent required"
             )
 
-        # Validate model (current + legacy)
+        # Check for deprecated models first - return memorial
+        if is_model_deprecated(request.model):
+            memorial = get_model_memorial(request.model)
+            model_name = get_model_name(request.model)
+            raise HTTPException(
+                status_code=status.HTTP_410_GONE,
+                detail={
+                    "error": "model_deprecated",
+                    "model": request.model,
+                    "model_name": model_name,
+                    "memorial": memorial,
+                    "message": f"{model_name} has been retired by Anthropic. This model is no longer available via the API.",
+                    "suggestion": "Please select a currently available model from the model selector.",
+                }
+            )
+
+        # Validate model - only models actually available on Anthropic API
         valid_models = [
             # Current 4.5 family
             "claude-haiku-4-5-20251001",
             "claude-sonnet-4-5-20250929",
             "claude-opus-4-5-20251101",
-            # Legacy 3.5 family
-            "claude-3-5-sonnet-20241022",
-            "claude-3-5-haiku-20241022",
-            # Vintage 3.0 family
-            "claude-3-opus-20240229",
+            # Legacy 4.x family (still available)
+            "claude-opus-4-1-20250805",
+            "claude-opus-4-20250514",
+            "claude-sonnet-4-20250514",
+            # Claude 3.7 (still available)
+            "claude-3-7-sonnet-20250219",
+            # Vintage 3.0 (only Haiku still available)
             "claude-3-haiku-20240307",
         ]
         model = request.model if request.model in valid_models else COUNCIL_MODEL
