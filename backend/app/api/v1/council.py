@@ -129,6 +129,45 @@ class ButtInRequest(BaseModel):
 # Endpoints
 # ============================================================================
 
+@router.get("/diagnostic")
+async def council_diagnostic(db: AsyncSession = Depends(get_db)):
+    """
+    Diagnostic endpoint to check council tables and configuration.
+    No auth required - for debugging deployment issues.
+    """
+    from sqlalchemy import text
+
+    diagnostics = {
+        "status": "checking",
+        "tables": {},
+        "model": COUNCIL_MODEL,
+    }
+
+    # Check if council tables exist
+    tables_to_check = [
+        "deliberation_sessions",
+        "session_agents",
+        "deliberation_rounds",
+        "session_messages",
+    ]
+
+    for table in tables_to_check:
+        try:
+            result = await db.execute(
+                text(f"SELECT COUNT(*) FROM {table}")
+            )
+            count = result.scalar()
+            diagnostics["tables"][table] = {"exists": True, "count": count}
+        except Exception as e:
+            diagnostics["tables"][table] = {"exists": False, "error": str(e)}
+
+    # Check overall status
+    all_exist = all(t.get("exists", False) for t in diagnostics["tables"].values())
+    diagnostics["status"] = "ready" if all_exist else "tables_missing"
+
+    return diagnostics
+
+
 @router.post("/sessions", response_model=SessionResponse)
 async def create_session(
     request: CreateSessionRequest,
@@ -136,67 +175,76 @@ async def create_session(
     db: AsyncSession = Depends(get_db),
 ):
     """Create a new deliberation session with selected agents."""
-    # Validate agents
-    valid_agents = ["AZOTH", "ELYSIAN", "VAJRA", "KETHER", "CLAUDE"]
-    for agent_id in request.agents:
-        if agent_id not in valid_agents:
+    try:
+        # Validate agents
+        valid_agents = ["AZOTH", "ELYSIAN", "VAJRA", "KETHER", "CLAUDE"]
+        for agent_id in request.agents:
+            if agent_id not in valid_agents:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Invalid agent: {agent_id}. Valid agents: {valid_agents}"
+                )
+
+        if len(request.agents) < 1:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid agent: {agent_id}. Valid agents: {valid_agents}"
+                detail="At least one agent required"
             )
 
-    if len(request.agents) < 1:
+        # Create session
+        session = DeliberationSession(
+            user_id=user.id,
+            topic=request.topic,
+            max_rounds=request.max_rounds,
+            use_tools=request.use_tools,
+            state="pending",
+            mode="manual",
+        )
+        db.add(session)
+
+        # Add agents
+        for agent_id in request.agents:
+            agent = SessionAgent(
+                session_id=session.id,
+                agent_id=agent_id,
+                display_name=agent_id,  # Could enhance with custom names
+                is_active=True,
+            )
+            db.add(agent)
+            session.agents.append(agent)
+
+        await db.commit()
+        await db.refresh(session)
+
+        return SessionResponse(
+            id=session.id,
+            topic=session.topic,
+            state=session.state,
+            mode=session.mode,
+            current_round=session.current_round,
+            max_rounds=session.max_rounds,
+            convergence_score=session.convergence_score,
+            agents=[
+                AgentInfo(
+                    agent_id=a.agent_id,
+                    display_name=a.display_name,
+                    is_active=a.is_active,
+                    input_tokens=a.input_tokens,
+                    output_tokens=a.output_tokens,
+                )
+                for a in session.agents
+            ],
+            total_cost_usd=session.total_cost_usd,
+            created_at=session.created_at.isoformat(),
+        )
+    except HTTPException:
+        raise  # Re-raise HTTP exceptions as-is
+    except Exception as e:
+        logger.exception(f"Failed to create council session: {e}")
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="At least one agent required"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create session: {str(e)}"
         )
-
-    # Create session
-    session = DeliberationSession(
-        user_id=user.id,
-        topic=request.topic,
-        max_rounds=request.max_rounds,
-        use_tools=request.use_tools,
-        state="pending",
-        mode="manual",
-    )
-    db.add(session)
-
-    # Add agents
-    for agent_id in request.agents:
-        agent = SessionAgent(
-            session_id=session.id,
-            agent_id=agent_id,
-            display_name=agent_id,  # Could enhance with custom names
-            is_active=True,
-        )
-        db.add(agent)
-        session.agents.append(agent)
-
-    await db.commit()
-    await db.refresh(session)
-
-    return SessionResponse(
-        id=session.id,
-        topic=session.topic,
-        state=session.state,
-        mode=session.mode,
-        current_round=session.current_round,
-        max_rounds=session.max_rounds,
-        convergence_score=session.convergence_score,
-        agents=[
-            AgentInfo(
-                agent_id=a.agent_id,
-                display_name=a.display_name,
-                is_active=a.is_active,
-                input_tokens=a.input_tokens,
-                output_tokens=a.output_tokens,
-            )
-            for a in session.agents
-        ],
-        total_cost_usd=session.total_cost_usd,
-        created_at=session.created_at.isoformat(),
-    )
 
 
 @router.get("/sessions", response_model=list[SessionResponse])
