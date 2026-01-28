@@ -465,6 +465,61 @@ async def init_db():
                 RAISE NOTICE 'User admin migration skipped';
             END $$;
             """,
+            # ═══════════════════════════════════════════════════════════════════════════
+            # MUSIC TASKS - v79: Full Suno integration
+            # Add new columns for enhanced music generation
+            # ═══════════════════════════════════════════════════════════════════════════
+            """
+            DO $$
+            BEGIN
+                IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'music_tasks') THEN
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                                   WHERE table_name = 'music_tasks' AND column_name = 'model') THEN
+                        ALTER TABLE music_tasks ADD COLUMN model VARCHAR(10) DEFAULT 'V5';
+                        RAISE NOTICE 'Added model column to music_tasks';
+                    END IF;
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                                   WHERE table_name = 'music_tasks' AND column_name = 'instrumental') THEN
+                        ALTER TABLE music_tasks ADD COLUMN instrumental BOOLEAN DEFAULT TRUE;
+                        RAISE NOTICE 'Added instrumental column to music_tasks';
+                    END IF;
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                                   WHERE table_name = 'music_tasks' AND column_name = 'progress') THEN
+                        ALTER TABLE music_tasks ADD COLUMN progress VARCHAR(255);
+                        RAISE NOTICE 'Added progress column to music_tasks';
+                    END IF;
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                                   WHERE table_name = 'music_tasks' AND column_name = 'audio_url') THEN
+                        ALTER TABLE music_tasks ADD COLUMN audio_url VARCHAR(500);
+                        RAISE NOTICE 'Added audio_url column to music_tasks';
+                    END IF;
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                                   WHERE table_name = 'music_tasks' AND column_name = 'duration') THEN
+                        ALTER TABLE music_tasks ADD COLUMN duration FLOAT;
+                        RAISE NOTICE 'Added duration column to music_tasks';
+                    END IF;
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                                   WHERE table_name = 'music_tasks' AND column_name = 'clip_id') THEN
+                        ALTER TABLE music_tasks ADD COLUMN clip_id VARCHAR(100);
+                        RAISE NOTICE 'Added clip_id column to music_tasks';
+                    END IF;
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                                   WHERE table_name = 'music_tasks' AND column_name = 'tags') THEN
+                        ALTER TABLE music_tasks ADD COLUMN tags TEXT;
+                        RAISE NOTICE 'Added tags column to music_tasks';
+                    END IF;
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                                   WHERE table_name = 'music_tasks' AND column_name = 'started_at') THEN
+                        ALTER TABLE music_tasks ADD COLUMN started_at TIMESTAMP WITH TIME ZONE;
+                        RAISE NOTICE 'Added started_at column to music_tasks';
+                    END IF;
+                    -- Expand style column size for compiled prompts
+                    ALTER TABLE music_tasks ALTER COLUMN style TYPE VARCHAR(1000);
+                END IF;
+            EXCEPTION WHEN OTHERS THEN
+                RAISE NOTICE 'Music tasks migration skipped';
+            END $$;
+            """,
         ]
 
         from sqlalchemy import text

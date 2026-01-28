@@ -1,12 +1,14 @@
 """
 Music Task Model
+
+Suno AI music generation with full pipeline support.
 """
 
 from datetime import datetime
 from typing import Optional
 from uuid import uuid4
 
-from sqlalchemy import String, Text, DateTime, Boolean, Integer, ForeignKey
+from sqlalchemy import String, Text, DateTime, Boolean, Integer, Float, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID
 
@@ -31,28 +33,38 @@ class MusicTask(Base):
 
     # Generation parameters
     prompt: Mapped[str] = mapped_column(Text)
-    style: Mapped[Optional[str]] = mapped_column(String(255))
+    style: Mapped[Optional[str]] = mapped_column(String(1000))  # Extended for compiled prompts
     title: Mapped[Optional[str]] = mapped_column(String(255))
+    model: Mapped[str] = mapped_column(String(10), default="V5")  # V3_5, V4, V4_5, V5
+    instrumental: Mapped[bool] = mapped_column(Boolean, default=True)
 
     # Status
-    status: Mapped[str] = mapped_column(String(20), default="pending")  # 'pending', 'processing', 'complete', 'failed'
+    status: Mapped[str] = mapped_column(String(20), default="pending")
+    # States: pending → generating → downloading → completed | failed
+    progress: Mapped[Optional[str]] = mapped_column(String(255))  # Human-readable status
     suno_task_id: Mapped[Optional[str]] = mapped_column(String(100))
 
     # Result
-    file_path: Mapped[Optional[str]] = mapped_column(String(500))  # S3 key
+    file_path: Mapped[Optional[str]] = mapped_column(String(500))  # Vault path
+    audio_url: Mapped[Optional[str]] = mapped_column(String(500))  # Suno CDN URL
+    duration: Mapped[Optional[float]] = mapped_column(Float)  # Duration in seconds
+    clip_id: Mapped[Optional[str]] = mapped_column(String(100))  # Suno clip ID
     error: Mapped[Optional[str]] = mapped_column(Text)
 
     # Curation
     favorite: Mapped[bool] = mapped_column(Boolean, default=False)
     play_count: Mapped[int] = mapped_column(Integer, default=0)
+    tags: Mapped[Optional[str]] = mapped_column(Text)  # JSON array of tags
 
     # Attribution
     agent_id: Mapped[Optional[str]] = mapped_column(String(50))  # Which agent created it
 
+    # Timestamps
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=datetime.utcnow
     )
+    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
 
     # Relationships
