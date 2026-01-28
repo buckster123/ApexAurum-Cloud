@@ -42,6 +42,13 @@ export const useCouncilStore = defineStore('council', () => {
   const newSessionAgents = ref(['AZOTH', 'VAJRA', 'ELYSIAN'])
   const newSessionMaxRounds = ref(10)
 
+  // Auto-deliberation state
+  const isAutoDeliberating = ref(false)
+  const autoDeliberationAbort = ref(null)  // AbortController
+  const streamingRound = ref(null)  // Current round being streamed
+  const streamingAgents = ref({})  // {agentId: {content, tokens}} for real-time display
+  const pendingButtIn = ref('')  // Human message to inject
+
   // ═══════════════════════════════════════════════════════════════════════════════
   // GETTERS - Derived State
   // ═══════════════════════════════════════════════════════════════════════════════
@@ -209,6 +216,192 @@ export const useCouncilStore = defineStore('council', () => {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════════
+  // AUTO-DELIBERATION ACTIONS
+  // ═══════════════════════════════════════════════════════════════════════════════
+
+  async function startAutoDeliberation(numRounds = 10) {
+    if (!currentSession.value || isAutoDeliberating.value) return
+
+    isAutoDeliberating.value = true
+    isExecutingRound.value = true
+    streamingRound.value = null
+    streamingAgents.value = {}
+    error.value = null
+
+    const abortController = new AbortController()
+    autoDeliberationAbort.value = abortController
+
+    // Build API URL with https:// prefix
+    let apiUrl = import.meta.env.VITE_API_URL || ''
+    if (apiUrl && !apiUrl.startsWith('http://') && !apiUrl.startsWith('https://')) {
+      apiUrl = 'https://' + apiUrl
+    }
+
+    try {
+      const response = await fetch(
+        `${apiUrl}/api/v1/council/sessions/${currentSession.value.id}/auto-deliberate?num_rounds=${numRounds}`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
+          },
+          signal: abortController.signal,
+        }
+      )
+
+      if (!response.ok) {
+        const errData = await response.json()
+        throw new Error(errData.detail || `HTTP ${response.status}`)
+      }
+
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n\n')
+        buffer = lines.pop() || ''
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue
+
+          try {
+            const data = JSON.parse(line.slice(6))
+
+            if (data.type === 'start') {
+              console.log('Auto-deliberation started:', data)
+            } else if (data.type === 'round_start') {
+              streamingRound.value = data.round_number
+              streamingAgents.value = {}
+            } else if (data.type === 'agent_complete') {
+              streamingAgents.value[data.agent_id] = {
+                content: data.content,
+                input_tokens: data.input_tokens,
+                output_tokens: data.output_tokens,
+              }
+            } else if (data.type === 'human_message_injected') {
+              console.log('Human message injected:', data.content)
+              pendingButtIn.value = ''  // Clear the input
+            } else if (data.type === 'round_complete') {
+              // Update session with new round data
+              if (currentSession.value) {
+                currentSession.value.current_round = data.round_number
+                currentSession.value.total_cost_usd = data.total_cost_usd
+              }
+              // Reload full session to get round details
+              await loadSession(currentSession.value.id)
+              streamingRound.value = null
+              streamingAgents.value = {}
+            } else if (data.type === 'paused') {
+              console.log('Deliberation paused at round:', data.round_number)
+              if (currentSession.value) {
+                currentSession.value.state = 'paused'
+              }
+            } else if (data.type === 'stopped') {
+              console.log('Deliberation stopped at round:', data.round_number)
+            } else if (data.type === 'end') {
+              console.log('Auto-deliberation ended:', data)
+              if (currentSession.value) {
+                currentSession.value.state = data.state
+                currentSession.value.total_cost_usd = data.total_cost_usd
+              }
+              await loadSession(currentSession.value.id)
+            }
+          } catch (parseError) {
+            console.warn('Failed to parse SSE:', line, parseError)
+          }
+        }
+      }
+    } catch (e) {
+      if (e.name === 'AbortError') {
+        console.log('Auto-deliberation aborted by user')
+      } else {
+        console.error('Auto-deliberation error:', e)
+        error.value = e.message || 'Auto-deliberation failed'
+      }
+    } finally {
+      isAutoDeliberating.value = false
+      isExecutingRound.value = false
+      autoDeliberationAbort.value = null
+      streamingRound.value = null
+      streamingAgents.value = {}
+    }
+  }
+
+  function stopAutoDeliberation() {
+    // Abort the SSE stream
+    if (autoDeliberationAbort.value) {
+      autoDeliberationAbort.value.abort()
+    }
+  }
+
+  async function pauseAutoDeliberation() {
+    if (!currentSession.value) return
+
+    try {
+      await api.post(`/api/v1/council/sessions/${currentSession.value.id}/pause`)
+      // The SSE stream will receive the 'paused' event
+    } catch (e) {
+      console.error('Failed to pause:', e)
+      error.value = e.response?.data?.detail || 'Failed to pause'
+    }
+  }
+
+  async function resumeAutoDeliberation(numRounds = 10) {
+    if (!currentSession.value) return
+
+    try {
+      // First set state back to running
+      await api.post(`/api/v1/council/sessions/${currentSession.value.id}/resume`)
+      // Then start auto-deliberation again
+      await startAutoDeliberation(numRounds)
+    } catch (e) {
+      console.error('Failed to resume:', e)
+      error.value = e.response?.data?.detail || 'Failed to resume'
+    }
+  }
+
+  async function stopSession() {
+    if (!currentSession.value) return
+
+    // First abort any running stream
+    stopAutoDeliberation()
+
+    try {
+      await api.post(`/api/v1/council/sessions/${currentSession.value.id}/stop`)
+      if (currentSession.value) {
+        currentSession.value.state = 'complete'
+      }
+      await loadSession(currentSession.value.id)
+    } catch (e) {
+      console.error('Failed to stop:', e)
+      error.value = e.response?.data?.detail || 'Failed to stop'
+    }
+  }
+
+  async function submitButtIn() {
+    if (!currentSession.value || !pendingButtIn.value.trim()) return
+
+    try {
+      await api.post(`/api/v1/council/sessions/${currentSession.value.id}/butt-in`, {
+        message: pendingButtIn.value.trim(),
+      })
+      // Don't clear pendingButtIn here - it will be cleared when SSE confirms injection
+      // Or clear it now if not in auto mode
+      if (!isAutoDeliberating.value) {
+        pendingButtIn.value = ''
+      }
+    } catch (e) {
+      console.error('Failed to submit butt-in:', e)
+      error.value = e.response?.data?.detail || 'Failed to submit message'
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════════
   // PUBLIC API
   // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -223,6 +416,11 @@ export const useCouncilStore = defineStore('council', () => {
     newSessionTopic,
     newSessionAgents,
     newSessionMaxRounds,
+    // Auto-deliberation state
+    isAutoDeliberating,
+    streamingRound,
+    streamingAgents,
+    pendingButtIn,
     // Getters
     sortedSessions,
     currentRounds,
@@ -238,5 +436,12 @@ export const useCouncilStore = defineStore('council', () => {
     clearCurrentSession,
     toggleAgent,
     clearError,
+    // Auto-deliberation actions
+    startAutoDeliberation,
+    stopAutoDeliberation,
+    pauseAutoDeliberation,
+    resumeAutoDeliberation,
+    stopSession,
+    submitButtIn,
   }
 })

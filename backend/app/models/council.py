@@ -39,6 +39,9 @@ class DeliberationSession(Base):
     convergence_score: Mapped[float] = mapped_column(Float, default=0.0)
     termination_reason: Mapped[Optional[str]] = mapped_column(String(50))
 
+    # Human butt-in queue (consumed by next round)
+    pending_human_message: Mapped[Optional[str]] = mapped_column(Text)
+
     # Cost tracking
     total_input_tokens: Mapped[int] = mapped_column(Integer, default=0)
     total_output_tokens: Mapped[int] = mapped_column(Integer, default=0)

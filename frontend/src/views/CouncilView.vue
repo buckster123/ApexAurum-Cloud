@@ -18,9 +18,20 @@ const council = useCouncilStore()
 // UI State
 const showNewSession = ref(false)
 const sidebarCollapsed = ref(false)
+const autoRoundsToRun = ref(10)  // Rounds to run in auto mode
 
 // Computed
 const hasSession = computed(() => council.currentSession !== null)
+
+const canStartAuto = computed(() => {
+  if (!council.currentSession) return false
+  if (council.currentSession.state === 'complete') return false
+  if (council.isAutoDeliberating) return false
+  if (council.isExecutingRound) return false
+  return true
+})
+
+const isPaused = computed(() => council.currentSession?.state === 'paused')
 
 // Load session from route param if present
 watch(() => route.params.id, async (sessionId) => {
@@ -60,6 +71,28 @@ async function handleExecuteRound() {
   await council.executeRound()
 }
 
+async function handleStartAuto() {
+  await council.startAutoDeliberation(autoRoundsToRun.value)
+}
+
+async function handlePauseAuto() {
+  await council.pauseAutoDeliberation()
+}
+
+async function handleResumeAuto() {
+  await council.resumeAutoDeliberation(autoRoundsToRun.value)
+}
+
+async function handleStopSession() {
+  if (confirm('Stop the deliberation? This will mark it as complete.')) {
+    await council.stopSession()
+  }
+}
+
+async function handleSubmitButtIn() {
+  await council.submitButtIn()
+}
+
 function handleNewSession() {
   council.clearCurrentSession()
   router.push('/council')
@@ -84,6 +117,7 @@ function getStateLabel(state) {
   switch (state) {
     case 'pending': return 'Ready'
     case 'running': return 'In Progress'
+    case 'paused': return 'Paused'
     case 'complete': return 'Complete'
     default: return state
   }
@@ -93,6 +127,7 @@ function getStateClass(state) {
   switch (state) {
     case 'pending': return 'bg-blue-500/20 text-blue-400'
     case 'running': return 'bg-gold/20 text-gold'
+    case 'paused': return 'bg-amber-500/20 text-amber-400'
     case 'complete': return 'bg-green-500/20 text-green-400'
     default: return 'bg-gray-500/20 text-gray-400'
   }
@@ -266,12 +301,13 @@ function getStateClass(state) {
                 type="range"
                 v-model.number="council.newSessionMaxRounds"
                 min="1"
-                max="20"
+                max="200"
                 class="w-full accent-gold"
               />
               <div class="flex justify-between text-xs text-gray-500 mt-1">
                 <span>1</span>
-                <span>20</span>
+                <span>100</span>
+                <span>200</span>
               </div>
             </div>
 
@@ -315,20 +351,80 @@ function getStateClass(state) {
               </div>
             </div>
 
-            <!-- Execute Round Button -->
-            <button
-              @click="handleExecuteRound"
-              :disabled="!council.canExecuteRound"
-              class="btn-primary px-6 py-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-            >
-              <svg v-if="council.isExecutingRound" class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
-              <span v-if="council.isExecutingRound">Deliberating...</span>
-              <span v-else-if="council.currentSession.state === 'complete'">Complete</span>
-              <span v-else>Next Round</span>
-            </button>
+            <!-- Control Buttons -->
+            <div class="flex items-center gap-2">
+              <!-- Manual: Next Round Button -->
+              <button
+                v-if="!council.isAutoDeliberating && council.currentSession.state !== 'complete'"
+                @click="handleExecuteRound"
+                :disabled="!council.canExecuteRound"
+                class="btn-secondary px-4 py-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                <span v-if="council.isExecutingRound">Running...</span>
+                <span v-else>+1 Round</span>
+              </button>
+
+              <!-- Auto: Rounds to run input -->
+              <div v-if="!council.isAutoDeliberating && council.currentSession.state !== 'complete'" class="flex items-center gap-2">
+                <input
+                  type="number"
+                  v-model.number="autoRoundsToRun"
+                  min="1"
+                  max="200"
+                  class="w-16 px-2 py-2 bg-apex-dark border border-apex-border rounded-lg text-white text-sm text-center"
+                />
+                <button
+                  @click="handleStartAuto"
+                  :disabled="!canStartAuto"
+                  class="btn-primary px-4 py-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd" />
+                  </svg>
+                  Auto
+                </button>
+              </div>
+
+              <!-- Auto Running: Pause/Stop buttons -->
+              <template v-if="council.isAutoDeliberating">
+                <button
+                  @click="handlePauseAuto"
+                  class="btn-secondary px-4 py-2 flex items-center gap-2"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" />
+                  </svg>
+                  Pause
+                </button>
+                <button
+                  @click="handleStopSession"
+                  class="px-4 py-2 bg-red-500/20 text-red-400 hover:bg-red-500/30 rounded-lg flex items-center gap-2"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 00-1 1v4a1 1 0 001 1h4a1 1 0 001-1V8a1 1 0 00-1-1H8z" clip-rule="evenodd" />
+                  </svg>
+                  Stop
+                </button>
+              </template>
+
+              <!-- Paused: Resume button -->
+              <template v-if="isPaused && !council.isAutoDeliberating">
+                <button
+                  @click="handleResumeAuto"
+                  class="btn-primary px-4 py-2 flex items-center gap-2"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd" />
+                  </svg>
+                  Resume
+                </button>
+              </template>
+
+              <!-- Complete badge -->
+              <span v-if="council.currentSession.state === 'complete'" class="px-4 py-2 bg-green-500/20 text-green-400 rounded-lg">
+                Complete
+              </span>
+            </div>
           </div>
 
           <!-- Progress Bar -->
@@ -353,11 +449,80 @@ function getStateClass(state) {
           </div>
         </header>
 
+        <!-- Human Butt-In Input -->
+        <div
+          v-if="council.currentSession.state !== 'complete'"
+          class="px-4 py-3 border-b border-apex-border bg-apex-card/50"
+        >
+          <div class="flex gap-3 items-start">
+            <div class="flex-1">
+              <textarea
+                v-model="council.pendingButtIn"
+                placeholder="Inject a thought into the deliberation... (applies to next round)"
+                class="w-full px-3 py-2 bg-apex-dark border border-apex-border rounded-lg text-white placeholder-gray-500 text-sm resize-none focus:outline-none focus:border-gold"
+                rows="2"
+              ></textarea>
+            </div>
+            <button
+              @click="handleSubmitButtIn"
+              :disabled="!council.pendingButtIn.trim()"
+              class="btn-secondary px-4 py-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Inject
+            </button>
+          </div>
+          <p class="text-xs text-gray-500 mt-1">
+            Your message will be included in the context for all agents in the next round.
+          </p>
+        </div>
+
         <!-- Rounds Display -->
         <div class="flex-1 overflow-y-auto p-4 space-y-6">
-          <div v-if="council.currentRounds.length === 0" class="text-center py-12 text-gray-500">
+          <!-- Streaming Round (during auto-deliberation) -->
+          <div v-if="council.streamingRound" class="space-y-4">
+            <div class="flex items-center gap-3">
+              <div class="w-8 h-8 rounded-full bg-gold/20 text-gold flex items-center justify-center font-bold text-sm animate-pulse">
+                {{ council.streamingRound }}
+              </div>
+              <div class="flex-1 h-px bg-gold/30"></div>
+              <span class="text-xs text-gold">Deliberating...</span>
+            </div>
+            <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              <AgentCard
+                v-for="(data, agentId) in council.streamingAgents"
+                :key="agentId"
+                :agent-id="agentId"
+                :content="data.content"
+                :input-tokens="data.input_tokens"
+                :output-tokens="data.output_tokens"
+                :color="getAgentColor(agentId)"
+                :is-streaming="true"
+              />
+              <!-- Placeholder cards for agents still processing -->
+              <div
+                v-for="agent in council.currentSession.agents.filter(a => !council.streamingAgents[a.agent_id])"
+                :key="'pending-' + agent.agent_id"
+                class="card p-4 border-dashed opacity-60"
+                :style="{ borderTopColor: getAgentColor(agent.agent_id), borderTopWidth: '3px' }"
+              >
+                <div class="flex items-center gap-2">
+                  <div
+                    class="w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm"
+                    :style="{ backgroundColor: getAgentColor(agent.agent_id) + '30', color: getAgentColor(agent.agent_id) }"
+                  >
+                    {{ agent.agent_id[0] }}
+                  </div>
+                  <span class="text-gray-400 text-sm">{{ agent.agent_id }}</span>
+                  <span class="w-2 h-2 bg-gold rounded-full animate-pulse ml-auto"></span>
+                </div>
+                <p class="text-gray-500 text-sm mt-3">Thinking...</p>
+              </div>
+            </div>
+          </div>
+
+          <div v-if="council.currentRounds.length === 0 && !council.streamingRound" class="text-center py-12 text-gray-500">
             <p class="text-lg">No rounds yet</p>
-            <p class="text-sm mt-1">Click "Next Round" to begin deliberation</p>
+            <p class="text-sm mt-1">Click "+1 Round" for manual mode or "Auto" for continuous deliberation</p>
           </div>
 
           <div
@@ -374,6 +539,14 @@ function getStateClass(state) {
               <span class="text-xs text-gray-500">{{ formatDate(round.started_at) }}</span>
             </div>
 
+            <!-- Human Butt-In Message (if present) -->
+            <div v-if="round.human_message" class="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+              <div class="flex items-center gap-2 mb-1">
+                <span class="text-amber-400 text-xs font-medium">HUMAN INTERVENTION</span>
+              </div>
+              <p class="text-white text-sm">{{ round.human_message }}</p>
+            </div>
+
             <!-- Agent Responses -->
             <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               <AgentCard
@@ -388,14 +561,30 @@ function getStateClass(state) {
             </div>
           </div>
 
-          <!-- Loading Indicator -->
-          <div v-if="council.isExecutingRound" class="flex items-center justify-center py-8">
+          <!-- Loading Indicator (for manual mode, when not streaming) -->
+          <div v-if="council.isExecutingRound && !council.isAutoDeliberating && !council.streamingRound" class="flex items-center justify-center py-8">
             <div class="flex items-center gap-3 text-gold">
               <svg class="animate-spin h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
               </svg>
               <span>Agents are deliberating...</span>
+            </div>
+          </div>
+
+          <!-- Auto-Deliberation Status -->
+          <div v-if="council.isAutoDeliberating" class="sticky bottom-0 bg-apex-dark/90 backdrop-blur-sm border-t border-apex-border p-3">
+            <div class="flex items-center justify-between text-sm">
+              <div class="flex items-center gap-2 text-gold">
+                <svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <span>Auto-deliberating... Round {{ council.streamingRound || council.currentSession.current_round }}</span>
+              </div>
+              <div class="text-gray-400">
+                {{ council.currentSession.current_round }} / {{ council.currentSession.max_rounds }} rounds
+              </div>
             </div>
           </div>
         </div>
