@@ -4,18 +4,21 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install system dependencies
+# Install system dependencies (including MIDI→audio pipeline)
 RUN apt-get update && apt-get install -y \
     build-essential \
     curl \
+    fluidsynth \
+    fluid-soundfont-gm \
+    ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies (relative to backend/)
 COPY requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Force rebuild v17
-RUN echo "Build: v18-pac-mode-$(date +%s)" > /tmp/build-info.txt
+# Force rebuild v19
+RUN echo "Build: v19-midi-compose-$(date +%s)" > /tmp/build-info.txt
 
 # Copy application code (relative to backend/)
 COPY app ./app

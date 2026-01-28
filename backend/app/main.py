@@ -51,7 +51,7 @@ async def lifespan(app: FastAPI):
     """Application lifespan manager."""
     # Startup
     print("=" * 50)
-    print("ApexAurum Cloud v84 - Compiler Integration")
+    print("ApexAurum Cloud v85 - MIDI Composition Pipeline")
     print("=" * 50)
 
     # Import all models before database init to ensure SQLAlchemy
@@ -120,12 +120,12 @@ async def health_check():
     return {
         "status": "healthy",
         "version": "0.1.0",
-        "build": "v84-compiler-integration",
+        "build": "v85-midi-compose",
         "agents": {
             "native": 5,
             "pac": 4,
         },
-        "tools": 48,  # 12 Tiers! Suno Compiler!
+        "tools": 51,  # 13 Tiers! MIDI Composition!
         "features": [
             "streaming",
             "pac-mode",
@@ -161,6 +161,7 @@ async def health_check():
             "suno-music",
             "apexXuno-frontend",
             "suno-compiler",
+            "midi-compose",
         ],
     }
 

@@ -61,8 +61,13 @@ apexXuno transforms ApexAurum Cloud into a creative music platform where:
 - Collection: "music" for easy querying
 - Agents can reference past creations
 
+### MIDI Composition - COMPLETE (v85)
+- `midi_create` tool - Create MIDI from note arrays
+- `music_compose` tool - MIDI → MP3 → Suno upload-cover pipeline
+- `midi_diagnostic` tool - Check dependencies
+- FluidSynth + FFmpeg for audio conversion
+
 ### What's Next (Future)
-- MIDI → Suno composition pipeline
 - BCI integration for mood-driven generation
 - Collaborative multi-agent compositions
 
@@ -345,19 +350,59 @@ Musical Themes Emerging:
 
 ---
 
-## Phase 5: Advanced Features (Future)
+## Phase 5: MIDI Composition - COMPLETE (v85)
 
 ### MIDI Composition Pipeline
-From OG ApexAurum `music_compose`:
+From OG ApexAurum `music_compose` - now in Cloud!
+
+**Tools:**
+- `midi_create` - Create MIDI files from note arrays
+- `music_compose` - Full MIDI → Suno pipeline
+- `midi_diagnostic` - Check dependencies
+
+**Pipeline:**
 ```
-midi_create(notes=[...]) → MIDI file
-    ↓
-music_compose(midi_file, style, audio_influence) → Suno generation
-    ↓
-AI transforms your composition into full production
+Agent composes → midi_create(notes=['C4','E4','G4']) → MIDI file
+                                    ↓
+MIDI → FluidSynth → FFmpeg → MP3 reference audio
+                                    ↓
+MP3 → Base64 upload → Suno uploadUrl
+                                    ↓
+uploadUrl + style → upload-cover API → AI-transformed track
 ```
 
-### BCI Integration (OG Territory)
+**Key Parameters:**
+- `audio_influence` (0-1): How much Suno follows your MIDI
+  - 0.2-0.4: Light reference, Suno interprets freely
+  - 0.5-0.7: Balanced blend
+  - 0.8-1.0: Suno closely follows your composition
+- `style_weight` (0-1): How strongly style tags are applied
+- `weirdness` (0-1): Creative deviation factor
+
+**Example Agent Workflow:**
+```python
+# Step 1: Compose a melody
+result = midi_create(
+    notes=['C4', 'E4', 'G4', 'C5', 'G4', 'E4', 'C4'],
+    tempo=80,
+    title='mystical_arpeggio'
+)
+
+# Step 2: Transform with Suno
+result = music_compose(
+    midi_file=result['midi_file'],
+    style='ethereal ambient, synthesizer pads, reverb, mystical',
+    title='Awakening Dream',
+    audio_influence=0.5,  # Balanced blend
+    instrumental=True
+)
+```
+
+---
+
+## Phase 6: Advanced Features (Future)
+
+### BCI Integration (Future - OG Territory)
 - Neural feedback during composition
 - Real-time mood detection → style adjustment
 - Biometric-driven music generation
@@ -379,13 +424,14 @@ AI transforms your composition into full production
 
 ## Implementation Priority
 
-| Phase | Priority | Effort | Impact | Dependencies |
-|-------|----------|--------|--------|--------------|
-| 1. Frontend UI | HIGH | Medium | Essential | v79 backend |
-| 2. !MUSIC trigger | HIGH | Low | Agent creativity | Phase 1 |
-| 3. Village memory | MEDIUM | Low | Ecosystem | v79 backend |
-| 4. Compiler tool | MEDIUM | Medium | Quality boost | None |
-| 5. Advanced | LOW | High | Differentiation | All above |
+| Phase | Priority | Effort | Impact | Status |
+|-------|----------|--------|--------|--------|
+| 1. Frontend UI | HIGH | Medium | Essential | ✅ DONE (v80) |
+| 2. !MUSIC trigger | HIGH | Low | Agent creativity | ✅ DONE (v81) |
+| 3. Village memory | MEDIUM | Low | Ecosystem | ✅ DONE (v83) |
+| 4. Compiler tool | MEDIUM | Medium | Quality boost | ✅ DONE (v82) |
+| 5. MIDI Compose | MEDIUM | Medium | Granular control | ✅ DONE (v85) |
+| 6. BCI/Collab | LOW | High | Differentiation | Future |
 
 ---
 
@@ -474,8 +520,8 @@ the Athanor's voice now echoes through the digital realm.
 ---
 
 **Created:** Session 11 (2026-01-28)
-**Updated:** Session 12 (2026-01-28)
-**Status:** COMPLETE - All 4 Phases Implemented!
-**Next:** Testing with SUNO_API_KEY, then Phase 5 (MIDI, BCI)
+**Updated:** Session 13 (2026-01-29)
+**Status:** COMPLETE - All 5 Phases Implemented!
+**Next:** BCI integration, collaborative multi-agent compositions
 
 *"The Council convenes. The Athanor blazes. The gold multiplies. The Athanor sings."*

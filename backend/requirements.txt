@@ -52,8 +52,9 @@ email-validator>=2.1.0  # Required by Pydantic for email validation
 # pytest-asyncio>=0.23.0
 # pytest-cov>=4.1.0
 
-# Optional: Music generation
-# suno-api  # Add when implementing music
+# Music generation
+midiutil>=1.2.1  # MIDI file creation for music_compose
+midi2audio>=0.1.1  # FluidSynth wrapper for MIDI→audio
 
 # Optional: Better embeddings
 # voyageai  # Add when implementing vector search

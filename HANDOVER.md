@@ -1,8 +1,8 @@
 # ApexAurum-Cloud Handover Document
 
-**Date:** 2026-01-28
-**Build:** v84-compiler-integration
-**Status:** PRODUCTION READY - apexXuno with Compiler Integration!
+**Date:** 2026-01-29
+**Build:** v85-midi-compose
+**Status:** PRODUCTION READY - MIDI Composition Pipeline!
 
 ---
 
@@ -340,7 +340,7 @@ curl -s -X POST "https://backboard.railway.app/graphql/v2" \
 - ~~!MUSIC trigger in chat (agent creative mode)~~ DONE (v81)
 - ~~Suno Prompt Compiler (advanced prompt engineering from OG ApexAurum)~~ DONE (v82)
 - ~~Music → Village memory posting (cultural transmission)~~ DONE (v83)
-- MIDI → Suno composition pipeline (music_compose from OG)
+- ~~MIDI → Suno composition pipeline (music_compose from OG)~~ DONE (v85)
 
 ---
 
@@ -735,6 +735,49 @@ curl -s -X POST "https://backboard.railway.app/graphql/v2" \
 | `backend/app/api/v1/music.py` | Token query param for audio playback |
 | `backend/app/main.py` | v84-compiler-integration |
 | `docs/SUNO_MASTERPLAN.md` | All 4 Phases COMPLETE |
+
+---
+
+## Session 13 Accomplishments
+
+### MIDI Composition Pipeline (v85) - COMPLETE
+- **`midi_create` tool** - Create MIDI files from note arrays
+  - Supports note names ('C4', 'F#3', 'Bb5') and MIDI numbers (60)
+  - Configurable tempo, duration, velocity, rests
+  - Agents can compose melodies, arpeggios, chord progressions
+- **`music_compose` tool** - MIDI → Suno pipeline
+  - Converts MIDI to MP3 via FluidSynth
+  - Uploads to Suno as reference audio
+  - Calls upload-cover API with composition weights
+  - `audio_influence` parameter (0-1) controls how closely Suno follows MIDI
+- **`midi_diagnostic` tool** - Check pipeline dependencies
+- **MidiService** - Full service for MIDI creation and conversion
+
+### Pipeline Flow:
+```
+Agent composes notes → midi_create() → MIDI file
+                              ↓
+MIDI → FluidSynth/FFmpeg → MP3 reference audio
+                              ↓
+MP3 → Base64 upload → Suno uploadUrl
+                              ↓
+uploadUrl + style → upload-cover API → AI-transformed track
+```
+
+### Dependencies Added:
+- **Python:** `midiutil`, `midi2audio`
+- **System:** `fluidsynth`, `fluid-soundfont-gm`, `ffmpeg` (in Dockerfile)
+
+### Key Files Created/Modified (Session 13):
+
+| File | Changes |
+|------|---------|
+| `backend/app/services/midi.py` | **NEW** - MidiService with create_midi, midi_to_audio, upload_to_suno, call_upload_cover |
+| `backend/app/tools/midi.py` | **NEW** - MidiCreateTool, MusicComposeTool, MidiDiagnosticTool (Tier 13) |
+| `backend/app/tools/__init__.py` | Register MIDI tools |
+| `backend/requirements.txt` | Added midiutil, midi2audio |
+| `backend/Dockerfile` | Added fluidsynth, fluid-soundfont-gm, ffmpeg |
+| `backend/app/main.py` | v85-midi-compose, 51 tools |
 
 ---
 

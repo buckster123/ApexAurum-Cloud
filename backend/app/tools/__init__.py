@@ -195,8 +195,9 @@ def register_all_tools():
     from . import browser  # noqa: F401
     from . import cortex  # noqa: F401
     from . import suno_compiler  # noqa: F401
+    from . import midi  # noqa: F401
 
-    # All 12 tiers loaded!
+    # All 13 tiers loaded!
 
     logger.info(f"Tool registry initialized with {registry.tool_count} tools")
 
