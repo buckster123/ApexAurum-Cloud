@@ -78,17 +78,17 @@ PROVIDERS = {
 PROVIDER_MODELS = {
     "anthropic": {
         "claude-opus-4-5-20251101": {
-            "name": "Claude Opus 4.5",
+            "name": "Opus 4.5",
             "tier": "opus",
             "max_tokens": 16384,
         },
         "claude-sonnet-4-5-20250929": {
-            "name": "Claude Sonnet 4.5",
+            "name": "Sonnet 4.5",
             "tier": "sonnet",
             "max_tokens": 16384,
         },
         "claude-haiku-4-5-20251001": {
-            "name": "Claude Haiku 4.5",
+            "name": "Haiku 4.5",
             "tier": "haiku",
             "max_tokens": 8192,
         },

@@ -323,7 +323,7 @@ async def get_pricing():
             messages_per_month=50,
             features=[
                 "50 messages per month",
-                "Claude Haiku model",
+                "Haiku model",
                 "Basic chat interface",
                 "Conversation history",
             ],
@@ -337,7 +337,7 @@ async def get_pricing():
             messages_per_month=1000,
             features=[
                 "1,000 messages per month",
-                "Claude Sonnet + Haiku models",
+                "Sonnet + Haiku models",
                 "All 35 tools (The Athanor's Hands)",
                 "Bring Your Own Key (BYOK)",
                 "Village Protocol GUI",
@@ -354,7 +354,7 @@ async def get_pricing():
             messages_per_month=None,
             features=[
                 "Unlimited messages",
-                "All models including Claude Opus",
+                "All models including Opus",
                 "Multi-provider LLMs (Groq, DeepSeek, etc.)",
                 "API access",
                 "Priority support",

@@ -37,13 +37,12 @@ const editingTitle = ref('')
 const titleInputRef = ref(null)
 const contextMenu = ref({ visible: false, x: 0, y: 0, conv: null })
 
-// Native agents (all alchemical agents now have PAC versions)
+// Native agents - The Four Alchemical Agents
 const nativeAgents = [
   { id: 'AZOTH', name: 'Azoth', color: '#FFD700', symbol: '∴', isNative: true, hasPac: true },
   { id: 'ELYSIAN', name: 'Elysian', color: '#E8B4FF', symbol: '∴', isNative: true, hasPac: true },
   { id: 'VAJRA', name: 'Vajra', color: '#4FC3F7', symbol: '∴', isNative: true, hasPac: true },
   { id: 'KETHER', name: 'Kether', color: '#FFFFFF', symbol: '∴', isNative: true, hasPac: true },
-  { id: 'CLAUDE', name: 'Claude', color: '#CC785C', symbol: 'C', isNative: true, hasPac: false },
 ]
 
 // PAC agents (Perfected Stones - only visible in PAC mode)

@@ -150,7 +150,7 @@ const contextStrategies = [
   { id: 'rolling', name: 'Rolling' },
 ]
 
-const agents = ['AZOTH', 'ELYSIAN', 'VAJRA', 'KETHER', 'CLAUDE']
+const agents = ['AZOTH', 'ELYSIAN', 'VAJRA', 'KETHER']
 
 // Computed
 const tapProgress = computed(() => Math.min(tapCount.value / 7 * 100, 100))

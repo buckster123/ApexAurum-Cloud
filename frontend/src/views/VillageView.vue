@@ -28,7 +28,7 @@ const visibilities = ['all', 'private', 'village', 'bridge']
 const selectedVisibility = ref('all')
 
 // Agent filter
-const agents = ['all', 'AZOTH', 'ELYSIAN', 'VAJRA', 'KETHER', 'CLAUDE']
+const agents = ['all', 'AZOTH', 'ELYSIAN', 'VAJRA', 'KETHER']
 const selectedAgent = ref('all')
 
 onMounted(async () => {
@@ -399,7 +399,6 @@ function getVisibilityIcon(visibility) {
                 <option value="ELYSIAN">∴ Elysian</option>
                 <option value="VAJRA">∴ Vajra</option>
                 <option value="KETHER">∴ Kether</option>
-                <option value="CLAUDE">Claude</option>
               </select>
             </div>
 

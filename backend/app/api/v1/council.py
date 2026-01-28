@@ -27,6 +27,7 @@ from app.models.council import (
 from app.auth.deps import get_current_user
 from app.services.claude import ClaudeService
 from app.services.billing import BillingService
+from app.services.tool_executor import create_tool_executor
 from app.config import get_settings
 from app.api.v1.chat import load_native_prompt  # Reuse prompt loading
 
@@ -63,7 +64,7 @@ class CreateSessionRequest(BaseModel):
     topic: str
     agents: list[str] = ["AZOTH", "VAJRA", "ELYSIAN"]
     max_rounds: int = 10
-    use_tools: bool = False
+    use_tools: bool = True  # Tools always on for native agents (The Athanor's Hands)
 
 
 class AgentInfo(BaseModel):
@@ -441,7 +442,7 @@ async def execute_round(
     for agent in active_agents:
         tasks.append(
             execute_agent_turn(
-                claude, session, round_record, agent, context, db
+                claude, session, round_record, agent, context, db, user_id=user.id
             )
         )
 
@@ -662,7 +663,7 @@ async def auto_deliberate(
             for agent in active_agents:
                 tasks.append(
                     execute_agent_turn(
-                        claude, session, round_record, agent, context, db
+                        claude, session, round_record, agent, context, db, user_id=user.id
                     )
                 )
 
@@ -941,8 +942,9 @@ async def execute_agent_turn(
     agent: SessionAgent,
     context: str,
     db: AsyncSession,
+    user_id: UUID = None,
 ) -> dict:
-    """Execute a single agent's turn in the deliberation."""
+    """Execute a single agent's turn in the deliberation with tool support."""
     # Get agent's base prompt (fallback to simple description if not found)
     base_prompt = load_native_prompt(agent.agent_id, use_pac=False)
     if not base_prompt:
@@ -955,7 +957,7 @@ async def execute_agent_turn(
     # Preamble establishes this is a legitimate product feature
     preamble = """You are an AI assistant participating in ApexAurum Cloud's Council feature - a structured multi-perspective deliberation system. This is a legitimate product feature for exploring topics through diverse viewpoints. Each agent brings a distinct analytical lens to help users examine ideas thoroughly.
 
-Your responses should be thoughtful, substantive, and helpful. Stay true to your perspective while engaging constructively with other viewpoints."""
+Your responses should be thoughtful, substantive, and helpful. Stay true to your perspective while engaging constructively with other viewpoints. You have access to tools to help research, analyze, and create."""
 
     system_prompt = f"""{preamble}
 
@@ -971,30 +973,69 @@ Guidelines:
 - Reference other participants' points when relevant
 - Clearly state agreements and disagreements
 - Move the discussion forward with new insights
+- Use tools when they would help analyze or research the topic
 - If consensus seems possible, propose specific wording
 
 {f"Previous discussion:{chr(10)}{context}" if context else "This is Round 1. Share your initial thoughts on the topic."}
 """
 
-    # Call Claude
+    # Set up tools for native agents (The Athanor's Hands)
+    tools = None
+    tool_executor = None
+    if session.use_tools and user_id:
+        tool_executor = create_tool_executor(
+            user_id=user_id,
+            conversation_id=None,
+            agent_id=agent.agent_id,
+        )
+        tools = tool_executor.get_available_tools()
+        logger.debug(f"Council agent {agent.agent_id}: {len(tools)} tools available")
+
+    # Call model with potential tool loop
     user_message = f"Round {round_record.round_number}: Share your perspective on the current state of the discussion."
+    messages = [{"role": "user", "content": user_message}]
 
-    response = await claude.chat(
-        messages=[{"role": "user", "content": user_message}],
-        model=COUNCIL_MODEL,
-        system=system_prompt,
-    )
+    total_input_tokens = 0
+    total_output_tokens = 0
+    full_content = ""
+    max_tool_turns = 3  # Limit tool turns per agent per round
 
-    # Extract content
-    content = ""
-    for block in response.get("content", []):
-        if block.get("text"):
-            content += block["text"]
+    for turn in range(max_tool_turns):
+        response = await claude.chat(
+            messages=messages,
+            model=COUNCIL_MODEL,
+            system=system_prompt,
+            tools=tools,
+        )
 
-    usage = response.get("usage", {})
+        usage = response.get("usage", {})
+        total_input_tokens += usage.get("input_tokens", 0)
+        total_output_tokens += usage.get("output_tokens", 0)
+
+        # Check for tool use
+        tool_uses = [b for b in response.get("content", []) if b.get("type") == "tool_use"]
+
+        if not tool_uses or not tool_executor:
+            # No tools called, extract text content
+            for block in response.get("content", []):
+                if block.get("type") == "text":
+                    full_content += block.get("text", "")
+            break
+
+        # Execute tools
+        assistant_content = response.get("content", [])
+        messages.append({"role": "assistant", "content": assistant_content})
+
+        tool_results = []
+        for tool_use in tool_uses:
+            result = await tool_executor.execute_tool_use(tool_use)
+            tool_results.append(result)
+            logger.debug(f"Agent {agent.agent_id} used tool {tool_use.get('name')}")
+
+        messages.append({"role": "user", "content": tool_results})
 
     return {
-        "content": content,
-        "input_tokens": usage.get("input_tokens", 0),
-        "output_tokens": usage.get("output_tokens", 0),
+        "content": full_content,
+        "input_tokens": total_input_tokens,
+        "output_tokens": total_output_tokens,
     }

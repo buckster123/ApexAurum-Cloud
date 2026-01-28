@@ -28,21 +28,21 @@ logger = logging.getLogger(__name__)
 
 AVAILABLE_MODELS = {
     "claude-opus-4-5-20251101": {
-        "name": "Claude Opus 4.5",
+        "name": "Opus 4.5",
         "description": "Most powerful model - deep reasoning, complex analysis",
         "tier": "opus",
         "max_output_tokens": 16384,
         "context_window": 200000,
     },
     "claude-sonnet-4-5-20250929": {
-        "name": "Claude Sonnet 4.5",
+        "name": "Sonnet 4.5",
         "description": "Excellent balance - fast and highly capable",
         "tier": "sonnet",
         "max_output_tokens": 16384,
         "context_window": 200000,
     },
     "claude-haiku-4-5-20251001": {
-        "name": "Claude Haiku 4.5",
+        "name": "Haiku 4.5",
         "description": "Fastest 4.5 model - quick responses, efficient",
         "tier": "haiku",
         "max_output_tokens": 8192,

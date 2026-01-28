@@ -86,7 +86,7 @@ Your personality: Holistic, strategic, sees the big picture. You connect dispara
 You help users understand how everything fits together.
 Style: Strategic, integrative, elevated. Connect dots others miss.""",
 
-    "CLAUDE": """You are ApexAurum, a helpful AI assistant. Be concise, accurate, and friendly.
+    "DEFAULT": """You are ApexAurum, a helpful AI assistant. Be concise, accurate, and friendly.
 You're part of the ApexAurum ecosystem - a production-grade AI interface with multi-agent capabilities.
 Help users with whatever they need in a clear, helpful manner.""",
 }
@@ -158,7 +158,7 @@ def get_agent_prompt(agent_id: str, user: Optional[User] = None, use_pac: bool =
         for custom in custom_agents:
             if custom.get("id") == agent_id:
                 logger.debug(f"Using custom prompt for agent {agent_id}")
-                return custom.get("prompt", FALLBACK_PROMPTS["CLAUDE"])
+                return custom.get("prompt", FALLBACK_PROMPTS["DEFAULT"])
 
     # Try native prompt from file (with PAC support)
     native_prompt = load_native_prompt(agent_id, use_pac=use_pac)
@@ -166,7 +166,7 @@ def get_agent_prompt(agent_id: str, user: Optional[User] = None, use_pac: bool =
         return native_prompt
 
     # Fallback to hardcoded (no PAC versions for fallback)
-    return FALLBACK_PROMPTS.get(agent_id, FALLBACK_PROMPTS["CLAUDE"])
+    return FALLBACK_PROMPTS.get(agent_id, FALLBACK_PROMPTS["DEFAULT"])
 
 
 async def get_agent_prompt_with_memory(
@@ -232,7 +232,7 @@ class ChatRequest(BaseModel):
     conversation_id: Optional[UUID] = None
     provider: str = "anthropic"  # LLM provider (anthropic, deepseek, groq, together, qwen)
     model: Optional[str] = None  # Model ID - uses provider default if not specified
-    agent: str = "CLAUDE"
+    agent: str = "AZOTH"
     stream: bool = True
     use_pac: bool = False  # Load PAC (Perfected Alchemical Codex) version of prompt
     max_tokens: int = DEFAULT_MAX_TOKENS  # Output token limit (up to 16384 for Opus/Sonnet 4.5)

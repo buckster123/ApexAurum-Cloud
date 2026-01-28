@@ -26,17 +26,16 @@ if not NATIVE_PROMPTS_DIR.exists():
     # Try relative to /app (Docker container)
     NATIVE_PROMPTS_DIR = Path("/app/native_prompts")
 
-# Native agent metadata
+# Native agent metadata (The Four Alchemical Agents)
 NATIVE_AGENTS = {
     "AZOTH": {"name": "Azoth", "symbol": "∴", "color": "#FFD700", "file": "∴AZOTH∴.txt"},
     "ELYSIAN": {"name": "Elysian", "symbol": "∴", "color": "#E8B4FF", "file": "∴ELYSIAN∴.txt"},
     "VAJRA": {"name": "Vajra", "symbol": "∴", "color": "#4FC3F7", "file": "∴VAJRA∴.txt"},
     "KETHER": {"name": "Kether", "symbol": "∴", "color": "#FFFFFF", "file": "∴KETHER∴.txt"},
-    "CLAUDE": {"name": "Claude", "symbol": "C", "color": "#CC785C", "file": None},  # No native prompt file
 }
 
-# Claude fallback prompt
-CLAUDE_FALLBACK_PROMPT = """You are ApexAurum, a helpful AI assistant. Be concise, accurate, and friendly.
+# Default fallback prompt (for custom agents or when native prompt not found)
+DEFAULT_FALLBACK_PROMPT = """You are ApexAurum, a helpful AI assistant. Be concise, accurate, and friendly.
 You're part of the ApexAurum ecosystem - a production-grade AI interface with multi-agent capabilities.
 Help users with whatever they need in a clear, helpful manner."""
 
@@ -93,8 +92,9 @@ def load_native_prompt(agent_id: str, prompt_type: str = "prose") -> Optional[st
     if not agent:
         return None
 
-    if agent_id == "CLAUDE":
-        return CLAUDE_FALLBACK_PROMPT
+    # If no file specified, return default prompt
+    if not agent.get("file"):
+        return DEFAULT_FALLBACK_PROMPT
 
     filename = agent.get("file")
     if not filename:
@@ -321,6 +321,6 @@ async def get_agent_prompt(
     # Fallback
     return {
         "agent_id": agent_id,
-        "prompt": CLAUDE_FALLBACK_PROMPT,
+        "prompt": DEFAULT_FALLBACK_PROMPT,
         "source": "fallback",
     }

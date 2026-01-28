@@ -133,7 +133,7 @@ export const useChatStore = defineStore('chat', () => {
     messages.value = []
   }
 
-  async function sendMessage(content, agent = 'CLAUDE', model = null, usePac = false) {
+  async function sendMessage(content, agent = 'AZOTH', model = null, usePac = false) {
     // Use selected model if not specified
     const useModel = model || selectedModel.value || defaultModel.value
     // Add user message immediately
