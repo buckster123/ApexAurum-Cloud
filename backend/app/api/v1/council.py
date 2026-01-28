@@ -254,39 +254,46 @@ async def list_sessions(
     db: AsyncSession = Depends(get_db),
 ):
     """List user's deliberation sessions."""
-    result = await db.execute(
-        select(DeliberationSession)
-        .options(selectinload(DeliberationSession.agents))
-        .where(DeliberationSession.user_id == user.id)
-        .order_by(DeliberationSession.created_at.desc())
-        .limit(limit)
-    )
-    sessions = result.scalars().all()
-
-    return [
-        SessionResponse(
-            id=s.id,
-            topic=s.topic,
-            state=s.state,
-            mode=s.mode,
-            current_round=s.current_round,
-            max_rounds=s.max_rounds,
-            convergence_score=s.convergence_score,
-            agents=[
-                AgentInfo(
-                    agent_id=a.agent_id,
-                    display_name=a.display_name,
-                    is_active=a.is_active,
-                    input_tokens=a.input_tokens,
-                    output_tokens=a.output_tokens,
-                )
-                for a in s.agents
-            ],
-            total_cost_usd=s.total_cost_usd,
-            created_at=s.created_at.isoformat(),
+    try:
+        result = await db.execute(
+            select(DeliberationSession)
+            .options(selectinload(DeliberationSession.agents))
+            .where(DeliberationSession.user_id == user.id)
+            .order_by(DeliberationSession.created_at.desc())
+            .limit(limit)
         )
-        for s in sessions
-    ]
+        sessions = result.scalars().all()
+
+        return [
+            SessionResponse(
+                id=s.id,
+                topic=s.topic,
+                state=s.state,
+                mode=s.mode,
+                current_round=s.current_round,
+                max_rounds=s.max_rounds,
+                convergence_score=s.convergence_score,
+                agents=[
+                    AgentInfo(
+                        agent_id=a.agent_id,
+                        display_name=a.display_name,
+                        is_active=a.is_active,
+                        input_tokens=a.input_tokens,
+                        output_tokens=a.output_tokens,
+                    )
+                    for a in s.agents
+                ],
+                total_cost_usd=s.total_cost_usd,
+                created_at=s.created_at.isoformat() if s.created_at else None,
+            )
+            for s in sessions
+        ]
+    except Exception as e:
+        logger.exception(f"Failed to list council sessions: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to list sessions: {str(e)}"
+        )
 
 
 @router.get("/sessions/{session_id}", response_model=SessionDetailResponse)
