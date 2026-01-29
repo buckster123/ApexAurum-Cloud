@@ -1,8 +1,8 @@
 # ApexAurum-Cloud Handover Document
 
 **Date:** 2026-01-29
-**Build:** v94-beta-hardening
-**Status:** BETA - Security hardened, streaming persistence fixed!
+**Build:** v96-beta-polish
+**Status:** BETA READY - Security hardened, bug reporting live, toast notifications!
 
 ---
 
@@ -1044,20 +1044,88 @@ uploadUrl + style → upload-cover API → AI-transformed track
 
 ---
 
+## Session 19 Accomplishments
+
+### Tier 2 Security Hardening (v95) - COMPLETE
+**Commits:** 497fcd0
+
+1. **Tool execution timeout** - `asyncio.wait_for()` wraps all tool execution, 120s default, configurable via `TOOL_EXECUTION_TIMEOUT` env var
+2. **Coupon unique constraint** - DB-level `UniqueConstraint('coupon_id', 'user_id')` on `coupon_redemptions` + `IntegrityError` catch returns clean 400
+3. **Credit balance CHECK constraint** - `CHECK(balance_cents >= 0)` on `credit_balances` prevents negative balances at DB level
+4. **Search param length limits** - `max_length` on all search endpoints: music (200), files (200), cortex (500), admin (200)
+
+### Toast Notification System (v96) - COMPLETE
+- **`useToast.js`** composable - singleton reactive state, 4 types (success/error/warning/info)
+- **`ToastContainer.vue`** - fixed bottom-right, slide-in/fade-out transitions, color-coded
+- Mounted globally in App.vue
+- Replaced all `alert()` calls in ChatView, FilesView with styled toasts
+- Surfaced silent save/delete failures in SettingsView
+
+### Bug Report System (v96) - COMPLETE
+- **Bug icon button** in navbar (desktop + mobile "Report Issue")
+- **BugReportModal** - category (Bug/Feedback/Question), description, auto-captures page + browser info
+- **Backend:** `BugReport` model, `POST /api/v1/feedback/report` endpoint
+- **Admin panel:** "Reports" tab with status filtering, expandable detail view, admin notes, status management
+- **Status flow:** open -> acknowledged -> resolved -> closed
+- **Tested and confirmed working** in production
+
+### Environment
+- Build: v96-beta-polish
+- Frontend CACHE_BUST: 16
+- New files: `feedback.py` (model + API), `useToast.js`, `ToastContainer.vue`, `BugReportModal.vue`
+
+### Key Files Modified (Session 19)
+
+| File | Changes |
+|------|---------|
+| `backend/app/tools/__init__.py` | Tool execution timeout via asyncio.wait_for |
+| `backend/app/config.py` | tool_execution_timeout setting |
+| `backend/app/models/billing.py` | UniqueConstraint + CheckConstraint |
+| `backend/app/database.py` | Migrations for coupon unique + credit CHECK |
+| `backend/app/api/v1/billing.py` | IntegrityError catch on coupon redeem |
+| `backend/app/api/v1/music.py` | search max_length=200 |
+| `backend/app/api/v1/files.py` | q max_length=200 |
+| `backend/app/api/v1/cortex.py` | query max_length=500 |
+| `backend/app/api/v1/admin.py` | search max_length=200, Reports CRUD endpoints |
+| `backend/app/models/feedback.py` | **NEW** - BugReport model |
+| `backend/app/api/v1/feedback.py` | **NEW** - POST /feedback/report |
+| `backend/app/models/__init__.py` | Import BugReport |
+| `backend/app/api/v1/__init__.py` | Include feedback router |
+| `backend/admin_static/index.html` | Reports tab with full management UI |
+| `frontend/src/composables/useToast.js` | **NEW** - toast notification composable |
+| `frontend/src/components/ToastContainer.vue` | **NEW** - global toast display |
+| `frontend/src/components/BugReportModal.vue` | **NEW** - bug report form modal |
+| `frontend/src/App.vue` | Mount ToastContainer |
+| `frontend/src/components/Navbar.vue` | Bug report button + BugReportModal |
+| `frontend/src/views/ChatView.vue` | Replace alert() with toast |
+| `frontend/src/views/FilesView.vue` | Replace alert() calls with toasts |
+| `frontend/src/views/SettingsView.vue` | Surface save/delete failures via toast |
+| `frontend/Dockerfile` | CACHE_BUST=16 |
+| `backend/app/main.py` | v96-beta-polish |
+
+---
+
 ## Beta Launch Status
 
-Beta hardening complete. Security audit Tier 1 items all addressed. Next steps:
+**All security audit items complete (Tier 1 + Tier 2).** Beta polish applied.
+
+### Ready for Beta
+- Security: rate limiting, auth on all WebSockets, input validation, exception hiding
+- Data integrity: DB constraints on credits and coupons
+- UX: toast notifications replace silent failures, bug reporting for testers
+- Admin: full dashboard with user management, coupons, stats, and bug reports
+
+### Remaining Before Public Launch
 - Set `INITIAL_ADMIN_PASSWORD` env var in Railway
-- Tier 2 security audit (timeouts, constraints, limits)
-- Community beta testing with access coupons
+- Landing page
 - Backfill assistant messages from neural memory (pre-streaming-fix conversations)
-- Landing page for beta launch
-- Compute/scaling review (current dev instance over-provisioned)
+- Community beta testing with access coupons
 
 ### Future Ideas (Not Blocking Launch)
 - Additional LLM providers (expand OSS model coverage)
-- 3D Neural view enhancements (trinkets, interactive elements)
+- 3D Neural view enhancements
 - Village GUI visual polish
+- Email notifications for bug reports (connect bugs@apexaurum.cloud)
 
 ---
 
