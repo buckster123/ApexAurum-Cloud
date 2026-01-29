@@ -376,8 +376,41 @@ If completed, includes audio URL and duration.""",
                             first_track = tracks[0]
                             task.status = "completed"
                             task.file_path = first_track.get("audio_url")
+                            task.audio_url = first_track.get("audio_url")
+                            task.duration = first_track.get("duration", 0.0)
+                            task.clip_id = first_track.get("clip_id")
                             task.title = first_track.get("title") or task.title
                             task.completed_at = datetime.utcnow()
+
+                            # Save additional tracks as separate entries
+                            saved_alt_count = 0
+                            for extra in tracks[1:]:
+                                try:
+                                    from app.models.music import MusicTask as MT
+                                    extra_title = extra.get("title") or task.title or "Untitled"
+                                    extra_task = MT(
+                                        id=uuid4(),
+                                        user_id=user_uuid,
+                                        prompt=task.prompt,
+                                        style=task.style,
+                                        title=f"{extra_title} (Alt)",
+                                        model=task.model,
+                                        instrumental=task.instrumental,
+                                        status="completed",
+                                        suno_task_id=task.suno_task_id,
+                                        file_path=extra.get("audio_url"),
+                                        audio_url=extra.get("audio_url"),
+                                        duration=extra.get("duration", 0.0),
+                                        clip_id=extra.get("clip_id"),
+                                        agent_id=task.agent_id,
+                                        completed_at=datetime.utcnow(),
+                                        progress="Complete",
+                                    )
+                                    db.add(extra_task)
+                                    saved_alt_count += 1
+                                except Exception as e:
+                                    logger.warning(f"Failed to save alt track: {e}")
+
                             await db.commit()
 
                             return ToolResult(
@@ -389,7 +422,8 @@ If completed, includes audio URL and duration.""",
                                     "audio_url": first_track.get("audio_url"),
                                     "duration": first_track.get("duration"),
                                     "tracks": tracks,
-                                    "message": "Generation complete!",
+                                    "track_count": len(tracks),
+                                    "message": f"Generation complete! {len(tracks)} track(s) saved.",
                                 },
                             )
 

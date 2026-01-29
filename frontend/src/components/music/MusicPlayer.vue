@@ -40,6 +40,10 @@ watch(() => music.currentTrack, (newTrack) => {
 watch(() => music.isPlaying, (playing) => {
   if (audioRef.value) {
     if (playing) {
+      // Reset position if audio ended (replay scenario)
+      if (audioRef.value.ended) {
+        audioRef.value.currentTime = 0
+      }
       audioRef.value.play().catch(e => {
         console.warn('Playback failed:', e)
         music.pausePlayback()

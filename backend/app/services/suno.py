@@ -12,8 +12,8 @@ import aiohttp
 import re
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Dict, Any, AsyncGenerator
-from uuid import UUID
+from typing import Optional, Dict, Any, AsyncGenerator, List
+from uuid import UUID, uuid4
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -99,32 +99,67 @@ class SunoService:
             if not result.get("success"):
                 raise Exception(result.get("error", "Generation failed"))
 
-            # Download audio
+            # Download ALL tracks (Suno generates 2 per request)
+            all_tracks = result["tracks"]
+            track_count = len(all_tracks)
             task.status = "downloading"
-            task.progress = "Downloading audio..."
+            task.progress = f"Downloading {track_count} track(s)..."
             await self.db.commit()
 
             if progress_callback:
                 await progress_callback("downloading", task.progress)
 
-            track_info = result["tracks"][0]  # Use first track
-            file_path = await self._download_audio(task, track_info)
+            # Download and save primary track
+            primary = all_tracks[0]
+            file_path = await self._download_audio(task, primary)
 
-            # Update task with results
             task.status = "completed"
             task.file_path = file_path
-            task.audio_url = track_info.get("audio_url")
-            task.duration = track_info.get("duration", 0.0)
-            task.clip_id = track_info.get("clip_id")
-            task.title = track_info.get("title") or task.title or f"Track_{str(task.id)[:8]}"
+            task.audio_url = primary.get("audio_url")
+            task.duration = primary.get("duration", 0.0)
+            task.clip_id = primary.get("clip_id")
+            task.title = primary.get("title") or task.title or f"Track_{str(task.id)[:8]}"
             task.progress = "Complete"
             task.completed_at = datetime.utcnow()
             await self.db.commit()
 
-            if progress_callback:
-                await progress_callback("completed", f"Generated: {task.title}")
+            # Save additional tracks as separate MusicTask entries
+            extra_tasks = []
+            for extra in all_tracks[1:]:
+                try:
+                    extra_path = await self._download_audio(task, extra)
+                    extra_title = extra.get("title") or task.title or "Untitled"
+                    extra_task = MusicTask(
+                        id=uuid4(),
+                        user_id=task.user_id,
+                        prompt=task.prompt,
+                        style=task.style,
+                        title=f"{extra_title} (Alt)",
+                        model=task.model,
+                        instrumental=task.instrumental,
+                        status="completed",
+                        suno_task_id=task.suno_task_id,
+                        file_path=extra_path,
+                        audio_url=extra.get("audio_url"),
+                        duration=extra.get("duration", 0.0),
+                        clip_id=extra.get("clip_id"),
+                        agent_id=task.agent_id,
+                        completed_at=datetime.utcnow(),
+                        progress="Complete",
+                    )
+                    self.db.add(extra_task)
+                    extra_tasks.append(extra_task)
+                    logger.info(f"Saved alt track: {extra_task.title} ({extra_task.id})")
+                except Exception as dl_err:
+                    logger.warning(f"Failed to download alt track: {dl_err}")
 
-            logger.info(f"Music task {task.id} completed: {task.title}")
+            if extra_tasks:
+                await self.db.commit()
+
+            if progress_callback:
+                await progress_callback("completed", f"Generated: {task.title} (+{len(extra_tasks)} alt)")
+
+            logger.info(f"Music task {task.id} completed: {task.title} ({track_count} tracks)")
 
             # ═══════════════════════════════════════════════════════════════════
             # VILLAGE MEMORY INJECTION - Songs become cultural memories
@@ -140,6 +175,7 @@ class SunoService:
                 "audio_url": task.audio_url,
                 "duration": task.duration,
                 "title": task.title,
+                "track_count": track_count,
             }
 
         except Exception as e:
@@ -414,6 +450,7 @@ async def generate_music_stream(
             "audio_url": result.get("audio_url"),
             "duration": result.get("duration"),
             "title": result.get("title"),
+            "track_count": result.get("track_count", 1),
         }
     else:
         event = {

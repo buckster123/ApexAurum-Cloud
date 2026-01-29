@@ -6,7 +6,7 @@
  */
 
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, computed, nextTick } from 'vue'
 import api from '@/services/api'
 
 export const useMusicStore = defineStore('music', () => {
@@ -176,6 +176,14 @@ export const useMusicStore = defineStore('music', () => {
       console.warn('Failed to increment play count:', e)
     }
 
+    const isSameTrack = currentTrack.value?.id === task.id
+    if (isSameTrack) {
+      // Replaying same track - force restart via toggle
+      isPlaying.value = false
+      currentTime.value = 0
+      await nextTick()
+    }
+
     currentTrack.value = task
     isPlaying.value = true
   }
@@ -222,6 +230,10 @@ export const useMusicStore = defineStore('music', () => {
     const currentIndex = completed.findIndex(t => t.id === currentTrack.value.id)
     if (currentIndex < completed.length - 1) {
       playTrack(completed[currentIndex + 1])
+    } else {
+      // No next track - reset playback state
+      isPlaying.value = false
+      currentTime.value = 0
     }
   }
 
