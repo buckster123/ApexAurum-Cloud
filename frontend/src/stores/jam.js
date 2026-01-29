@@ -19,10 +19,15 @@ export const useJamStore = defineStore('jam', () => {
   const isCreating = ref(false)
   const isContributing = ref(false)
   const isFinalizing = ref(false)
+  const isAutoJamming = ref(false)
+  const autoJamAbort = ref(null)
   const error = ref(null)
 
   // For real-time collaboration visualization
   const liveContributions = ref([])  // Recent contributions for animation
+  const streamingRound = ref(null)
+  const streamingAgents = ref({})  // {agentId: {content, toolCalls}}
+  const streamingEvents = ref([])  // All events for timeline display
 
   // ═══════════════════════════════════════════════════════════════════════════
   // Getters
@@ -291,8 +296,121 @@ export const useJamStore = defineStore('jam', () => {
     }
   }
 
+  async function startAutoJam(sessionId, numRounds = 3) {
+    isAutoJamming.value = true
+    streamingRound.value = null
+    streamingAgents.value = {}
+    streamingEvents.value = []
+    error.value = null
+
+    const abortController = new AbortController()
+    autoJamAbort.value = abortController
+
+    try {
+      let apiUrl = import.meta.env.VITE_API_URL || ''
+      if (apiUrl && !apiUrl.startsWith('http://') && !apiUrl.startsWith('https://')) {
+        apiUrl = 'https://' + apiUrl
+      }
+
+      const response = await fetch(
+        `${apiUrl}/api/v1/jam/sessions/${sessionId}/auto-jam`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ num_rounds: numRounds }),
+          signal: abortController.signal,
+        }
+      )
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}))
+        throw new Error(errData.detail || `HTTP ${response.status}`)
+      }
+
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n\n')
+        buffer = lines.pop() || ''
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue
+          try {
+            const data = JSON.parse(line.slice(6))
+            streamingEvents.value.push(data)
+
+            if (data.type === 'start') {
+              streamingRound.value = 0
+            } else if (data.type === 'round_start') {
+              streamingRound.value = data.round_number
+              streamingAgents.value = {}
+            } else if (data.type === 'agent_complete') {
+              streamingAgents.value[data.agent_id] = {
+                content: data.content,
+                role: data.role,
+                toolCalls: data.tool_calls || [],
+              }
+              // Add to live contributions
+              liveContributions.value.push({
+                agent_id: data.agent_id,
+                content: data.content,
+                round: streamingRound.value,
+                timestamp: Date.now()
+              })
+            } else if (data.type === 'round_complete') {
+              // Round finished
+            } else if (data.type === 'finalizing') {
+              // Merging tracks
+            } else if (data.type === 'midi_created') {
+              // MIDI file ready
+            } else if (data.type === 'suno_started') {
+              // Suno generation started
+            } else if (data.type === 'end') {
+              isAutoJamming.value = false
+              // Refresh session to get final state
+              await fetchSession(sessionId)
+            }
+          } catch (parseErr) {
+            console.warn('Failed to parse SSE event:', parseErr)
+          }
+        }
+      }
+    } catch (err) {
+      if (err.name !== 'AbortError') {
+        console.error('Auto-jam stream error:', err)
+        error.value = err.message || 'Auto-jam failed'
+      }
+    } finally {
+      isAutoJamming.value = false
+      autoJamAbort.value = null
+    }
+  }
+
+  function stopAutoJam() {
+    if (autoJamAbort.value) {
+      autoJamAbort.value.abort()
+      autoJamAbort.value = null
+    }
+    isAutoJamming.value = false
+  }
+
   function clearLiveContributions() {
     liveContributions.value = []
+  }
+
+  function clearStreamingState() {
+    streamingRound.value = null
+    streamingAgents.value = {}
+    streamingEvents.value = []
   }
 
   function setCurrentSession(session) {
@@ -357,8 +475,13 @@ export const useJamStore = defineStore('jam', () => {
     isCreating,
     isContributing,
     isFinalizing,
+    isAutoJamming,
+    autoJamAbort,
     error,
     liveContributions,
+    streamingRound,
+    streamingAgents,
+    streamingEvents,
 
     // Getters
     activeSessions,
@@ -378,7 +501,10 @@ export const useJamStore = defineStore('jam', () => {
     advanceRound,
     finalizeSession,
     deleteSession,
+    startAutoJam,
+    stopAutoJam,
     clearLiveContributions,
+    clearStreamingState,
     setCurrentSession,
 
     // Helpers

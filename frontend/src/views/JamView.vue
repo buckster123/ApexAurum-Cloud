@@ -112,14 +112,24 @@
                   {{ jam.getStateBadge(jam.currentSession.state).label }}
                 </span>
                 <button
-                  v-if="jam.currentSession.state === 'forming'"
-                  @click="startJam"
-                  class="px-4 py-2 bg-green-600 hover:bg-green-500 rounded-lg font-medium transition-colors"
+                  v-if="jam.currentSession.state === 'forming' || jam.currentSession.state === 'jamming'"
+                  @click="showAutoJamModal = true"
+                  :disabled="jam.isAutoJamming"
+                  class="px-4 py-2 bg-green-600 hover:bg-green-500 rounded-lg font-medium transition-colors disabled:opacity-50 flex items-center gap-2"
                 >
-                  Start Jamming
+                  <span v-if="jam.isAutoJamming" class="animate-pulse">🎵</span>
+                  <span v-else>🎸</span>
+                  {{ jam.isAutoJamming ? 'Jamming...' : 'Auto-Jam' }}
                 </button>
                 <button
-                  v-if="jam.currentSession.state === 'jamming'"
+                  v-if="jam.isAutoJamming"
+                  @click="jam.stopAutoJam()"
+                  class="px-4 py-2 bg-red-600 hover:bg-red-500 rounded-lg font-medium transition-colors"
+                >
+                  Stop
+                </button>
+                <button
+                  v-if="jam.currentSession.state === 'jamming' && !jam.isAutoJamming"
                   @click="showFinalizeModal = true"
                   class="px-4 py-2 bg-purple-600 hover:bg-purple-500 rounded-lg font-medium transition-colors"
                 >
@@ -178,6 +188,82 @@
                 <div class="text-xs text-gray-500 mt-2">
                   {{ participant.contributions }} contributions
                 </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Live Streaming Panel (during auto-jam) -->
+          <div
+            v-if="jam.isAutoJamming || jam.streamingEvents.length > 0"
+            class="bg-gradient-to-r from-green-900/30 to-blue-900/30 rounded-xl border border-green-500/30 p-6"
+          >
+            <h3 class="text-lg font-semibold mb-4 flex items-center gap-2">
+              <span class="animate-pulse" v-if="jam.isAutoJamming">🎵</span>
+              <span v-else>🎧</span>
+              {{ jam.isAutoJamming ? 'Live Session' : 'Session Replay' }}
+              <span v-if="jam.streamingRound" class="text-sm font-normal text-gray-400">
+                Round {{ jam.streamingRound }}
+              </span>
+            </h3>
+
+            <!-- Agent contributions in real-time -->
+            <div v-if="Object.keys(jam.streamingAgents).length > 0" class="space-y-3 mb-4">
+              <div
+                v-for="(data, agentId) in jam.streamingAgents"
+                :key="agentId"
+                class="p-3 rounded-lg bg-black/30 border-l-4"
+                :style="{ borderColor: jam.getAgentColor(agentId) }"
+              >
+                <div class="flex items-center gap-2 mb-1">
+                  <span>{{ jam.getRoleIcon(data.role) }}</span>
+                  <span class="font-medium" :style="{ color: jam.getAgentColor(agentId) }">
+                    {{ agentId }}
+                  </span>
+                  <span v-if="data.toolCalls?.length" class="text-xs text-green-400">
+                    {{ data.toolCalls.length }} tool call{{ data.toolCalls.length > 1 ? 's' : '' }}
+                  </span>
+                </div>
+                <p class="text-sm text-gray-300">{{ data.content }}</p>
+                <!-- Tool calls -->
+                <div v-if="data.toolCalls?.length" class="mt-2 space-y-1">
+                  <div
+                    v-for="(tc, idx) in data.toolCalls"
+                    :key="idx"
+                    class="text-xs px-2 py-1 bg-gray-800 rounded flex items-center gap-2"
+                  >
+                    <span class="text-green-400 font-mono">{{ tc.name }}</span>
+                    <span v-if="tc.input?.notes" class="text-gray-400">
+                      {{ Array.isArray(tc.input.notes) ? tc.input.notes.slice(0, 6).join(', ') : '' }}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Event timeline -->
+            <div class="space-y-1 max-h-48 overflow-y-auto text-xs font-mono text-gray-500">
+              <div v-for="(event, idx) in jam.streamingEvents.slice(-15)" :key="idx">
+                <span v-if="event.type === 'start'" class="text-green-400">
+                  ▶ Session started ({{ event.num_rounds }} rounds)
+                </span>
+                <span v-else-if="event.type === 'round_start'" class="text-blue-400">
+                  ── Round {{ event.round_number }} ──
+                </span>
+                <span v-else-if="event.type === 'round_complete'" class="text-gray-400">
+                  ✓ Round {{ event.round_number }} complete ({{ event.total_notes }} notes total)
+                </span>
+                <span v-else-if="event.type === 'finalizing'" class="text-yellow-400">
+                  ⚡ Finalizing {{ event.total_notes }} notes...
+                </span>
+                <span v-else-if="event.type === 'midi_created'" class="text-purple-400">
+                  🎼 MIDI created ({{ event.note_count }} notes)
+                </span>
+                <span v-else-if="event.type === 'suno_started'" class="text-pink-400">
+                  🎧 Suno generation started
+                </span>
+                <span v-else-if="event.type === 'end'" class="text-green-400">
+                  ✦ Session complete! {{ event.total_notes }} notes, {{ event.total_tracks }} tracks
+                </span>
               </div>
             </div>
           </div>
@@ -261,6 +347,53 @@
               View in Music Library
             </router-link>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Auto-Jam Modal -->
+    <div
+      v-if="showAutoJamModal"
+      class="fixed inset-0 bg-black/70 flex items-center justify-center z-50"
+      @click.self="showAutoJamModal = false"
+    >
+      <div class="bg-gray-800 rounded-xl p-6 w-full max-w-md border border-gray-700">
+        <h3 class="text-xl font-bold mb-4 flex items-center gap-2">
+          <span>🎸</span> Auto-Jam
+        </h3>
+
+        <p class="text-gray-400 mb-4">
+          The Village Band will collaborate for multiple rounds, with each agent
+          contributing notes and discussing the composition.
+        </p>
+
+        <div class="mb-4">
+          <label class="block text-sm text-gray-400 mb-1">Rounds to play</label>
+          <input
+            v-model.number="autoJamRounds"
+            type="number"
+            min="1"
+            max="10"
+            class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:border-green-500 focus:outline-none"
+          />
+          <p class="text-xs text-gray-500 mt-1">
+            Each round: all agents contribute in parallel
+          </p>
+        </div>
+
+        <div class="flex justify-end gap-3">
+          <button
+            @click="showAutoJamModal = false"
+            class="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            @click="launchAutoJam"
+            class="px-6 py-2 bg-green-600 hover:bg-green-500 rounded-lg font-medium transition-colors flex items-center gap-2"
+          >
+            <span>🎸</span> Let's Jam!
+          </button>
         </div>
       </div>
     </div>
@@ -467,6 +600,10 @@ const jam = useJamStore()
 // Modals
 const showCreateModal = ref(false)
 const showFinalizeModal = ref(false)
+const showAutoJamModal = ref(false)
+
+// Auto-jam
+const autoJamRounds = ref(3)
 
 // New session form
 const newSession = ref({
@@ -521,6 +658,14 @@ async function createNewSession() {
 async function startJam() {
   if (jam.currentSession) {
     await jam.startSession(jam.currentSession.id)
+  }
+}
+
+async function launchAutoJam() {
+  if (jam.currentSession) {
+    showAutoJamModal.value = false
+    jam.clearStreamingState()
+    await jam.startAutoJam(jam.currentSession.id, autoJamRounds.value)
   }
 }
 

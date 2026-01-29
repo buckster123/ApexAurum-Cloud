@@ -51,7 +51,7 @@ async def lifespan(app: FastAPI):
     """Application lifespan manager."""
     # Startup
     print("=" * 50)
-    print("ApexAurum Cloud v86 - Village Band Studio")
+    print("ApexAurum Cloud v87 - Auto-Jam & Village Memory")
     print("=" * 50)
 
     # Import all models before database init to ensure SQLAlchemy
@@ -120,7 +120,7 @@ async def health_check():
     return {
         "status": "healthy",
         "version": "0.1.0",
-        "build": "v86-village-band",
+        "build": "v87-auto-jam",
         "agents": {
             "native": 5,
             "pac": 4,

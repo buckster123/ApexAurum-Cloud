@@ -34,6 +34,10 @@ from app.models.jam import (
 )
 from app.auth.deps import get_current_user
 from app.services.midi import MidiService
+from app.services.claude import ClaudeService
+from app.services.tool_executor import create_tool_executor
+from app.services.neural_memory import NeuralMemoryService
+from app.api.v1.chat import load_native_prompt, get_agent_prompt_with_memory
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -704,6 +708,9 @@ async def finalize_session(
 
         logger.info(f"Jam session {session_id} finalized -> music task {music_task.id}")
 
+        # Inject into Village memory
+        await inject_jam_village_memory(db, session, user.id)
+
         return {
             "success": True,
             "message": "Jam session finalized! Music generation started.",
@@ -721,6 +728,474 @@ async def finalize_session(
         session.state = JamState.FAILED.value
         await db.commit()
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# Auto-Jam SSE Streaming - The Band Plays Live
+# ============================================================================
+
+# Claude service singleton
+_claude_service = None
+
+def get_claude_service() -> ClaudeService:
+    global _claude_service
+    if _claude_service is None:
+        _claude_service = ClaudeService()
+    return _claude_service
+
+JAM_MODEL = "claude-haiku-4-5-20251001"
+
+ROLE_DESCRIPTIONS = {
+    "producer": "You are the PRODUCER. Oversee the session, guide the creative vision. Decide when the composition feels complete. You may also contribute notes.",
+    "melody": "You are the MELODY player. Create the lead voice - haunting themes, memorable hooks, and expressive phrases. Think vocal line, flute, or lead synth.",
+    "bass": "You are the BASS player. Provide the low-end foundation - deep, grounding notes that anchor the composition. Think bass guitar, sub synth, or cello.",
+    "harmony": "You are the HARMONY player. Add chords, countermelodies, and texture. Fill the space between melody and bass. Think piano chords, pad synth, or strings.",
+    "rhythm": "You are the RHYTHM section. Create percussive patterns and rhythmic drive. Use short, staccato notes and rests to build groove.",
+    "free": "You have no fixed role. Contribute whatever you feel the composition needs.",
+}
+
+
+def build_jam_context(session: JamSession) -> str:
+    """Build context from previous tracks for agent prompts."""
+    if not session.tracks:
+        return "This is the first round. No tracks have been contributed yet."
+
+    context_parts = ["Previous contributions:"]
+
+    # Group tracks by round
+    rounds = {}
+    for track in sorted(session.tracks, key=lambda t: (t.round_number, t.created_at)):
+        r = track.round_number
+        if r not in rounds:
+            rounds[r] = []
+        rounds[r].append(track)
+
+    for round_num in sorted(rounds.keys()):
+        context_parts.append(f"\n--- Round {round_num} ---")
+        for track in rounds[round_num]:
+            note_preview = [n.get("note") for n in (track.notes or [])[:12]]
+            notes_str = ", ".join(str(n) for n in note_preview)
+            if len(track.notes or []) > 12:
+                notes_str += f" (+{len(track.notes) - 12} more)"
+            desc = f' - "{track.description}"' if track.description else ""
+            context_parts.append(f"  {track.agent_id} ({track.role}): [{notes_str}]{desc}")
+
+    # Add messages
+    if session.messages:
+        context_parts.append("\nPrevious discussion:")
+        for msg in sorted(session.messages, key=lambda m: m.created_at)[-10:]:
+            content_preview = msg.content[:200]
+            context_parts.append(f"  {msg.agent_id}: {content_preview}")
+
+    return "\n".join(context_parts)
+
+
+async def execute_jam_agent_turn(
+    claude: ClaudeService,
+    session: JamSession,
+    agent: JamParticipant,
+    context: str,
+    db,
+    user=None,
+) -> dict:
+    """Execute a single agent's turn in the jam session."""
+    # Get agent's base prompt with memory
+    if user and db:
+        base_prompt = await get_agent_prompt_with_memory(
+            agent_id=agent.agent_id,
+            user=user,
+            use_pac=False,
+            db=db,
+        )
+    else:
+        base_prompt = load_native_prompt(agent.agent_id, use_pac=False)
+
+    if not base_prompt:
+        base_prompt = f"You are {agent.agent_id}, an AI musician with a distinct style."
+
+    role_desc = ROLE_DESCRIPTIONS.get(agent.role, ROLE_DESCRIPTIONS["free"])
+
+    system_prompt = f"""You are an AI musician participating in ApexAurum's Village Band - a collaborative composition system. This is a legitimate product feature for creating music through multi-agent collaboration.
+
+=== YOUR IDENTITY ===
+{base_prompt}
+
+=== YOUR MUSICAL ROLE ===
+{role_desc}
+
+=== JAM SESSION ===
+Title: "{session.title}"
+Style: {session.style or 'open'}
+Tempo: {session.tempo} BPM
+Key: {session.musical_key}
+Round: {session.current_round} / {session.max_rounds}
+
+=== INSTRUCTIONS ===
+1. Review what others have contributed
+2. Use jam_contribute() to add your notes that complement the existing composition
+3. Choose notes that fit the key ({session.musical_key}) and style ({session.style or 'open'})
+4. Describe your musical intention when contributing
+5. Keep contributions focused: 4-12 notes per contribution is ideal
+6. Be concise in your discussion (1-2 short paragraphs)
+
+=== PREVIOUS CONTRIBUTIONS ===
+{context}
+"""
+
+    # Set up tools
+    tools = None
+    tool_executor = None
+    if user:
+        tool_executor = create_tool_executor(
+            user_id=user.id,
+            conversation_id=None,
+            agent_id=agent.agent_id,
+        )
+        tools = tool_executor.get_available_tools()
+
+    user_message = f"Round {session.current_round}: Listen to what's been played and add your contribution."
+    messages = [{"role": "user", "content": user_message}]
+
+    total_input_tokens = 0
+    total_output_tokens = 0
+    full_content = ""
+    all_tool_calls = []
+    max_tool_turns = 3
+
+    for turn in range(max_tool_turns):
+        response = await claude.chat(
+            messages=messages,
+            model=JAM_MODEL,
+            system=system_prompt,
+            tools=tools,
+        )
+
+        usage = response.get("usage", {})
+        total_input_tokens += usage.get("input_tokens", 0)
+        total_output_tokens += usage.get("output_tokens", 0)
+
+        tool_uses = [b for b in response.get("content", []) if b.get("type") == "tool_use"]
+
+        if not tool_uses or not tool_executor:
+            for block in response.get("content", []):
+                if block.get("type") == "text":
+                    full_content += block.get("text", "")
+            break
+
+        # Execute tools
+        assistant_content = response.get("content", [])
+        messages.append({"role": "assistant", "content": assistant_content})
+
+        tool_results = []
+        for tool_use in tool_uses:
+            result = await tool_executor.execute_tool_use(tool_use)
+            tool_results.append(result)
+
+            result_text = ""
+            if result.get("type") == "tool_result":
+                result_content = result.get("content", "")
+                if isinstance(result_content, str):
+                    result_text = result_content
+                elif isinstance(result_content, list):
+                    for item in result_content:
+                        if isinstance(item, dict) and item.get("type") == "text":
+                            result_text += item.get("text", "")
+
+            all_tool_calls.append({
+                "name": tool_use.get("name"),
+                "input": tool_use.get("input"),
+                "result": result_text[:500] if result_text else None,
+            })
+
+        messages.append({"role": "user", "content": tool_results})
+
+        # Extract text from this turn too
+        for block in response.get("content", []):
+            if block.get("type") == "text":
+                full_content += block.get("text", "")
+
+    return {
+        "content": full_content,
+        "input_tokens": total_input_tokens,
+        "output_tokens": total_output_tokens,
+        "tool_calls": all_tool_calls if all_tool_calls else None,
+    }
+
+
+async def inject_jam_village_memory(db, session: JamSession, user_id) -> None:
+    """Inject completed jam session into Village memory as cultural memory."""
+    try:
+        memory_service = NeuralMemoryService(db)
+
+        # Build the collaboration story
+        participant_parts = []
+        for p in session.participants:
+            role_icon = {"producer": "🎛️", "melody": "🎵", "bass": "🎸", "harmony": "🎹", "rhythm": "🥁"}.get(p.role, "🎼")
+            participant_parts.append(f"{role_icon} {p.agent_id} ({p.role}): {p.total_notes} notes in {p.contributions} contributions")
+
+        track_summary = []
+        for track in sorted(session.tracks or [], key=lambda t: t.round_number):
+            if track.notes:
+                note_preview = [n.get("note") for n in track.notes[:6]]
+                track_summary.append(f"  R{track.round_number} {track.agent_id}: {', '.join(str(n) for n in note_preview)}")
+
+        content = f"""🎸 VILLAGE BAND JAM: "{session.title}"
+Style: {session.style or 'freeform'}
+Tempo: {session.tempo} BPM | Key: {session.musical_key}
+Rounds: {session.current_round} | Mode: {session.mode}
+
+THE BAND:
+{chr(10).join(participant_parts)}
+
+COMPOSITION HIGHLIGHTS:
+{chr(10).join(track_summary[:10])}
+
+The Village Band created this together through collaborative improvisation."""
+
+        memory_id = await memory_service.store_message(
+            user_id=user_id,
+            content=content,
+            agent_id="VILLAGE_BAND",
+            role="assistant",
+            visibility="village",
+            collection="music",
+        )
+
+        if memory_id:
+            logger.info(f"Injected jam village memory: {memory_id}")
+        else:
+            logger.warning("Village memory injection returned None")
+
+    except Exception as e:
+        logger.warning(f"Jam village memory injection failed (non-fatal): {e}")
+
+
+class AutoJamRequest(BaseModel):
+    """Request for auto-jam deliberation."""
+    num_rounds: int = 3  # How many rounds to auto-play
+
+
+@router.post("/sessions/{session_id}/auto-jam")
+async def auto_jam(
+    session_id: UUID,
+    request: AutoJamRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Execute multiple rounds of collaborative composition with SSE streaming.
+
+    Agents discuss and contribute notes in parallel, streamed in real-time.
+
+    SSE Events:
+    - {type: "start", session_id, num_rounds}
+    - {type: "round_start", round_number}
+    - {type: "agent_complete", agent_id, content, tool_calls}
+    - {type: "round_complete", round_number, total_notes}
+    - {type: "finalizing"}
+    - {type: "end", state, total_rounds}
+    """
+    num_rounds = request.num_rounds
+
+    result = await db.execute(
+        select(JamSession)
+        .where(JamSession.id == session_id)
+        .where(JamSession.user_id == user.id)
+        .options(
+            selectinload(JamSession.participants),
+            selectinload(JamSession.tracks),
+            selectinload(JamSession.messages),
+        )
+    )
+    session = result.scalar_one_or_none()
+
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    if session.state == JamState.COMPLETE.value:
+        raise HTTPException(status_code=400, detail="Session already complete")
+
+    async def stream_jam():
+        nonlocal session
+
+        # Start
+        yield f"data: {json.dumps({'type': 'start', 'session_id': str(session.id), 'num_rounds': num_rounds, 'title': session.title})}\n\n"
+
+        session.state = JamState.JAMMING.value
+        if not session.started_at:
+            session.started_at = datetime.utcnow()
+        if session.current_round == 0:
+            session.current_round = 1
+        await db.commit()
+
+        claude = get_claude_service()
+        rounds_executed = 0
+
+        while rounds_executed < num_rounds and session.current_round <= session.max_rounds:
+            round_number = session.current_round
+
+            yield f"data: {json.dumps({'type': 'round_start', 'round_number': round_number})}\n\n"
+
+            # Build context from existing tracks
+            context = build_jam_context(session)
+
+            # Execute all agents in parallel
+            active_agents = [a for a in session.participants if a.is_active]
+            tasks = []
+            for agent in active_agents:
+                tasks.append(
+                    execute_jam_agent_turn(
+                        claude, session, agent, context, db, user=user
+                    )
+                )
+
+            agent_results = await asyncio.gather(*tasks, return_exceptions=True)
+
+            # Process results
+            for i, result in enumerate(agent_results):
+                agent = active_agents[i]
+                if isinstance(result, Exception):
+                    logger.error(f"Jam agent {agent.agent_id} failed: {result}")
+                    content = f"[Error: {str(result)}]"
+                    tool_calls = None
+                else:
+                    content = result["content"]
+                    tool_calls = result.get("tool_calls")
+
+                # Save message
+                msg = JamMessage(
+                    id=uuid4(),
+                    session_id=session.id,
+                    agent_id=agent.agent_id,
+                    content=content,
+                    round_number=round_number,
+                )
+                db.add(msg)
+
+                # Stream agent complete event
+                event = {
+                    'type': 'agent_complete',
+                    'agent_id': agent.agent_id,
+                    'role': agent.role,
+                    'content': content[:500],
+                    'tool_calls': [
+                        {'name': tc['name'], 'input': tc.get('input')}
+                        for tc in (tool_calls or [])
+                    ],
+                }
+                yield f"data: {json.dumps(event)}\n\n"
+
+            # Advance round
+            session.current_round = round_number + 1
+            await db.commit()
+
+            # Reload session to get new tracks from tool calls
+            await db.refresh(session)
+            result = await db.execute(
+                select(JamSession)
+                .where(JamSession.id == session_id)
+                .options(
+                    selectinload(JamSession.participants),
+                    selectinload(JamSession.tracks),
+                    selectinload(JamSession.messages),
+                )
+            )
+            session = result.scalar_one()
+
+            # Count total notes
+            total_notes = sum(len(t.notes or []) for t in session.tracks)
+
+            yield f"data: {json.dumps({'type': 'round_complete', 'round_number': round_number, 'total_notes': total_notes, 'total_tracks': len(session.tracks)})}\n\n"
+
+            rounds_executed += 1
+
+        # Auto-finalize if there are tracks
+        if session.tracks:
+            yield f"data: {json.dumps({'type': 'finalizing', 'total_notes': sum(len(t.notes or []) for t in session.tracks)})}\n\n"
+
+            try:
+                # Merge notes
+                all_notes = []
+                for track in sorted(session.tracks, key=lambda t: t.round_number):
+                    if track.notes:
+                        for note in track.notes:
+                            all_notes.append(note.get("note", "C4"))
+
+                if all_notes:
+                    midi_service = MidiService()
+                    midi_result = await midi_service.create_midi(
+                        notes=all_notes,
+                        tempo=session.tempo,
+                        note_duration=0.5,
+                        title=session.title,
+                        user_id=str(user.id),
+                    )
+
+                    if midi_result.get("success"):
+                        session.final_midi_path = midi_result["midi_file"]
+
+                        yield f"data: {json.dumps({'type': 'midi_created', 'note_count': len(all_notes), 'midi_file': midi_result['midi_file']})}\n\n"
+
+                        # Try full Suno pipeline
+                        deps = midi_service.check_dependencies()
+                        if deps["ready"]:
+                            audio_result = await midi_service.midi_to_audio(midi_result["midi_file"])
+                            if audio_result.get("success"):
+                                upload_result = await midi_service.upload_to_suno(audio_result["audio_path"])
+                                if upload_result.get("success"):
+                                    style = session.style or "collaborative jam"
+                                    cover_result = await midi_service.call_upload_cover(
+                                        upload_url=upload_result["upload_url"],
+                                        style=style,
+                                        title=session.title,
+                                        audio_weight=session.audio_influence,
+                                        instrumental=True,
+                                    )
+                                    if cover_result.get("success"):
+                                        from app.models.music import MusicTask
+                                        music_task = MusicTask(
+                                            id=uuid4(),
+                                            user_id=user.id,
+                                            prompt=f"[VILLAGE BAND] {session.title}",
+                                            style=style,
+                                            title=session.title,
+                                            model="V5",
+                                            instrumental=True,
+                                            status="generating",
+                                            progress="Village Band masterpiece generating...",
+                                            suno_task_id=cover_result["suno_task_id"],
+                                            agent_id="VILLAGE_BAND",
+                                        )
+                                        db.add(music_task)
+                                        session.final_music_task_id = music_task.id
+
+                                        yield f"data: {json.dumps({'type': 'suno_started', 'music_task_id': str(music_task.id)})}\n\n"
+
+            except Exception as e:
+                logger.warning(f"Auto-finalize error (non-fatal): {e}")
+                yield f"data: {json.dumps({'type': 'finalize_error', 'error': str(e)[:200]})}\n\n"
+
+        # Complete session
+        session.state = JamState.COMPLETE.value
+        session.completed_at = datetime.utcnow()
+        await db.commit()
+
+        # Inject Village memory
+        await inject_jam_village_memory(db, session, user.id)
+
+        # End event
+        total_notes = sum(len(t.notes or []) for t in session.tracks)
+        yield f"data: {json.dumps({'type': 'end', 'state': session.state, 'total_rounds': session.current_round - 1, 'total_notes': total_notes, 'total_tracks': len(session.tracks), 'music_task_id': str(session.final_music_task_id) if session.final_music_task_id else None})}\n\n"
+
+    return StreamingResponse(
+        stream_jam(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        }
+    )
 
 
 @router.delete("/sessions/{session_id}")
