@@ -271,7 +271,8 @@ class Coupon(Base):
         """Check if coupon is currently valid."""
         if not self.is_active:
             return False
-        now = datetime.utcnow()
+        from datetime import timezone
+        now = datetime.now(timezone.utc)
         if self.valid_from and now < self.valid_from:
             return False
         if self.valid_until and now > self.valid_until:

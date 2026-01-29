@@ -506,10 +506,10 @@ async def redeem_coupon(
 
     elif coupon.coupon_type == "tier_upgrade":
         # Grant temporary tier access
-        from datetime import datetime, timedelta
+        from datetime import datetime, timedelta, timezone
 
         # Calculate expiry date
-        expiry_date = datetime.utcnow() + timedelta(days=coupon.value)
+        expiry_date = datetime.now(timezone.utc) + timedelta(days=coupon.value)
         target_tier = coupon.tier or "opus"
 
         # Update user's subscription tier (or create temporary override)
