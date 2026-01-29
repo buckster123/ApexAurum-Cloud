@@ -36,11 +36,11 @@ function closeMobileMenu() {
           Chat
         </router-link>
         <router-link
-          to="/agents"
+          to="/council"
           class="text-gray-400 hover:text-white transition-colors"
           active-class="text-gold"
         >
-          Agents
+          Council
         </router-link>
         <router-link
           to="/village"
@@ -50,25 +50,11 @@ function closeMobileMenu() {
           Village
         </router-link>
         <router-link
-          to="/music"
+          to="/village-gui"
           class="text-gray-400 hover:text-white transition-colors"
           active-class="text-gold"
         >
-          Music
-        </router-link>
-        <router-link
-          to="/jam"
-          class="text-gray-400 hover:text-white transition-colors"
-          active-class="text-gold"
-        >
-          Jam
-        </router-link>
-        <router-link
-          to="/files"
-          class="text-gray-400 hover:text-white transition-colors"
-          active-class="text-gold"
-        >
-          Files
+          GUI
         </router-link>
         <router-link
           to="/neural"
@@ -78,18 +64,32 @@ function closeMobileMenu() {
           Neural
         </router-link>
         <router-link
-          to="/village-gui"
+          to="/jam"
           class="text-gray-400 hover:text-white transition-colors"
           active-class="text-gold"
         >
-          GUI
+          Jam
         </router-link>
         <router-link
-          to="/council"
+          to="/music"
           class="text-gray-400 hover:text-white transition-colors"
           active-class="text-gold"
         >
-          Council
+          Music
+        </router-link>
+        <router-link
+          to="/agents"
+          class="text-gray-400 hover:text-white transition-colors"
+          active-class="text-gold"
+        >
+          Agents
+        </router-link>
+        <router-link
+          to="/files"
+          class="text-gray-400 hover:text-white transition-colors"
+          active-class="text-gold"
+        >
+          Files
         </router-link>
         <router-link
           to="/billing"
@@ -163,11 +163,11 @@ function closeMobileMenu() {
           💬 Chat
         </router-link>
         <router-link
-          to="/agents"
+          to="/council"
           @click="closeMobileMenu"
           class="px-4 py-3 rounded-lg text-gray-300 hover:bg-white/5 hover:text-gold transition-colors"
         >
-          🤖 Agents
+          🏛️ Council
         </router-link>
         <router-link
           to="/village"
@@ -177,25 +177,11 @@ function closeMobileMenu() {
           🏘️ Village
         </router-link>
         <router-link
-          to="/music"
+          to="/village-gui"
           @click="closeMobileMenu"
           class="px-4 py-3 rounded-lg text-gray-300 hover:bg-white/5 hover:text-gold transition-colors"
         >
-          🎵 Music
-        </router-link>
-        <router-link
-          to="/jam"
-          @click="closeMobileMenu"
-          class="px-4 py-3 rounded-lg text-gray-300 hover:bg-white/5 hover:text-gold transition-colors"
-        >
-          🎸 Jam
-        </router-link>
-        <router-link
-          to="/files"
-          @click="closeMobileMenu"
-          class="px-4 py-3 rounded-lg text-gray-300 hover:bg-white/5 hover:text-gold transition-colors"
-        >
-          📁 Files
+          👁️ GUI
         </router-link>
         <router-link
           to="/neural"
@@ -205,18 +191,32 @@ function closeMobileMenu() {
           🧠 Neural
         </router-link>
         <router-link
-          to="/village-gui"
+          to="/jam"
           @click="closeMobileMenu"
           class="px-4 py-3 rounded-lg text-gray-300 hover:bg-white/5 hover:text-gold transition-colors"
         >
-          👁️ GUI
+          🎸 Jam
         </router-link>
         <router-link
-          to="/council"
+          to="/music"
           @click="closeMobileMenu"
           class="px-4 py-3 rounded-lg text-gray-300 hover:bg-white/5 hover:text-gold transition-colors"
         >
-          🏛️ Council
+          🎵 Music
+        </router-link>
+        <router-link
+          to="/agents"
+          @click="closeMobileMenu"
+          class="px-4 py-3 rounded-lg text-gray-300 hover:bg-white/5 hover:text-gold transition-colors"
+        >
+          🤖 Agents
+        </router-link>
+        <router-link
+          to="/files"
+          @click="closeMobileMenu"
+          class="px-4 py-3 rounded-lg text-gray-300 hover:bg-white/5 hover:text-gold transition-colors"
+        >
+          📁 Files
         </router-link>
         <router-link
           to="/billing"
