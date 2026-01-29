@@ -742,6 +742,7 @@ async def send_message(
             content=request.message,
         )
         db.add(user_msg)
+        await db.commit()  # Commit early so conversation is visible to other endpoints
 
     # Build messages for Claude
     messages = [{"role": "user", "content": request.message}]
