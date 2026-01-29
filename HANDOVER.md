@@ -1,8 +1,8 @@
 # ApexAurum-Cloud Handover Document
 
 **Date:** 2026-01-29
-**Build:** v87-auto-jam
-**Status:** PRODUCTION READY - Auto-Jam SSE + Village Memory!
+**Build:** v89-suno-auto-complete
+**Status:** PRODUCTION READY - Suno Auto-Completion Engine!
 
 ---
 
@@ -830,33 +830,61 @@ uploadUrl + style → upload-cover API → AI-transformed track
 
 ---
 
+## Session 14 Accomplishments
+
+### Music Player Fixes (v88) - COMPLETE
+- **Player replay fix** - Same-track replay via nextTick toggle, ended state reset, playNext resets state
+- **Both Suno tracks captured** - Alt tracks saved as separate MusicTask entries with "(Alt)" suffix
+- **Player disappearing fix** - CDN URL file_paths now redirect instead of 404, onError pauses instead of hiding
+- **User gesture chain preserved** - Play count API call moved to fire-and-forget
+
+### Suno Auto-Completion Engine (v89) - COMPLETE
+- **`auto_complete_music_task()`** in suno.py - Fire-and-forget background worker
+  - Phase 1: Poll every 15s until Suno SUCCESS
+  - Phase 2: Wait 60s for audio URLs to stabilize
+  - Phase 3: Download both tracks with retry (3 attempts, CDN fallback)
+  - Village memory injection + WebSocket broadcast on completion
+- **MusicGenerateTool** now fires asyncio.create_task() after submission
+  - No more manual `music_status` polling needed
+  - Agent message: "Your song will appear in the library when ready"
+- **Agent notification** - Chat system prompt includes recently completed songs (10-min window)
+- **Frontend notification** - Gold "Song ready!" banner via Village WebSocket event
+- **MusicView polling leak fixed** - Proper clearInterval on unmount
+- **MUSIC_COMPLETE** event type added to Village WebSocket broadcaster
+
+### Deployment Workflow Updated
+- **Railway auto-deploys on push to main** - Confirmed and documented in CLAUDE.md
+- Manual GraphQL deploy kept as fallback only
+
+### Key Files Modified (Session 14)
+
+| File | Changes |
+|------|---------|
+| `backend/app/services/suno.py` | Both-tracks download, `auto_complete_music_task()` background worker |
+| `backend/app/services/village_events.py` | Added `MUSIC_COMPLETE` event type |
+| `backend/app/tools/music.py` | Fire background task, add model/instrumental fields, both-tracks in status tool |
+| `backend/app/api/v1/music.py` | `/file` endpoint redirects for CDN URLs, audio_url fallback |
+| `backend/app/api/v1/chat.py` | Music completion notification in agent system prompt |
+| `backend/app/main.py` | v89-suno-auto-complete |
+| `frontend/src/stores/music.js` | nextTick replay, playNext reset, fire-and-forget play count |
+| `frontend/src/components/music/MusicPlayer.vue` | Ended state handling, onError pauses, song-ready banner |
+| `frontend/src/views/MusicView.vue` | Fixed polling interval leak |
+| `frontend/src/composables/useVillage.js` | music_complete DOM event dispatch |
+| `CLAUDE.md` | Updated workflow: commit+push auto-deploys |
+
+---
+
 ## Known Issues & Next Session Priorities
-
-### Bug: Music Player Won't Replay
-- Clicking play again after a track finishes (or stopping/restarting) fails
-- Likely HTML audio element needs `load()` called before `play()` on re-trigger
-- Check `frontend/src/components/music/MusicPlayer.vue` watch logic
-
-### Bug: Suno Returns 2 Songs, Only 1 Captured
-- Suno API generates 2 clips per request (standard behavior)
-- Current logic in `backend/app/services/suno.py:_poll_completion()` only takes `tracks[0]`
-- **Fix:** Save BOTH tracks as separate MusicTask entries (or add a secondary file)
-- Same issue in `backend/app/tools/music.py` MusicStatusTool
-
-### Enhancement: Auto-Fetch / Callback for Suno Completion
-- Currently requires manual polling via `music_status` tool
-- **Preferred: Callback URL** - Suno pushes completion to our server
-  - Need a webhook endpoint: `POST /api/v1/music/suno-callback`
-  - Register real callback URL instead of `https://localhost/callback`
-  - On callback: download audio, update MusicTask, inject Village memory
-- **Alternative: Auto-polling** - Background task polls after generation starts
-  - Less ideal but simpler if callback URL doesn't work with Suno's API
-- Apply to BOTH songs per generation
 
 ### Polish: Jam Session Edge Cases
 - Some quirks in agent collaboration (first session testing)
 - Tune agent role prompts for more musical output
 - Ensure `jam_contribute` tool calls are properly parsed and tracked
+
+### Nice-to-have: Suno Callback URL
+- Current auto-polling works well but callback would eliminate polling entirely
+- Would need a public webhook endpoint and Suno API verification
+- Low priority since auto-complete engine handles it
 
 ---
 
