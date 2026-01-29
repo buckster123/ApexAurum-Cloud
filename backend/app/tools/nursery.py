@@ -875,6 +875,462 @@ Use to:
             return ToolResult(success=False, error=f"Failed to discover models: {str(e)}")
 
 
+class NurseryCreateApprenticeTool(BaseTool):
+    """Create an apprentice under a master agent."""
+
+    @property
+    def schema(self) -> ToolSchema:
+        return ToolSchema(
+            name="nursery_create_apprentice",
+            description="""Create an apprentice model under a master agent.
+
+An apprentice is a trainable model raised by one of the four alchemists
+(AZOTH, ELYSIAN, VAJRA, KETHER). Optionally auto-generates a training
+dataset from the specialization tools.
+
+Use to:
+- Create a new apprentice for an agent
+- Optionally auto-generate training data
+- Begin the apprentice training pipeline""",
+            category=ToolCategory.NURSERY,
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "master_agent": {
+                        "type": "string",
+                        "enum": ["AZOTH", "ELYSIAN", "VAJRA", "KETHER"],
+                        "description": "Master agent raising this apprentice",
+                    },
+                    "apprentice_name": {
+                        "type": "string",
+                        "description": "Name for the apprentice",
+                    },
+                    "specialization": {
+                        "type": "string",
+                        "description": "Comma-separated tool names for specialization (e.g., 'calculate,web_search')",
+                    },
+                    "auto_generate": {
+                        "type": "boolean",
+                        "description": "Auto-generate a training dataset from specialization tools (default: false)",
+                        "default": False,
+                    },
+                    "num_examples": {
+                        "type": "integer",
+                        "description": "Number of training examples to generate (default: 50)",
+                        "default": 50,
+                    },
+                },
+                "required": ["master_agent", "apprentice_name"],
+            },
+            requires_auth=True,
+        )
+
+    async def execute(self, params: dict, context: ToolContext) -> ToolResult:
+        if not context.user_id:
+            return ToolResult(success=False, error="Authentication required")
+
+        master_agent = params.get("master_agent", "")
+        apprentice_name = params.get("apprentice_name", "")
+        specialization = params.get("specialization")
+        auto_generate = params.get("auto_generate", False)
+        num_examples = min(params.get("num_examples", 50), 500)
+
+        valid_masters = {"AZOTH", "ELYSIAN", "VAJRA", "KETHER"}
+        if master_agent not in valid_masters:
+            return ToolResult(success=False, error=f"Invalid master_agent. Must be one of: {', '.join(sorted(valid_masters))}")
+
+        if not apprentice_name or len(apprentice_name.strip()) < 2:
+            return ToolResult(success=False, error="Apprentice name must be at least 2 characters")
+
+        try:
+            from app.database import get_db_context
+            from app.models.nursery import NurseryApprentice
+            from uuid import uuid4
+
+            apprentice_id = uuid4()
+            dataset_id = None
+            final_num_examples = 0
+
+            # Optional: auto-generate training dataset
+            if auto_generate and specialization:
+                from app.services.nursery import NurseryService
+                from app.tools import registry as tool_registry
+
+                tool_names = [t.strip() for t in specialization.split(",") if t.strip()]
+
+                # Validate tool names
+                all_tools = tool_registry.get_all_tools()
+                valid_tool_names = {t.schema.name for t in all_tools}
+                tool_names = [t for t in tool_names if t in valid_tool_names]
+
+                if not tool_names:
+                    fallback = ["calculate", "web_search", "vault_list", "cortex_recall"]
+                    tool_names = [t for t in fallback if t in valid_tool_names]
+
+                if tool_names:
+                    ds_name = f"apprentice_{apprentice_name.strip().lower().replace(' ', '_')}_{master_agent.lower()}"
+                    result = await NurseryService.generate_synthetic_data(
+                        tool_names=tool_names,
+                        num_examples=num_examples,
+                        variation_level="medium",
+                        user_id=str(context.user_id),
+                        agent_id=master_agent,
+                        dataset_name=ds_name,
+                    )
+                    if result.get("success"):
+                        dataset_id = UUID(result["dataset_id"])
+                        final_num_examples = result["num_examples"]
+
+            async with get_db_context() as db:
+                apprentice = NurseryApprentice(
+                    id=apprentice_id,
+                    user_id=UUID(str(context.user_id)),
+                    master_agent=master_agent,
+                    apprentice_name=apprentice_name.strip(),
+                    specialization=specialization.strip() if specialization else None,
+                    dataset_id=dataset_id,
+                    num_examples=final_num_examples,
+                    status="dataset_ready",
+                )
+                db.add(apprentice)
+                await db.commit()
+
+            message = f"Apprentice '{apprentice_name.strip()}' created under {master_agent}."
+            if dataset_id:
+                message += f" Dataset generated with {final_num_examples} examples."
+
+            return ToolResult(
+                success=True,
+                result={
+                    "apprentice_id": str(apprentice_id),
+                    "master_agent": master_agent,
+                    "apprentice_name": apprentice_name.strip(),
+                    "specialization": specialization,
+                    "dataset_id": str(dataset_id) if dataset_id else None,
+                    "num_examples": final_num_examples,
+                    "message": message,
+                },
+            )
+
+        except Exception as e:
+            logger.exception("Nursery create apprentice error")
+            return ToolResult(success=False, error=f"Failed to create apprentice: {str(e)}")
+
+
+class NurseryListApprenticesTool(BaseTool):
+    """List apprentices in the Nursery."""
+
+    @property
+    def schema(self) -> ToolSchema:
+        return ToolSchema(
+            name="nursery_list_apprentices",
+            description="""List your apprentices in the Nursery.
+
+Shows apprentice name, master agent, specialization, status,
+linked dataset and model info.
+
+Use to:
+- See all apprentices and their training status
+- Find apprentice IDs for training or deletion
+- Check which agents have apprentices""",
+            category=ToolCategory.NURSERY,
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "status_filter": {
+                        "type": "string",
+                        "enum": ["dataset_ready", "training", "trained", "failed"],
+                        "description": "Filter by status (optional)",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Max results (default: 20)",
+                        "default": 20,
+                    },
+                },
+                "required": [],
+            },
+            requires_auth=True,
+        )
+
+    async def execute(self, params: dict, context: ToolContext) -> ToolResult:
+        if not context.user_id:
+            return ToolResult(success=False, error="Authentication required")
+
+        status_filter = params.get("status_filter")
+        limit = min(params.get("limit", 20), 50)
+
+        try:
+            from app.database import get_db_context
+            from app.models.nursery import NurseryApprentice
+            from sqlalchemy import select
+            from sqlalchemy.orm import selectinload
+
+            async with get_db_context() as db:
+                query = (
+                    select(NurseryApprentice)
+                    .options(
+                        selectinload(NurseryApprentice.dataset),
+                        selectinload(NurseryApprentice.model),
+                    )
+                    .where(NurseryApprentice.user_id == UUID(str(context.user_id)))
+                )
+
+                if status_filter:
+                    query = query.where(NurseryApprentice.status == status_filter)
+
+                query = query.order_by(NurseryApprentice.created_at.desc()).limit(limit)
+
+                result = await db.execute(query)
+                apprentices = result.scalars().all()
+
+            return ToolResult(
+                success=True,
+                result={
+                    "count": len(apprentices),
+                    "apprentices": [
+                        {
+                            "id": str(a.id),
+                            "apprentice_name": a.apprentice_name,
+                            "master_agent": a.master_agent,
+                            "specialization": a.specialization,
+                            "status": a.status,
+                            "num_examples": a.num_examples,
+                            "dataset_name": a.dataset.name if a.dataset else None,
+                            "model_name": a.model.name if a.model else None,
+                        }
+                        for a in apprentices
+                    ],
+                },
+            )
+
+        except Exception as e:
+            logger.exception("Nursery list apprentices error")
+            return ToolResult(success=False, error=f"Failed to list apprentices: {str(e)}")
+
+
+class NurseryAutoTrainTool(BaseTool):
+    """Auto-train an apprentice with cost guard."""
+
+    @property
+    def schema(self) -> ToolSchema:
+        return ToolSchema(
+            name="nursery_auto_train",
+            description="""Auto-train an apprentice model end-to-end with a cost guard.
+
+Resolves the dataset (from the apprentice record or a direct dataset_id),
+validates it, estimates cost, checks against max_cost budget, uploads to
+Together.ai, starts the training job, links the apprentice, and fires
+background polling.
+
+Use to:
+- Train an apprentice in one step
+- Safely train with a cost budget
+- Automate the full training pipeline""",
+            category=ToolCategory.NURSERY,
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "apprentice_id": {
+                        "type": "string",
+                        "description": "Apprentice ID to train",
+                    },
+                    "dataset_id": {
+                        "type": "string",
+                        "description": "Dataset ID (optional -- uses apprentice's dataset if omitted)",
+                    },
+                    "base_model": {
+                        "type": "string",
+                        "description": "Base model for fine-tuning (default: meta-llama/Llama-3.2-3B-Instruct)",
+                        "default": "meta-llama/Llama-3.2-3B-Instruct",
+                    },
+                    "n_epochs": {
+                        "type": "integer",
+                        "description": "Number of training epochs (default: 3)",
+                        "default": 3,
+                    },
+                    "learning_rate": {
+                        "type": "number",
+                        "description": "Learning rate (default: 0.00001)",
+                        "default": 0.00001,
+                    },
+                    "lora": {
+                        "type": "boolean",
+                        "description": "Use LoRA training (default: true)",
+                        "default": True,
+                    },
+                    "max_cost": {
+                        "type": "number",
+                        "description": "Maximum allowed cost in USD (default: 5.0). Aborts if estimate exceeds this.",
+                        "default": 5.0,
+                    },
+                },
+                "required": ["apprentice_id"],
+            },
+            requires_auth=True,
+        )
+
+    async def execute(self, params: dict, context: ToolContext) -> ToolResult:
+        if not context.user_id:
+            return ToolResult(success=False, error="Authentication required")
+
+        apprentice_id = params.get("apprentice_id")
+        dataset_id = params.get("dataset_id")
+        base_model = params.get("base_model", "meta-llama/Llama-3.2-3B-Instruct")
+        n_epochs = params.get("n_epochs", 3)
+        learning_rate = params.get("learning_rate", 1e-5)
+        lora = params.get("lora", True)
+        max_cost = params.get("max_cost", 5.0)
+
+        if not apprentice_id:
+            return ToolResult(success=False, error="apprentice_id is required")
+
+        try:
+            from app.database import get_db_context
+            from app.models.nursery import NurseryApprentice, NurseryTrainingJob
+            from app.models.user import User
+            from app.services.nursery import NurseryService
+            from app.services.cloud_trainer import CloudTrainerService, auto_complete_training_job
+            from app.api.v1.user import get_user_api_key
+            from sqlalchemy import select
+            from uuid import uuid4
+
+            # 1. Resolve apprentice and dataset
+            async with get_db_context() as db:
+                ap_result = await db.execute(
+                    select(NurseryApprentice).where(
+                        NurseryApprentice.id == UUID(apprentice_id),
+                        NurseryApprentice.user_id == UUID(str(context.user_id)),
+                    )
+                )
+                apprentice = ap_result.scalar_one_or_none()
+
+            if not apprentice:
+                return ToolResult(success=False, error="Apprentice not found")
+
+            # Resolve dataset: prefer explicit param, fall back to apprentice's dataset
+            resolved_dataset_id = dataset_id or (str(apprentice.dataset_id) if apprentice.dataset_id else None)
+            if not resolved_dataset_id:
+                return ToolResult(success=False, error="No dataset available. Provide dataset_id or create an apprentice with auto_generate.")
+
+            # 2. Validate dataset
+            dataset = await NurseryService.get_dataset(resolved_dataset_id, str(context.user_id))
+            if not dataset:
+                return ToolResult(success=False, error="Dataset not found")
+
+            num_examples = dataset.get("num_examples", 0)
+
+            # 3. Get Together API key
+            async with get_db_context() as db:
+                user_result = await db.execute(
+                    select(User).where(User.id == UUID(str(context.user_id)))
+                )
+                user = user_result.scalar_one_or_none()
+
+            if not user:
+                return ToolResult(success=False, error="User not found")
+
+            api_key = get_user_api_key(user, "together")
+            if not api_key:
+                return ToolResult(
+                    success=False,
+                    error="Together.ai API key required. Configure in Settings > API Keys.",
+                )
+
+            # 4. Estimate cost
+            estimate = CloudTrainerService.estimate_cost(
+                num_examples=num_examples,
+                base_model=base_model,
+                n_epochs=n_epochs,
+                lora=lora,
+            )
+
+            # 5. COST GUARD
+            estimated_cost = estimate.get("estimated_cost_usd", 0)
+            if estimated_cost > max_cost:
+                return ToolResult(
+                    success=False,
+                    error=f"Estimated cost ${estimated_cost:.2f} exceeds max_cost ${max_cost:.2f}. Increase max_cost or reduce dataset/epochs.",
+                )
+
+            # 6. Upload dataset to Together
+            storage_path = dataset.get("storage_path", "")
+            file_id = await CloudTrainerService.upload_dataset(storage_path, api_key)
+
+            # 7. Create training job on Together
+            job_info = await CloudTrainerService.create_training_job(
+                file_id=file_id,
+                base_model=base_model,
+                api_key=api_key,
+                n_epochs=n_epochs,
+                learning_rate=learning_rate,
+                lora=lora,
+                suffix=f"apprentice-{apprentice.apprentice_name.lower().replace(' ', '-')}",
+            )
+
+            # 8. Save job to DB and update apprentice status
+            job_id = uuid4()
+            async with get_db_context() as db:
+                job = NurseryTrainingJob(
+                    id=job_id,
+                    user_id=UUID(str(context.user_id)),
+                    dataset_id=UUID(resolved_dataset_id),
+                    provider="together",
+                    provider_job_id=job_info.get("job_id"),
+                    base_model=base_model,
+                    output_name=job_info.get("output_name"),
+                    status="running",
+                    progress=0.0,
+                    config={
+                        "n_epochs": n_epochs,
+                        "learning_rate": learning_rate,
+                        "lora": lora,
+                        "file_id": file_id,
+                        "apprentice_id": apprentice_id,
+                    },
+                    cost_estimate=estimated_cost,
+                    agent_id=context.agent_id,
+                    started_at=datetime.utcnow(),
+                )
+                db.add(job)
+
+                # Update apprentice status to training
+                ap_result = await db.execute(
+                    select(NurseryApprentice).where(
+                        NurseryApprentice.id == UUID(apprentice_id),
+                    )
+                )
+                ap = ap_result.scalar_one_or_none()
+                if ap:
+                    ap.status = "training"
+
+                await db.commit()
+
+            # 9. Fire background polling task
+            asyncio.create_task(
+                auto_complete_training_job(str(job_id), str(context.user_id))
+            )
+
+            return ToolResult(
+                success=True,
+                result={
+                    "job_id": str(job_id),
+                    "apprentice_id": apprentice_id,
+                    "apprentice_name": apprentice.apprentice_name,
+                    "status": "running",
+                    "estimated_cost": estimated_cost,
+                    "max_cost": max_cost,
+                    "base_model": base_model,
+                    "num_examples": num_examples,
+                    "message": f"Auto-training apprentice '{apprentice.apprentice_name}' on {base_model} with {num_examples} examples. Estimated cost: ${estimated_cost:.2f}.",
+                },
+            )
+
+        except Exception as e:
+            logger.exception("Nursery auto-train error")
+            return ToolResult(success=False, error=f"Failed to auto-train: {str(e)}")
+
+
 # Register tools
 registry.register(NurseryGenerateDataTool())
 registry.register(NurseryExtractDataTool())
@@ -886,3 +1342,6 @@ registry.register(NurseryListJobsTool())
 registry.register(NurseryListModelsTool())
 registry.register(NurseryRegisterModelTool())
 registry.register(NurseryDiscoverModelsTool())
+registry.register(NurseryCreateApprenticeTool())
+registry.register(NurseryListApprenticesTool())
+registry.register(NurseryAutoTrainTool())

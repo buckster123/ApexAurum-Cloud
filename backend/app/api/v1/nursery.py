@@ -21,7 +21,7 @@ from app.database import get_db
 from app.api.v1.auth import get_current_user
 from app.models.user import User
 from app.models.billing import Subscription
-from app.models.nursery import NurseryModelRecord, NurseryTrainingJob
+from app.models.nursery import NurseryModelRecord, NurseryTrainingJob, NurseryApprentice
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +57,16 @@ class StartTrainingRequest(BaseModel):
     lora: bool = True
     batch_size: Optional[int] = None
     suffix: Optional[str] = None
+    apprentice_id: Optional[str] = None
+
+
+class CreateApprenticeRequest(BaseModel):
+    master_agent: str
+    apprentice_name: str
+    specialization: Optional[str] = None
+    auto_generate: bool = False
+    num_examples: int = 50
+    variation_level: str = "medium"
 
 
 async def _check_adept_tier(user: User, db: AsyncSession):
@@ -275,6 +285,17 @@ async def start_training(
     )
 
     # Save job to DB
+    config = {
+        "n_epochs": request.n_epochs,
+        "learning_rate": request.learning_rate,
+        "lora": request.lora,
+        "batch_size": request.batch_size,
+        "suffix": request.suffix,
+        "file_id": file_id,
+    }
+    if request.apprentice_id:
+        config["apprentice_id"] = request.apprentice_id
+
     job = NurseryTrainingJob(
         id=uuid4(),
         user_id=user.id,
@@ -285,19 +306,25 @@ async def start_training(
         output_name=job_info.get("output_name"),
         status="running",
         progress=0.0,
-        config={
-            "n_epochs": request.n_epochs,
-            "learning_rate": request.learning_rate,
-            "lora": request.lora,
-            "batch_size": request.batch_size,
-            "suffix": request.suffix,
-            "file_id": file_id,
-        },
+        config=config,
         cost_estimate=estimate.get("estimated_cost_usd"),
         started_at=datetime.utcnow(),
     )
     db.add(job)
     await db.flush()
+
+    # Update apprentice status if linked
+    if request.apprentice_id:
+        ap_result = await db.execute(
+            select(NurseryApprentice).where(
+                NurseryApprentice.id == UUID(request.apprentice_id),
+                NurseryApprentice.user_id == user.id,
+            )
+        )
+        ap = ap_result.scalar_one_or_none()
+        if ap:
+            ap.status = "training"
+            await db.commit()
 
     # Fire background polling task
     asyncio.create_task(
@@ -695,3 +722,151 @@ async def delete_model(
     await db.delete(model)
     await db.commit()
     return {"success": True, "message": f"Model '{model_name}' deleted."}
+
+
+# ===============================================================================
+# APPRENTICE PROTOCOL
+# ===============================================================================
+
+@router.get("/apprentices")
+async def list_apprentices(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """List user's apprentices."""
+    await _check_adept_tier(user, db)
+
+    result = await db.execute(
+        select(NurseryApprentice)
+        .options(
+            selectinload(NurseryApprentice.dataset),
+            selectinload(NurseryApprentice.model),
+        )
+        .where(NurseryApprentice.user_id == user.id)
+        .order_by(NurseryApprentice.created_at.desc())
+        .limit(50)
+    )
+    apprentices = result.scalars().all()
+
+    return {
+        "count": len(apprentices),
+        "apprentices": [
+            {
+                "id": str(a.id),
+                "master_agent": a.master_agent,
+                "apprentice_name": a.apprentice_name,
+                "specialization": a.specialization,
+                "status": a.status,
+                "num_examples": a.num_examples,
+                "dataset_id": str(a.dataset_id) if a.dataset_id else None,
+                "dataset_name": a.dataset.name if a.dataset else None,
+                "model_id": str(a.model_id) if a.model_id else None,
+                "model_name": a.model.name if a.model else None,
+                "created_at": a.created_at.isoformat() if a.created_at else None,
+            }
+            for a in apprentices
+        ],
+    }
+
+
+@router.post("/apprentices")
+async def create_apprentice(
+    request: CreateApprenticeRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Create an apprentice, optionally auto-generating a dataset."""
+    await _check_adept_tier(user, db)
+
+    valid_masters = {"AZOTH", "ELYSIAN", "VAJRA", "KETHER"}
+    if request.master_agent not in valid_masters:
+        raise HTTPException(status_code=400, detail=f"Invalid master_agent. Must be one of: {', '.join(sorted(valid_masters))}")
+
+    if not request.apprentice_name or len(request.apprentice_name.strip()) < 2:
+        raise HTTPException(status_code=400, detail="Apprentice name must be at least 2 characters")
+
+    apprentice = NurseryApprentice(
+        id=uuid4(),
+        user_id=user.id,
+        master_agent=request.master_agent,
+        apprentice_name=request.apprentice_name.strip(),
+        specialization=request.specialization.strip() if request.specialization else None,
+        status="dataset_ready",
+    )
+
+    # Optional: auto-generate training dataset
+    if request.auto_generate:
+        from app.services.nursery import NurseryService
+        from app.tools import registry
+
+        # Parse specialization as comma-separated tool names
+        tool_names = []
+        if request.specialization:
+            tool_names = [t.strip() for t in request.specialization.split(",") if t.strip()]
+
+        # Validate tool names
+        all_tools = registry.get_all_tools()
+        valid_tool_names = {t.schema.name for t in all_tools}
+        tool_names = [t for t in tool_names if t in valid_tool_names]
+
+        if not tool_names:
+            # Fallback to common tools
+            fallback = ["calculate", "web_search", "vault_list", "cortex_recall"]
+            tool_names = [t for t in fallback if t in valid_tool_names]
+
+        if tool_names:
+            ds_name = f"apprentice_{request.apprentice_name.strip().lower().replace(' ', '_')}_{request.master_agent.lower()}"
+            result = await NurseryService.generate_synthetic_data(
+                tool_names=tool_names,
+                num_examples=min(request.num_examples, 500),
+                variation_level=request.variation_level,
+                user_id=str(user.id),
+                agent_id=request.master_agent,
+                dataset_name=ds_name,
+            )
+            if result.get("success"):
+                apprentice.dataset_id = UUID(result["dataset_id"])
+                apprentice.num_examples = result["num_examples"]
+
+    db.add(apprentice)
+    await db.commit()
+
+    response = {
+        "id": str(apprentice.id),
+        "master_agent": apprentice.master_agent,
+        "apprentice_name": apprentice.apprentice_name,
+        "specialization": apprentice.specialization,
+        "status": apprentice.status,
+        "num_examples": apprentice.num_examples,
+        "dataset_id": str(apprentice.dataset_id) if apprentice.dataset_id else None,
+        "message": f"Apprentice '{apprentice.apprentice_name}' created under {apprentice.master_agent}.",
+    }
+    if request.auto_generate and apprentice.dataset_id:
+        response["message"] += f" Dataset generated with {apprentice.num_examples} examples."
+
+    return response
+
+
+@router.delete("/apprentices/{apprentice_id}")
+async def delete_apprentice(
+    apprentice_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete an apprentice record."""
+    await _check_adept_tier(user, db)
+
+    result = await db.execute(
+        select(NurseryApprentice).where(
+            NurseryApprentice.id == UUID(apprentice_id),
+            NurseryApprentice.user_id == user.id,
+        )
+    )
+    apprentice = result.scalar_one_or_none()
+    if not apprentice:
+        raise HTTPException(status_code=404, detail="Apprentice not found")
+
+    name = apprentice.apprentice_name
+    await db.delete(apprentice)
+    await db.commit()
+    return {"success": True, "message": f"Apprentice '{name}' deleted."}

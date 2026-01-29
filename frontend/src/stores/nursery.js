@@ -38,6 +38,11 @@ export const useNurseryStore = defineStore('nursery', () => {
   const loadingDiscovery = ref(false)
   const discoveryQuery = ref('')
 
+  // Apprentice Protocol state
+  const apprentices = ref([])
+  const loadingApprentices = ref(false)
+  const creatingApprentice = ref(false)
+
   // Actions
   async function fetchDatasets() {
     loading.value = true
@@ -300,6 +305,58 @@ export const useNurseryStore = defineStore('nursery', () => {
     }
   }
 
+  // ── Apprentice Protocol ───────────────────────────────────────
+
+  async function fetchApprentices() {
+    loadingApprentices.value = true
+    try {
+      const response = await api.get('/api/v1/nursery/apprentices')
+      apprentices.value = response.data.apprentices || []
+      tierRequired.value = false
+    } catch (error) {
+      if (error.response?.status === 403) tierRequired.value = true
+      console.error('Failed to fetch apprentices:', error)
+    } finally {
+      loadingApprentices.value = false
+    }
+  }
+
+  async function createApprentice(masterAgent, apprenticeName, specialization, autoGenerate, numExamples) {
+    creatingApprentice.value = true
+    try {
+      const payload = {
+        master_agent: masterAgent,
+        apprentice_name: apprenticeName,
+        auto_generate: autoGenerate || false,
+        num_examples: numExamples || 50,
+      }
+      if (specialization) payload.specialization = specialization
+      if (autoGenerate) payload.variation_level = 'medium'
+
+      const response = await api.post('/api/v1/nursery/apprentices', payload)
+      await fetchApprentices()
+      await fetchStats()
+      return response.data
+    } catch (error) {
+      console.error('Create apprentice failed:', error)
+      throw error
+    } finally {
+      creatingApprentice.value = false
+    }
+  }
+
+  async function deleteApprentice(apprenticeId) {
+    try {
+      await api.delete(`/api/v1/nursery/apprentices/${apprenticeId}`)
+      apprentices.value = apprentices.value.filter(a => a.id !== apprenticeId)
+      await fetchStats()
+      return true
+    } catch (error) {
+      console.error('Delete apprentice failed:', error)
+      return false
+    }
+  }
+
   return {
     // Data Garden
     datasets, stats, loading, generating, extracting, tierRequired,
@@ -314,5 +371,8 @@ export const useNurseryStore = defineStore('nursery', () => {
     // Village Feed
     villageActivity, loadingActivity, discoveredModels, loadingDiscovery, discoveryQuery,
     discoverModels, fetchVillageActivity,
+    // Apprentice Protocol
+    apprentices, loadingApprentices, creatingApprentice,
+    fetchApprentices, createApprentice, deleteApprentice,
   }
 })

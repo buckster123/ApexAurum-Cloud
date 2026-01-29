@@ -346,7 +346,7 @@ async def get_pricing():
             features=[
                 "1,000 messages per month",
                 "Sonnet + Haiku models",
-                "All 65 tools (The Athanor's Hands)",
+                "All 68 tools (The Athanor's Hands)",
                 "Bring Your Own Key (BYOK)",
                 "Village Protocol GUI",
                 "Neo-Cortex memory",

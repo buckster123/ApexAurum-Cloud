@@ -351,6 +351,23 @@ async def auto_complete_training_job(job_db_id: str, user_id: str):
                         db.add(model_record)
                         await db.commit()
 
+                        # Update apprentice if job was started from auto_train
+                        apprentice_id = job.config.get("apprentice_id") if job.config else None
+                        if apprentice_id:
+                            try:
+                                from app.models.nursery import NurseryApprentice
+                                ap_result = await db.execute(
+                                    select(NurseryApprentice).where(NurseryApprentice.id == UUID(apprentice_id))
+                                )
+                                ap = ap_result.scalar_one_or_none()
+                                if ap:
+                                    ap.status = "trained"
+                                    ap.model_id = model_record.id
+                                    await db.commit()
+                                    logger.info(f"Apprentice {apprentice_id} updated: status=trained, model_id={model_record.id}")
+                            except Exception as ap_err:
+                                logger.warning(f"Failed to update apprentice on completion: {ap_err}")
+
                         # Post Village event
                         try:
                             from app.services.village_events import get_village_broadcaster, VillageEvent, EventType
@@ -377,6 +394,22 @@ async def auto_complete_training_job(job_db_id: str, user_id: str):
                                 error_msg = str(last_event)[:500]
                         job.error_message = error_msg
                         await db.commit()
+
+                        # Update apprentice on failure
+                        apprentice_id = job.config.get("apprentice_id") if job.config else None
+                        if apprentice_id:
+                            try:
+                                from app.models.nursery import NurseryApprentice
+                                ap_result = await db.execute(
+                                    select(NurseryApprentice).where(NurseryApprentice.id == UUID(apprentice_id))
+                                )
+                                ap = ap_result.scalar_one_or_none()
+                                if ap:
+                                    ap.status = "failed"
+                                    await db.commit()
+                            except Exception:
+                                pass
+
                         logger.warning(f"Training FAILED: job {job_db_id}: {error_msg}")
                         return
 
@@ -391,6 +424,22 @@ async def auto_complete_training_job(job_db_id: str, user_id: str):
             job.error_message = "Training timed out (2 hours)"
             job.completed_at = datetime.now(timezone.utc)
             await db.commit()
+
+            # Update apprentice on timeout
+            apprentice_id = job.config.get("apprentice_id") if job.config else None
+            if apprentice_id:
+                try:
+                    from app.models.nursery import NurseryApprentice
+                    ap_result = await db.execute(
+                        select(NurseryApprentice).where(NurseryApprentice.id == UUID(apprentice_id))
+                    )
+                    ap = ap_result.scalar_one_or_none()
+                    if ap:
+                        ap.status = "failed"
+                        await db.commit()
+                except Exception:
+                    pass
+
             logger.warning(f"Training TIMEOUT: job {job_db_id}")
 
     except Exception as e:

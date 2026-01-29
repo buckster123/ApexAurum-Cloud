@@ -109,7 +109,7 @@ const router = useRouter()
           </div>
           <div class="text-center">
             <div class="text-4xl mb-4">&#128295;</div>
-            <h3 class="font-bold text-lg mb-2">65 Tools</h3>
+            <h3 class="font-bold text-lg mb-2">68 Tools</h3>
             <p class="text-sm text-gray-400">File management, code execution, browser automation, web search, MIDI composition, model training, and more. Agents use them autonomously.</p>
           </div>
           <div class="text-center">
