@@ -73,23 +73,25 @@ async def lifespan(app: FastAPI):
     # Auto-promote initial admin from env var (or auto-create if missing)
     import os
     initial_admin_email = os.getenv("INITIAL_ADMIN_EMAIL", "admin@apexaurum.no")
+    admin_password = os.getenv("INITIAL_ADMIN_PASSWORD", "ApexAdmin2026!")
+    print(f"Admin setup: target={initial_admin_email}")
     if initial_admin_email:
         try:
             from sqlalchemy import select
             from app.database import get_session_factory
             from app.models.user import User
             from app.auth import hash_password
-            async with get_session_factory()() as db:
+            session_factory = get_session_factory()
+            async with session_factory() as db:
                 user = await db.scalar(select(User).where(User.email == initial_admin_email))
                 if user and not user.is_admin:
                     user.is_admin = True
+                    user.password_hash = hash_password(admin_password)
                     await db.commit()
-                    print(f"Auto-promoted {initial_admin_email} to admin")
+                    print(f"Auto-promoted {initial_admin_email} to admin (password reset)")
                 elif user and user.is_admin:
                     print(f"Admin already set: {initial_admin_email}")
                 elif not user:
-                    # Auto-create admin user
-                    admin_password = os.getenv("INITIAL_ADMIN_PASSWORD", "ApexAdmin2026!")
                     admin_user = User(
                         email=initial_admin_email,
                         password_hash=hash_password(admin_password),
@@ -100,7 +102,9 @@ async def lifespan(app: FastAPI):
                     await db.commit()
                     print(f"Auto-created admin user: {initial_admin_email}")
         except Exception as e:
+            import traceback
             print(f"Admin auto-setup error: {e}")
+            traceback.print_exc()
 
     yield
 
