@@ -8,19 +8,19 @@ ApexAurum Cloud is a production AI chat interface deployed on Railway. FastAPI b
 
 **Always read `HANDOVER.md` first for current deployment state and known issues.**
 
-## Quick Commands
+## Workflow
+
+**Commit, push, done.** Railway auto-deploys both backend and frontend on push to `main`.
 
 ```bash
-# Health check
-curl https://backend-production-507c.up.railway.app/health
+# Standard workflow
+git add <files> && git commit -m "message" && git push origin main
+# Then verify:
+curl -s https://backend-production-507c.up.railway.app/health | python3 -m json.tool
+```
 
-# Test chat API (requires auth token)
-curl -X POST "https://backend-production-507c.up.railway.app/api/v1/chat/message" \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <token>" \
-  -d '{"message": "hello", "stream": false}'
-
-# Deploy both services at once
+```bash
+# Manual deploy (only if auto-deploy fails or for special ops)
 COMMIT=$(git log --oneline -1 | cut -d' ' -f1)
 curl -s -X POST "https://backboard.railway.app/graphql/v2" \
   -H "Authorization: Bearer 90fb849e-af7b-4ea5-8474-d57d8802a368" \
@@ -30,7 +30,7 @@ curl -s -X POST "https://backboard.railway.app/graphql/v2" \
 
 ## Railway Deployment
 
-**Railway does NOT auto-deploy from GitHub.** Always trigger manually after pushing.
+**Railway auto-deploys from GitHub on push to main.** Manual GraphQL deploy only needed for special operations.
 
 **Railway IDs:**
 - Token: `90fb849e-af7b-4ea5-8474-d57d8802a368`
