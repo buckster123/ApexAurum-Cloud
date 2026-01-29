@@ -1,8 +1,8 @@
 # ApexAurum-Cloud Handover Document
 
 **Date:** 2026-01-29
-**Build:** v93-moonshot-kimi
-**Status:** PRE-LAUNCH - Multi-provider + admin panel ready!
+**Build:** v94-beta-hardening
+**Status:** BETA - Security hardened, streaming persistence fixed!
 
 ---
 
@@ -977,16 +977,85 @@ uploadUrl + style → upload-cover API → AI-transformed track
 
 ---
 
-## Pre-Launch Status
+## Session 18 Accomplishments
 
-All feature development and bug sweep complete. Next steps:
+### Beta Hardening + Bug Fixes (v94) - COMPLETE
+**Build:** v94-beta-hardening
+**Commits:** 1d84cf9 - a64bcce (7 commits)
+
+### Admin Panel Login Fix - COMPLETE
+- Added missing `GET /auth/me` endpoint that admin panel's checkAuth() depended on
+- Fixed admin auto-setup: user wasn't being created in DB (silent failure). Registered via API, then fixed startup hook to reset password on promote and print traceback on errors
+- Admin credentials: `admin@apexaurum.no` / set via `INITIAL_ADMIN_PASSWORD` env var
+
+### Coupon DateTime Fix - COMPLETE
+- Fixed "can't compare offset-naive and offset-aware datetimes" in coupon validation
+- `Coupon.is_valid()` and tier_upgrade redemption used `datetime.utcnow()` (naive) against `DateTime(timezone=True)` columns
+- Fixed to `datetime.now(timezone.utc)` in both billing model and API
+
+### PAC Mode Text Contrast - COMPLETE
+- Headers, bold text, list markers were invisible against purple chat bubble background
+- Replaced `prose-purple` with `prose-invert pac-prose`
+- Custom CSS: gold headers, white bold, gold code/markers, ethereal purple links
+
+### Streaming Message Persistence (critical fix) - COMPLETE
+- Assistant messages were NEVER saved to DB in the streaming path
+- Only user messages were persisted; neural memory stored the content but messages table didn't
+- Old conversations showed only user's side when reloaded
+- Added Message save after streaming completes using final_response
+
+### Navbar Reorder - COMPLETE
+- Reordered by expected usage: Chat - Council - Village - GUI - Neural - Jam - Music - Agents - Files - Billing
+
+### Beta Hardening (7 Tier 1 security fixes) - COMPLETE
+1. Rate limiting: slowapi middleware, 100/min default, chat 20/min
+2. Billing bypass guard: restrict to Haiku when Stripe unconfigured
+3. Village WebSocket auth: JWT token via query param, reject unauthorized
+4. Password minimum length: 8 chars on registration
+5. Exception handler: hide internals in production
+6. Admin password: generate random via secrets.token_urlsafe if env var not set
+7. BillingView: show checkout/credits/portal errors to users
+
+### Known Issues / Next Session
+- Set INITIAL_ADMIN_PASSWORD env var in Railway (hardcoded default removed)
+- Tier 2 audit items remaining: tool execution timeout, coupon unique constraint, credit balance DB CHECK constraint, search param length limits
+- Old conversations from before streaming fix still missing assistant messages (data exists in neural memory)
+- Landing page still needed for beta launch
+
+### Environment
+- Build: v94-beta-hardening
+- Frontend CACHE_BUST: 15
+- New dependency: slowapi (rate limiting)
+- Admin URL: https://backend-production-507c.up.railway.app/admin
+
+### Key Files Modified (Session 18)
+
+| File | Changes |
+|------|---------|
+| `backend/app/main.py` | v94-beta-hardening, rate limiter, exception handler hide internals, admin password generation |
+| `backend/app/api/v1/auth.py` | GET /auth/me endpoint, password min length 8 |
+| `backend/app/api/v1/chat.py` | Rate limit 20/min, assistant message persistence after streaming |
+| `backend/app/api/v1/billing.py` | Billing bypass guard (Haiku only when no Stripe), coupon datetime fix |
+| `backend/app/models/billing.py` | Coupon.is_valid() datetime.now(timezone.utc) fix |
+| `backend/app/api/v1/village_ws.py` | JWT auth on WebSocket connect |
+| `frontend/src/views/ChatView.vue` | PAC mode prose-invert pac-prose, gold/white contrast CSS |
+| `frontend/src/views/BillingView.vue` | Show checkout/credits/portal errors to users |
+| `frontend/src/components/Navbar.vue` | Reordered nav items by usage frequency |
+
+---
+
+## Beta Launch Status
+
+Beta hardening complete. Security audit Tier 1 items all addressed. Next steps:
+- Set `INITIAL_ADMIN_PASSWORD` env var in Railway
+- Tier 2 security audit (timeouts, constraints, limits)
 - Community beta testing with access coupons
+- Backfill assistant messages from neural memory (pre-streaming-fix conversations)
+- Landing page for beta launch
 - Compute/scaling review (current dev instance over-provisioned)
-- Edge case refinement based on real user traffic
-- Final review pass before official launch
 
 ### Future Ideas (Not Blocking Launch)
-- Additional LLM providers (Kimi K2.5, open-source models)
+- Additional LLM providers (expand OSS model coverage)
 - 3D Neural view enhancements (trinkets, interactive elements)
 - Village GUI visual polish
 
