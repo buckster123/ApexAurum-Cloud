@@ -14,11 +14,14 @@ from pydantic import BaseModel
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from sqlalchemy import text
+
 from app.database import get_db
 from app.models.user import User
 from app.models.billing import Subscription, CreditBalance, Coupon
-from app.models.conversation import Message
+from app.models.conversation import Conversation, Message
 from app.auth.deps import get_current_user
+from app.services.llm_provider import get_available_providers, PROVIDER_MODELS
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/admin", tags=["Admin"])
@@ -53,11 +56,32 @@ class UpdateTierRequest(BaseModel):
     tier: str  # free, pro, opus
 
 
+class ProviderStatus(BaseModel):
+    id: str
+    name: str
+    available: bool
+    model_count: int
+
+
 class StatsResponse(BaseModel):
+    # Core
     total_users: int
     total_messages: int
+    total_conversations: int
     active_coupons: int
     users_by_tier: dict
+    # Features
+    total_music_tasks: int
+    music_by_status: dict
+    total_council_sessions: int
+    council_by_state: dict
+    total_jam_sessions: int
+    # Storage
+    total_vault_files: int
+    total_vault_storage_mb: float
+    total_neural_vectors: int
+    # Providers
+    providers: list[ProviderStatus]
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -217,25 +241,29 @@ async def get_stats(
     admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """Get system-wide statistics."""
-    # Total users
+    """Get system-wide statistics including all platform features."""
+    # --- Core counts ---
     user_count = await db.execute(select(func.count(User.id)))
-    total_users = user_count.scalar()
+    total_users = user_count.scalar() or 0
 
-    # Total messages
     try:
         msg_count = await db.execute(select(func.count(Message.id)))
-        total_messages = msg_count.scalar()
+        total_messages = msg_count.scalar() or 0
     except Exception:
         total_messages = 0
 
-    # Active coupons
+    try:
+        conv_count = await db.execute(select(func.count(Conversation.id)))
+        total_conversations = conv_count.scalar() or 0
+    except Exception:
+        total_conversations = 0
+
     coupon_count = await db.execute(
         select(func.count(Coupon.id)).where(Coupon.is_active == True)
     )
-    active_coupons = coupon_count.scalar()
+    active_coupons = coupon_count.scalar() or 0
 
-    # Users by tier
+    # --- Users by tier ---
     tier_query = await db.execute(
         select(Subscription.tier, func.count(Subscription.id))
         .group_by(Subscription.tier)
@@ -249,13 +277,97 @@ async def get_stats(
         name = tier_names.get(tier, tier)
         users_by_tier[name] = count
 
-    # Add users without subscriptions as Seeker
     users_with_sub = sum(users_by_tier.values())
     users_by_tier["Seeker"] += total_users - users_with_sub
+
+    # --- Music tasks ---
+    total_music_tasks = 0
+    music_by_status = {}
+    try:
+        from app.models.music import MusicTask
+        music_count = await db.execute(select(func.count(MusicTask.id)))
+        total_music_tasks = music_count.scalar() or 0
+
+        music_status_query = await db.execute(
+            select(MusicTask.status, func.count(MusicTask.id))
+            .group_by(MusicTask.status)
+        )
+        music_by_status = {s: c for s, c in music_status_query.fetchall()}
+    except Exception as e:
+        logger.debug(f"Music stats unavailable: {e}")
+
+    # --- Council sessions ---
+    total_council_sessions = 0
+    council_by_state = {}
+    try:
+        from app.models.council import DeliberationSession
+        council_count = await db.execute(select(func.count(DeliberationSession.id)))
+        total_council_sessions = council_count.scalar() or 0
+
+        council_state_query = await db.execute(
+            select(DeliberationSession.state, func.count(DeliberationSession.id))
+            .group_by(DeliberationSession.state)
+        )
+        council_by_state = {s: c for s, c in council_state_query.fetchall()}
+    except Exception as e:
+        logger.debug(f"Council stats unavailable: {e}")
+
+    # --- Jam sessions ---
+    total_jam_sessions = 0
+    try:
+        from app.models.jam import JamSession
+        jam_count = await db.execute(select(func.count(JamSession.id)))
+        total_jam_sessions = jam_count.scalar() or 0
+    except Exception as e:
+        logger.debug(f"Jam stats unavailable: {e}")
+
+    # --- Vault (files) ---
+    total_vault_files = 0
+    total_vault_storage_mb = 0.0
+    try:
+        from app.models.file import File
+        file_count = await db.execute(select(func.count(File.id)))
+        total_vault_files = file_count.scalar() or 0
+
+        storage_result = await db.execute(select(func.coalesce(func.sum(File.size_bytes), 0)))
+        total_bytes = storage_result.scalar() or 0
+        total_vault_storage_mb = round(total_bytes / (1024 * 1024), 1)
+    except Exception as e:
+        logger.debug(f"Vault stats unavailable: {e}")
+
+    # --- Neural vectors (raw SQL - pgvector table) ---
+    total_neural_vectors = 0
+    try:
+        vector_result = await db.execute(text("SELECT COUNT(*) FROM user_vectors"))
+        total_neural_vectors = vector_result.scalar() or 0
+    except Exception as e:
+        logger.debug(f"Neural vector stats unavailable: {e}")
+
+    # --- Provider status ---
+    providers_raw = get_available_providers()
+    providers = [
+        ProviderStatus(
+            id=p["id"],
+            name=p["name"],
+            available=p["available"],
+            model_count=len(PROVIDER_MODELS.get(p["id"], {})),
+        )
+        for p in providers_raw
+    ]
 
     return StatsResponse(
         total_users=total_users,
         total_messages=total_messages,
+        total_conversations=total_conversations,
         active_coupons=active_coupons,
         users_by_tier=users_by_tier,
+        total_music_tasks=total_music_tasks,
+        music_by_status=music_by_status,
+        total_council_sessions=total_council_sessions,
+        council_by_state=council_by_state,
+        total_jam_sessions=total_jam_sessions,
+        total_vault_files=total_vault_files,
+        total_vault_storage_mb=total_vault_storage_mb,
+        total_neural_vectors=total_neural_vectors,
+        providers=providers,
     )

@@ -194,23 +194,88 @@
         <!-- Stats Tab -->
         <div id="tab-stats" class="tab-content hidden">
           <h2 class="text-xl font-bold mb-6">System Stats</h2>
-          <div class="grid md:grid-cols-3 gap-6">
-            <div class="card">
-              <div class="text-3xl font-bold text-gold" id="stat-users">-</div>
-              <div class="text-sm text-gray-400 mt-1">Total Users</div>
+
+          <!-- Overview Row -->
+          <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+            <div class="card text-center">
+              <div class="text-2xl font-bold text-gold" id="stat-users">-</div>
+              <div class="text-xs text-gray-400 mt-1">Users</div>
             </div>
-            <div class="card">
-              <div class="text-3xl font-bold text-green-400" id="stat-messages">-</div>
-              <div class="text-sm text-gray-400 mt-1">Total Messages</div>
+            <div class="card text-center">
+              <div class="text-2xl font-bold text-green-400" id="stat-messages">-</div>
+              <div class="text-xs text-gray-400 mt-1">Messages</div>
             </div>
-            <div class="card">
-              <div class="text-3xl font-bold text-purple-400" id="stat-coupons">-</div>
-              <div class="text-sm text-gray-400 mt-1">Active Coupons</div>
+            <div class="card text-center">
+              <div class="text-2xl font-bold text-blue-400" id="stat-conversations">-</div>
+              <div class="text-xs text-gray-400 mt-1">Conversations</div>
+            </div>
+            <div class="card text-center">
+              <div class="text-2xl font-bold text-purple-400" id="stat-coupons">-</div>
+              <div class="text-xs text-gray-400 mt-1">Active Coupons</div>
+            </div>
+            <div class="card text-center">
+              <div class="text-2xl font-bold text-cyan-400" id="stat-files">-</div>
+              <div class="text-xs text-gray-400 mt-1">Vault Files</div>
             </div>
           </div>
-          <div class="card mt-6">
-            <h3 class="text-lg font-semibold mb-4">Users by Tier</h3>
+
+          <!-- Features Row -->
+          <h3 class="text-sm font-semibold text-gray-400 mb-3 uppercase tracking-wider">Features</h3>
+          <div class="grid md:grid-cols-3 gap-4 mb-6">
+            <!-- Music -->
+            <div class="card">
+              <div class="flex items-center justify-between mb-3">
+                <span class="text-sm font-semibold">Music Tasks</span>
+                <span class="text-xl font-bold text-orange-400" id="stat-music-total">-</span>
+              </div>
+              <div id="stat-music-breakdown" class="text-xs text-gray-400 space-y-1"></div>
+            </div>
+            <!-- Council -->
+            <div class="card">
+              <div class="flex items-center justify-between mb-3">
+                <span class="text-sm font-semibold">Council Sessions</span>
+                <span class="text-xl font-bold text-yellow-400" id="stat-council-total">-</span>
+              </div>
+              <div id="stat-council-breakdown" class="text-xs text-gray-400 space-y-1"></div>
+            </div>
+            <!-- Jam -->
+            <div class="card">
+              <div class="flex items-center justify-between mb-3">
+                <span class="text-sm font-semibold">Jam Sessions</span>
+                <span class="text-xl font-bold text-pink-400" id="stat-jam-total">-</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Storage & Memory Row -->
+          <h3 class="text-sm font-semibold text-gray-400 mb-3 uppercase tracking-wider">Storage & Memory</h3>
+          <div class="grid md:grid-cols-2 gap-4 mb-6">
+            <div class="card flex items-center justify-between">
+              <div>
+                <div class="text-sm font-semibold">Neural Vectors</div>
+                <div class="text-xs text-gray-400">Cortex memory embeddings</div>
+              </div>
+              <div class="text-2xl font-bold text-emerald-400" id="stat-vectors">-</div>
+            </div>
+            <div class="card flex items-center justify-between">
+              <div>
+                <div class="text-sm font-semibold">Vault Storage</div>
+                <div class="text-xs text-gray-400" id="stat-vault-files-label">-</div>
+              </div>
+              <div class="text-2xl font-bold text-cyan-400" id="stat-vault-storage">-</div>
+            </div>
+          </div>
+
+          <!-- Users by Tier -->
+          <h3 class="text-sm font-semibold text-gray-400 mb-3 uppercase tracking-wider">Users by Tier</h3>
+          <div class="card mb-6">
             <div id="tier-breakdown" class="space-y-2"></div>
+          </div>
+
+          <!-- LLM Providers -->
+          <h3 class="text-sm font-semibold text-gray-400 mb-3 uppercase tracking-wider">LLM Providers</h3>
+          <div class="card">
+            <div id="provider-grid" class="grid grid-cols-2 md:grid-cols-3 gap-3"></div>
           </div>
         </div>
       </main>
@@ -597,23 +662,80 @@
 
         const stats = await res.json();
 
-        document.getElementById('stat-users').textContent = stats.total_users || 0;
+        // Overview
+        document.getElementById('stat-users').textContent = (stats.total_users || 0).toLocaleString();
         document.getElementById('stat-messages').textContent = (stats.total_messages || 0).toLocaleString();
+        document.getElementById('stat-conversations').textContent = (stats.total_conversations || 0).toLocaleString();
         document.getElementById('stat-coupons').textContent = stats.active_coupons || 0;
+        document.getElementById('stat-files').textContent = (stats.total_vault_files || 0).toLocaleString();
 
+        // Music
+        document.getElementById('stat-music-total').textContent = (stats.total_music_tasks || 0).toLocaleString();
+        const musicEl = document.getElementById('stat-music-breakdown');
+        if (stats.music_by_status && Object.keys(stats.music_by_status).length > 0) {
+          const statusColors = { completed: 'text-green-400', processing: 'text-yellow-400', pending: 'text-gray-400', failed: 'text-red-400' };
+          musicEl.innerHTML = Object.entries(stats.music_by_status).map(([s, c]) =>
+            `<div class="flex justify-between"><span>${s}</span><span class="${statusColors[s] || 'text-gray-400'} font-mono">${c}</span></div>`
+          ).join('');
+        } else {
+          musicEl.innerHTML = '<div class="text-gray-500">No music tasks yet</div>';
+        }
+
+        // Council
+        document.getElementById('stat-council-total').textContent = (stats.total_council_sessions || 0).toLocaleString();
+        const councilEl = document.getElementById('stat-council-breakdown');
+        if (stats.council_by_state && Object.keys(stats.council_by_state).length > 0) {
+          const stateColors = { complete: 'text-green-400', running: 'text-yellow-400', paused: 'text-orange-400', pending: 'text-gray-400' };
+          councilEl.innerHTML = Object.entries(stats.council_by_state).map(([s, c]) =>
+            `<div class="flex justify-between"><span>${s}</span><span class="${stateColors[s] || 'text-gray-400'} font-mono">${c}</span></div>`
+          ).join('');
+        } else {
+          councilEl.innerHTML = '<div class="text-gray-500">No council sessions yet</div>';
+        }
+
+        // Jam
+        document.getElementById('stat-jam-total').textContent = (stats.total_jam_sessions || 0).toLocaleString();
+
+        // Storage & Memory
+        document.getElementById('stat-vectors').textContent = (stats.total_neural_vectors || 0).toLocaleString();
+        const storageMb = stats.total_vault_storage_mb || 0;
+        document.getElementById('stat-vault-storage').textContent = storageMb >= 1024
+          ? (storageMb / 1024).toFixed(1) + ' GB'
+          : storageMb.toFixed(1) + ' MB';
+        document.getElementById('stat-vault-files-label').textContent =
+          `${(stats.total_vault_files || 0).toLocaleString()} files stored`;
+
+        // Users by tier
         const breakdown = document.getElementById('tier-breakdown');
         if (stats.users_by_tier) {
+          const tierColors = { Seeker: 'text-gray-400', Alchemist: 'text-blue-400', Adept: 'text-gold' };
           breakdown.innerHTML = Object.entries(stats.users_by_tier).map(([tier, count]) => `
             <div class="flex justify-between items-center">
-              <span class="text-gray-400">${tier}</span>
-              <span class="font-mono">${count}</span>
+              <span class="${tierColors[tier] || 'text-gray-400'}">${tier}</span>
+              <span class="font-mono font-bold">${count}</span>
+            </div>
+          `).join('');
+        }
+
+        // LLM Providers
+        const providerGrid = document.getElementById('provider-grid');
+        if (stats.providers && stats.providers.length > 0) {
+          providerGrid.innerHTML = stats.providers.map(p => `
+            <div class="flex items-center gap-2 p-2 rounded-lg ${p.available ? 'bg-green-500/10' : 'bg-gray-500/10'}">
+              <span class="${p.available ? 'text-green-400' : 'text-gray-500'}">${p.available ? '●' : '○'}</span>
+              <div>
+                <div class="text-sm font-medium">${p.name}</div>
+                <div class="text-xs text-gray-500">${p.model_count} model${p.model_count !== 1 ? 's' : ''}${p.available ? '' : ' (no key)'}</div>
+              </div>
             </div>
           `).join('');
         }
       } catch (err) {
         document.getElementById('stat-users').textContent = '-';
         document.getElementById('stat-messages').textContent = '-';
+        document.getElementById('stat-conversations').textContent = '-';
         document.getElementById('stat-coupons').textContent = '-';
+        document.getElementById('stat-files').textContent = '-';
       }
     }
   </script>

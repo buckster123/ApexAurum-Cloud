@@ -70,6 +70,27 @@ async def lifespan(app: FastAPI):
     # Initialize Vault storage
     init_vault()
 
+    # Auto-promote initial admin from env var
+    import os
+    initial_admin_email = os.getenv("INITIAL_ADMIN_EMAIL")
+    if initial_admin_email:
+        try:
+            from sqlalchemy import select
+            from app.database import get_session_factory
+            from app.models.user import User
+            async with get_session_factory()() as db:
+                user = await db.scalar(select(User).where(User.email == initial_admin_email))
+                if user and not user.is_admin:
+                    user.is_admin = True
+                    await db.commit()
+                    print(f"Auto-promoted {initial_admin_email} to admin")
+                elif user and user.is_admin:
+                    print(f"Admin already set: {initial_admin_email}")
+                elif not user:
+                    print(f"INITIAL_ADMIN_EMAIL user not found yet: {initial_admin_email} (register first)")
+        except Exception as e:
+            print(f"Admin auto-setup error: {e}")
+
     yield
 
     # Shutdown
