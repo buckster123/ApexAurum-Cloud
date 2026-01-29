@@ -34,7 +34,8 @@
       @apply w-full px-3 py-2 bg-apex-dark border border-apex-border rounded-lg text-white placeholder-gray-500 focus:border-gold focus:outline-none;
     }
     /* Ensure password dots and all input text are visible on dark bg */
-    input, select, textarea { color: #ffffff !important; }
+    input, select, textarea { color: #ffffff !important; background-color: #0a0a0f !important; }
+    input[type="password"] { -webkit-text-security: disc; color: #ffffff !important; }
     input::placeholder { color: #6b7280 !important; }
     .card {
       @apply bg-apex-card border border-apex-border rounded-xl p-6;

@@ -70,14 +70,15 @@ async def lifespan(app: FastAPI):
     # Initialize Vault storage
     init_vault()
 
-    # Auto-promote initial admin from env var
+    # Auto-promote initial admin from env var (or auto-create if missing)
     import os
-    initial_admin_email = os.getenv("INITIAL_ADMIN_EMAIL")
+    initial_admin_email = os.getenv("INITIAL_ADMIN_EMAIL", "admin@apexaurum.no")
     if initial_admin_email:
         try:
             from sqlalchemy import select
             from app.database import get_session_factory
             from app.models.user import User
+            from app.auth import hash_password
             async with get_session_factory()() as db:
                 user = await db.scalar(select(User).where(User.email == initial_admin_email))
                 if user and not user.is_admin:
@@ -87,7 +88,17 @@ async def lifespan(app: FastAPI):
                 elif user and user.is_admin:
                     print(f"Admin already set: {initial_admin_email}")
                 elif not user:
-                    print(f"INITIAL_ADMIN_EMAIL user not found yet: {initial_admin_email} (register first)")
+                    # Auto-create admin user
+                    admin_password = os.getenv("INITIAL_ADMIN_PASSWORD", "ApexAdmin2026!")
+                    admin_user = User(
+                        email=initial_admin_email,
+                        password_hash=hash_password(admin_password),
+                        display_name="Admin",
+                        is_admin=True,
+                    )
+                    db.add(admin_user)
+                    await db.commit()
+                    print(f"Auto-created admin user: {initial_admin_email}")
         except Exception as e:
             print(f"Admin auto-setup error: {e}")
 

@@ -1,8 +1,8 @@
 # ApexAurum-Cloud Handover Document
 
 **Date:** 2026-01-29
-**Build:** v92-bugfixes
-**Status:** PRE-LAUNCH - Bug sweep complete, ready for community beta!
+**Build:** v93-moonshot-kimi
+**Status:** PRE-LAUNCH - Multi-provider + admin panel ready!
 
 ---
 
@@ -939,6 +939,41 @@ uploadUrl + style → upload-cover API → AI-transformed track
 - `d964559` - Fix branches 404 race condition during chat streaming
 - `ea65b07` - Fix file download/preview: FileResponse name collision
 - `a95db50` - Remove Claude/Anthropic branding from user-facing frontend
+
+---
+
+## Session 17 Accomplishments
+
+### Moonshot/Kimi K2.5 Provider + Model Refresh (v93) - COMPLETE
+- **Moonshot provider** added with Kimi K2.5 model (China's top reasoning model)
+- **api_model_id + extra_body** support for model aliases (Kimi instant mode)
+- **Refreshed all provider model lists** - Groq, Together, Qwen, DeepSeek updated to latest
+- **OSS tier icons** in frontend: reasoning, standard, large, small, fast model categories
+
+### Enhanced Admin Panel (v93) - COMPLETE
+- **Monitoring dashboard** with music/council/jam/vault/vector/provider stats
+- **Admin served from backend** at `/admin` (no separate Railway service needed)
+- **Admin auto-setup** via `INITIAL_ADMIN_EMAIL` env var
+- **Admin user auto-created on startup** - `admin@apexaurum.no` with default password
+- **Password field styling fix** - Explicit dark background for browser compatibility
+
+### Admin User Setup
+- **Email:** `admin@apexaurum.no` (auto-created on startup)
+- **Default password:** Set via `INITIAL_ADMIN_PASSWORD` env var (or `ApexAdmin2026!`)
+- **Change password after first login** (recommended)
+- **Env var override:** Set `INITIAL_ADMIN_EMAIL` to use a different admin email
+
+### Known Issues
+- Admin panel password field styling needs browser testing across platforms
+- Moonshot provider needs `MOONSHOT_API_KEY` env var set in Railway
+
+### Key Files Modified (Session 17)
+
+| File | Changes |
+|------|---------|
+| `backend/app/main.py` | v93, admin auto-create user on startup |
+| `backend/admin_static/index.html` | Password field dark background fix |
+| `admin/index.html` | Synced with admin_static version |
 
 ---
 
