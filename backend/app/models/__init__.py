@@ -19,6 +19,7 @@ from app.models.billing import Subscription, CreditBalance, CreditTransaction, W
 from app.models.council import DeliberationSession, SessionAgent, DeliberationRound, SessionMessage
 from app.models.jam import JamSession, JamParticipant, JamTrack, JamMessage
 from app.models.feedback import BugReport
+from app.models.nursery import NurseryDataset, NurseryTrainingJob, NurseryModelRecord, NurseryApprentice
 
 # User references all of the above, so import LAST
 from app.models.user import User
@@ -49,5 +50,9 @@ __all__ = [
     "JamTrack",
     "JamMessage",
     "BugReport",
+    "NurseryDataset",
+    "NurseryTrainingJob",
+    "NurseryModelRecord",
+    "NurseryApprentice",
     # "UserVector",  # Temp disabled
 ]

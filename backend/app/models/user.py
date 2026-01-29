@@ -61,6 +61,12 @@ class User(Base):
     # The Council - Deliberation Sessions
     deliberation_sessions = relationship("DeliberationSession", back_populates="user", cascade="all, delete-orphan")
 
+    # The Nursery - Model Training Studio
+    nursery_datasets = relationship("NurseryDataset", back_populates="user", cascade="all, delete-orphan")
+    nursery_training_jobs = relationship("NurseryTrainingJob", back_populates="user", cascade="all, delete-orphan")
+    nursery_models = relationship("NurseryModelRecord", back_populates="user", cascade="all, delete-orphan")
+    nursery_apprentices = relationship("NurseryApprentice", back_populates="user", cascade="all, delete-orphan")
+
     # The Remembering Deep - Vector Storage
     # TODO: Re-enable after fixing import order
     # vectors = relationship("UserVector", cascade="all, delete-orphan", passive_deletes=True)

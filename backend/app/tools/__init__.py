@@ -216,8 +216,9 @@ def register_all_tools():
     from . import suno_compiler  # noqa: F401
     from . import midi  # noqa: F401
     from . import jam  # noqa: F401
+    from . import nursery  # noqa: F401
 
-    # All 14 tiers loaded!
+    # All 15 tiers loaded!
 
     logger.info(f"Tool registry initialized with {registry.tool_count} tools")
 

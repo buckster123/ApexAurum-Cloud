@@ -57,7 +57,7 @@ async def lifespan(app: FastAPI):
     """Application lifespan manager."""
     # Startup
     print("=" * 50)
-    print("ApexAurum Cloud v96 - Toast Notifications + Bug Reports")
+    print("ApexAurum Cloud v98 - The Nursery Foundation")
     print("=" * 50)
 
     # Import all models before database init to ensure SQLAlchemy
@@ -196,12 +196,12 @@ async def health_check():
     return {
         "status": "healthy",
         "version": "0.1.0",
-        "build": "v97-byok-attachments",
+        "build": "v98-nursery-foundation",
         "agents": {
             "native": 5,
             "pac": 4,
         },
-        "tools": 55,  # 14 Tiers! Village Band!
+        "tools": 58,  # 15 Tiers! Village Band + Nursery!
         "features": [
             "streaming",
             "pac-mode",
@@ -242,6 +242,7 @@ async def health_check():
             "council-ws-streaming",
             "multi-provider-byok",
             "file-attachments-vision",
+            "nursery-data-garden",
         ],
     }
 

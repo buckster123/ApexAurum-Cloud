@@ -95,6 +95,12 @@ const router = createRouter({
       meta: { requiresAuth: true }
     },
     {
+      path: '/nursery',
+      name: 'nursery',
+      component: () => import('@/views/NurseryView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
       path: '/billing',
       name: 'billing',
       component: () => import('@/views/BillingView.vue'),

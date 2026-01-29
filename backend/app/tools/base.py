@@ -24,6 +24,7 @@ class ToolCategory(str, Enum):
     MUSIC = "music"
     BROWSER = "browser"
     CREATIVE = "creative"  # Suno compiler, prompt engineering
+    NURSERY = "nursery"  # Model training studio
 
 
 class ToolResult(BaseModel):

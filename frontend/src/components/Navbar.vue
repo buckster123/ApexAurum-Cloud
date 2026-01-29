@@ -66,6 +66,13 @@ function closeMobileMenu() {
           Neural
         </router-link>
         <router-link
+          to="/nursery"
+          class="text-gray-400 hover:text-white transition-colors"
+          active-class="text-gold"
+        >
+          Nursery
+        </router-link>
+        <router-link
           to="/jam"
           class="text-gray-400 hover:text-white transition-colors"
           active-class="text-gold"
@@ -201,6 +208,13 @@ function closeMobileMenu() {
           class="px-4 py-3 rounded-lg text-gray-300 hover:bg-white/5 hover:text-gold transition-colors"
         >
           🧠 Neural
+        </router-link>
+        <router-link
+          to="/nursery"
+          @click="closeMobileMenu"
+          class="px-4 py-3 rounded-lg text-gray-300 hover:bg-white/5 hover:text-gold transition-colors"
+        >
+          Nursery
         </router-link>
         <router-link
           to="/jam"

@@ -608,6 +608,96 @@ async def init_db():
         """
         migrations.append(alter_embedding_sql)
 
+        # ═══════════════════════════════════════════════════════════════════════
+        # THE NURSERY - v98: Model training studio
+        # ═══════════════════════════════════════════════════════════════════════
+        migrations.append("""
+            CREATE TABLE IF NOT EXISTS nursery_datasets (
+                id UUID PRIMARY KEY,
+                user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                name VARCHAR(255) NOT NULL,
+                source VARCHAR(50) NOT NULL,
+                tool_names JSONB DEFAULT '[]',
+                num_examples INTEGER DEFAULT 0,
+                size_bytes INTEGER DEFAULT 0,
+                storage_path VARCHAR(500),
+                agent_id VARCHAR(50),
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+            );
+        """)
+        migrations.append("""
+            CREATE INDEX IF NOT EXISTS idx_nursery_datasets_user_id ON nursery_datasets(user_id);
+        """)
+        migrations.append("""
+            CREATE TABLE IF NOT EXISTS nursery_training_jobs (
+                id UUID PRIMARY KEY,
+                user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                dataset_id UUID NOT NULL REFERENCES nursery_datasets(id) ON DELETE CASCADE,
+                provider VARCHAR(50) NOT NULL,
+                provider_job_id VARCHAR(255),
+                base_model VARCHAR(255) NOT NULL,
+                output_name VARCHAR(255),
+                status VARCHAR(20) DEFAULT 'pending',
+                progress FLOAT DEFAULT 0.0,
+                config JSONB,
+                cost_estimate FLOAT,
+                cost_actual FLOAT,
+                error_message TEXT,
+                agent_id VARCHAR(50),
+                started_at TIMESTAMP WITH TIME ZONE,
+                completed_at TIMESTAMP WITH TIME ZONE,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+            );
+        """)
+        migrations.append("""
+            CREATE INDEX IF NOT EXISTS idx_nursery_jobs_user_id ON nursery_training_jobs(user_id);
+        """)
+        migrations.append("""
+            CREATE INDEX IF NOT EXISTS idx_nursery_jobs_dataset_id ON nursery_training_jobs(dataset_id);
+        """)
+        migrations.append("""
+            CREATE INDEX IF NOT EXISTS idx_nursery_jobs_status ON nursery_training_jobs(status);
+        """)
+        migrations.append("""
+            CREATE TABLE IF NOT EXISTS nursery_models (
+                id UUID PRIMARY KEY,
+                user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                job_id UUID REFERENCES nursery_training_jobs(id) ON DELETE SET NULL,
+                name VARCHAR(255) NOT NULL,
+                base_model VARCHAR(255),
+                model_type VARCHAR(50) NOT NULL,
+                storage_path VARCHAR(500),
+                capabilities JSONB DEFAULT '[]',
+                performance JSONB,
+                agent_id VARCHAR(50),
+                village_posted BOOLEAN DEFAULT FALSE,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+            );
+        """)
+        migrations.append("""
+            CREATE INDEX IF NOT EXISTS idx_nursery_models_user_id ON nursery_models(user_id);
+        """)
+        migrations.append("""
+            CREATE TABLE IF NOT EXISTS nursery_apprentices (
+                id UUID PRIMARY KEY,
+                user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                master_agent VARCHAR(50) NOT NULL,
+                apprentice_name VARCHAR(255) NOT NULL,
+                specialization VARCHAR(255),
+                dataset_id UUID REFERENCES nursery_datasets(id) ON DELETE SET NULL,
+                model_id UUID REFERENCES nursery_models(id) ON DELETE SET NULL,
+                num_examples INTEGER DEFAULT 0,
+                status VARCHAR(20) DEFAULT 'dataset_ready',
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+            );
+        """)
+        migrations.append("""
+            CREATE INDEX IF NOT EXISTS idx_nursery_apprentices_user_id ON nursery_apprentices(user_id);
+        """)
+        migrations.append("""
+            CREATE INDEX IF NOT EXISTS idx_nursery_apprentices_master ON nursery_apprentices(master_agent);
+        """)
+
         for migration in migrations:
             await conn.execute(text(migration))
         print(f"Database migrations complete (embedding_dim={embed_dim})")
