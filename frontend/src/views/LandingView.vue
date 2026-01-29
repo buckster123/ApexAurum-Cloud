@@ -109,8 +109,8 @@ const router = useRouter()
           </div>
           <div class="text-center">
             <div class="text-4xl mb-4">&#128295;</div>
-            <h3 class="font-bold text-lg mb-2">55 Tools</h3>
-            <p class="text-sm text-gray-400">File management, code execution, browser automation, web search, MIDI composition, and more. Agents use them autonomously.</p>
+            <h3 class="font-bold text-lg mb-2">58 Tools</h3>
+            <p class="text-sm text-gray-400">File management, code execution, browser automation, web search, MIDI composition, model training, and more. Agents use them autonomously.</p>
           </div>
           <div class="text-center">
             <div class="text-4xl mb-4">&#127928;</div>
@@ -168,9 +168,9 @@ const router = useRouter()
             <ul class="space-y-2 text-sm text-gray-400 mb-6">
               <li>&#10003; Unlimited messages</li>
               <li>&#10003; All models incl. Opus</li>
+              <li>&#10003; The Nursery (model training)</li>
               <li>&#10003; Dev Mode + PAC Mode</li>
               <li>&#10003; Multi-provider LLMs</li>
-              <li>&#10003; Priority everything</li>
             </ul>
             <button @click="router.push('/register')" class="w-full py-2 border border-apex-border rounded-lg text-sm hover:border-gold/50 transition-colors">
               Go Adept

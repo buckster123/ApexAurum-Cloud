@@ -346,7 +346,7 @@ async def get_pricing():
             features=[
                 "1,000 messages per month",
                 "Sonnet + Haiku models",
-                "All 35 tools (The Athanor's Hands)",
+                "All 58 tools (The Athanor's Hands)",
                 "Bring Your Own Key (BYOK)",
                 "Village Protocol GUI",
                 "Neo-Cortex memory",
@@ -363,10 +363,10 @@ async def get_pricing():
             features=[
                 "Unlimited messages",
                 "All models including Opus",
+                "The Nursery (model training studio)",
                 "Multi-provider LLMs (Groq, DeepSeek, etc.)",
-                "API access",
-                "Priority support",
-                "All Pro features",
+                "Dev Mode + PAC Mode",
+                "All Alchemist features",
             ],
             popular=False,
         ),

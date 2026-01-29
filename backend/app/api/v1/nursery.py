@@ -12,9 +12,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from sqlalchemy import select
+
 from app.database import get_db
 from app.api.v1.auth import get_current_user
 from app.models.user import User
+from app.models.billing import Subscription
 
 logger = logging.getLogger(__name__)
 
@@ -35,12 +38,20 @@ class ExtractDataRequest(BaseModel):
     dataset_name: Optional[str] = None
 
 
-def _check_adept_tier(user: User):
-    """Check if user has Adept tier (required for Nursery)."""
+async def _check_adept_tier(user: User, db: AsyncSession):
+    """Check if user has Adept tier (required for Nursery).
+
+    Reads tier from the Subscription model (same as chat.py),
+    not user.settings which is never populated by Stripe/admin flows.
+    """
     tier = "free"
-    if user.settings and isinstance(user.settings, dict):
-        tier = user.settings.get("subscription_tier", "free")
-    if tier not in ("opus", "adept"):
+    result = await db.execute(
+        select(Subscription).where(Subscription.user_id == user.id)
+    )
+    subscription = result.scalar_one_or_none()
+    if subscription:
+        tier = subscription.tier
+    if tier != "opus":
         raise HTTPException(
             status_code=403,
             detail="The Nursery requires Adept tier ($30/mo). Upgrade to access model training."
@@ -53,7 +64,7 @@ async def list_datasets(
     db: AsyncSession = Depends(get_db),
 ):
     """List user's training datasets."""
-    _check_adept_tier(user)
+    await _check_adept_tier(user, db)
 
     from app.services.nursery import NurseryService
     datasets = await NurseryService.list_datasets(str(user.id))
@@ -67,7 +78,7 @@ async def generate_data(
     db: AsyncSession = Depends(get_db),
 ):
     """Generate synthetic training data."""
-    _check_adept_tier(user)
+    await _check_adept_tier(user, db)
 
     if not request.tool_names:
         raise HTTPException(status_code=400, detail="At least one tool name is required")
@@ -100,7 +111,7 @@ async def extract_data(
     db: AsyncSession = Depends(get_db),
 ):
     """Extract training data from conversation history."""
-    _check_adept_tier(user)
+    await _check_adept_tier(user, db)
 
     from app.services.nursery import NurseryService
     result = await NurseryService.extract_conversation_data(
@@ -123,7 +134,7 @@ async def delete_dataset(
     db: AsyncSession = Depends(get_db),
 ):
     """Delete a dataset and its file."""
-    _check_adept_tier(user)
+    await _check_adept_tier(user, db)
 
     from app.services.nursery import NurseryService
     deleted = await NurseryService.delete_dataset(dataset_id, str(user.id))
@@ -140,7 +151,7 @@ async def get_stats(
     db: AsyncSession = Depends(get_db),
 ):
     """Get nursery statistics."""
-    _check_adept_tier(user)
+    await _check_adept_tier(user, db)
 
     from app.services.nursery import NurseryService
     stats = await NurseryService.get_stats(str(user.id))
