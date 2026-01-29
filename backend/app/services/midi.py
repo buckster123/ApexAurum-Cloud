@@ -215,6 +215,122 @@ class MidiService:
             logger.exception("MIDI creation failed")
             return {"success": False, "error": str(e)}
 
+    async def create_layered_midi(
+        self,
+        tracks_by_agent: Dict[str, List[Dict[str, Any]]],
+        tempo: int = 120,
+        title: str = "composition",
+        user_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Create a multi-track MIDI file with layered parts.
+
+        Each agent gets its own MIDI track, so all parts play simultaneously.
+        Used by Village Band jam sessions.
+
+        Args:
+            tracks_by_agent: {agent_id: [list of track objects]}
+                Each track object has a 'notes' list of note dicts:
+                  {"note": "C4", "duration": 0.5, "velocity": 100, "time": 0.0}
+                Tracks from the same agent in the same round play sequentially.
+                Tracks from different rounds are offset by previous round durations.
+            tempo: Beats per minute
+            title: Filename for the MIDI file
+            user_id: Optional user ID for path organization
+
+        Returns:
+            Dict with midi_file path and composition details
+        """
+        try:
+            from midiutil import MIDIFile
+        except ImportError:
+            return {
+                "success": False,
+                "error": "midiutil not installed. Add to requirements.txt."
+            }
+
+        try:
+            agent_ids = list(tracks_by_agent.keys())
+            num_tracks = max(len(agent_ids), 1)
+            midi = MIDIFile(num_tracks)
+            midi.addTempo(0, 0, tempo)
+
+            total_note_count = 0
+
+            for track_idx, agent_id in enumerate(agent_ids):
+                channel = track_idx % 15  # MIDI channels 0-15 (skip 9=drums)
+                if channel >= 9:
+                    channel += 1  # Skip drum channel
+
+                agent_tracks = tracks_by_agent[agent_id]
+
+                # Group this agent's tracks by round for sequential offset
+                rounds = {}
+                for t in agent_tracks:
+                    r = t.get("round_number", 1)
+                    if r not in rounds:
+                        rounds[r] = []
+                    rounds[r].append(t)
+
+                round_offset = 0.0
+                for round_num in sorted(rounds.keys()):
+                    round_max_dur = 0.0
+                    for track in rounds[round_num]:
+                        track_time = 0.0
+                        for note_obj in (track.get("notes") or []):
+                            note_name = str(note_obj.get("note", "C4"))
+                            dur = float(note_obj.get("duration", 0.5))
+                            vel = int(note_obj.get("velocity", 100))
+
+                            if note_name.upper() not in ("R", "0"):
+                                try:
+                                    midi_num = _parse_note(note_name)
+                                    midi.addNote(
+                                        track_idx, channel, midi_num,
+                                        round_offset + track_time, dur, vel
+                                    )
+                                    total_note_count += 1
+                                except (ValueError, IndexError):
+                                    pass  # Skip unparseable notes
+                            track_time += dur
+                        round_max_dur = max(round_max_dur, track_time)
+                    round_offset += round_max_dur
+
+            # Generate filename
+            safe_title = re.sub(r'[^\w\-]', '_', title)
+            timestamp = int(time.time())
+            filename = f"{safe_title}_{timestamp}.mid"
+
+            if user_id:
+                midi_path = MIDI_FOLDER / str(user_id) / filename
+                midi_path.parent.mkdir(parents=True, exist_ok=True)
+            else:
+                midi_path = MIDI_FOLDER / filename
+
+            with open(midi_path, "wb") as f:
+                midi.writeFile(f)
+
+            total_duration = round_offset * (60 / tempo)
+
+            logger.info(
+                f"Created layered MIDI: {midi_path} "
+                f"({num_tracks} tracks, {total_note_count} notes, {total_duration:.1f}s)"
+            )
+
+            return {
+                "success": True,
+                "midi_file": str(midi_path),
+                "title": title,
+                "note_count": total_note_count,
+                "track_count": num_tracks,
+                "tempo": tempo,
+                "duration_seconds": round(total_duration, 2),
+            }
+
+        except Exception as e:
+            logger.exception("Layered MIDI creation failed")
+            return {"success": False, "error": str(e)}
+
     async def midi_to_audio(
         self,
         midi_path: str,

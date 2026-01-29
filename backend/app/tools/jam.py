@@ -565,22 +565,27 @@ The audio_influence parameter controls how much Suno follows the MIDI compositio
                             error="No tracks to finalize. The band needs to contribute first!"
                         )
 
-                    # Merge all notes
-                    all_notes = []
-                    for track in sorted(session.tracks, key=lambda t: t.round_number):
-                        if track.notes:
-                            for note in track.notes:
-                                all_notes.append(note.get("note", "C4"))
+                    # Group tracks by agent for multi-track MIDI layering
+                    tracks_by_agent = {}
+                    for track in sorted(session.tracks, key=lambda t: (t.round_number, t.created_at)):
+                        if not track.notes:
+                            continue
+                        aid = track.agent_id or "UNKNOWN"
+                        if aid not in tracks_by_agent:
+                            tracks_by_agent[aid] = []
+                        tracks_by_agent[aid].append({
+                            "round_number": track.round_number,
+                            "notes": track.notes,
+                        })
 
-                    if not all_notes:
+                    if not tracks_by_agent:
                         return ToolResult(success=False, error="No notes in tracks")
 
-                    # Create MIDI
+                    # Create layered MIDI (each agent on its own track)
                     midi_service = MidiService()
-                    midi_result = await midi_service.create_midi(
-                        notes=all_notes,
+                    midi_result = await midi_service.create_layered_midi(
+                        tracks_by_agent=tracks_by_agent,
                         tempo=session.tempo,
-                        note_duration=0.5,
                         title=title_override or session.title,
                         user_id=str(user_uuid),
                     )
@@ -606,8 +611,9 @@ The audio_influence parameter controls how much Suno follows the MIDI compositio
                             success=True,
                             result={
                                 "midi_file": midi_result["midi_file"],
-                                "note_count": len(all_notes),
-                                "message": f"🎼 MIDI created with {len(all_notes)} notes! (Suno composition skipped - FluidSynth not available)",
+                                "note_count": midi_result.get("note_count", 0),
+                                "track_count": midi_result.get("track_count", 1),
+                                "message": f"🎼 MIDI created with {midi_result.get('note_count', 0)} notes across {midi_result.get('track_count', 1)} tracks! (Suno composition skipped - FluidSynth not available)",
                                 "dependencies_missing": [k for k, v in deps.items() if not v and k != "ready"],
                             },
                         )
@@ -666,17 +672,25 @@ The audio_influence parameter controls how much Suno follows the MIDI compositio
                     session.completed_at = datetime.utcnow()
                     await db.commit()
 
+                    # Fire auto-completion background worker
+                    import asyncio
+                    from app.services.suno import auto_complete_music_task
+                    asyncio.create_task(
+                        auto_complete_music_task(str(music_task.id), str(user_uuid))
+                    )
+
                     return ToolResult(
                         success=True,
                         result={
                             "music_task_id": str(music_task.id),
                             "midi_file": midi_result["midi_file"],
-                            "note_count": len(all_notes),
+                            "note_count": midi_result.get("note_count", 0),
+                            "track_count": midi_result.get("track_count", 1),
                             "audio_influence": audio_influence,
                             "style": style,
                             "title": title,
                             "participants": participant_names,
-                            "message": f"🎸 The Village Band has spoken! '{title}' is being forged. Track with music_status('{music_task.id}')",
+                            "message": f"🎸 The Village Band has spoken! '{title}' is being forged. It will appear in the library when ready.",
                         },
                     )
 

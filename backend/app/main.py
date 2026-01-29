@@ -51,7 +51,7 @@ async def lifespan(app: FastAPI):
     """Application lifespan manager."""
     # Startup
     print("=" * 50)
-    print("ApexAurum Cloud v89 - Suno Auto-Completion")
+    print("ApexAurum Cloud v90 - Village Band Polish")
     print("=" * 50)
 
     # Import all models before database init to ensure SQLAlchemy
@@ -120,7 +120,7 @@ async def health_check():
     return {
         "status": "healthy",
         "version": "0.1.0",
-        "build": "v89-suno-auto-complete",
+        "build": "v90-village-band-polish",
         "agents": {
             "native": 5,
             "pac": 4,

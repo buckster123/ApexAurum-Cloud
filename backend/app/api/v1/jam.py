@@ -746,19 +746,62 @@ def get_claude_service() -> ClaudeService:
 JAM_MODEL = "claude-haiku-4-5-20251001"
 
 ROLE_DESCRIPTIONS = {
-    "producer": "You are the PRODUCER. Oversee the session, guide the creative vision. Decide when the composition feels complete. You may also contribute notes.",
-    "melody": "You are the MELODY player. Create the lead voice - haunting themes, memorable hooks, and expressive phrases. Think vocal line, flute, or lead synth.",
-    "bass": "You are the BASS player. Provide the low-end foundation - deep, grounding notes that anchor the composition. Think bass guitar, sub synth, or cello.",
-    "harmony": "You are the HARMONY player. Add chords, countermelodies, and texture. Fill the space between melody and bass. Think piano chords, pad synth, or strings.",
-    "rhythm": "You are the RHYTHM section. Create percussive patterns and rhythmic drive. Use short, staccato notes and rests to build groove.",
-    "free": "You have no fixed role. Contribute whatever you feel the composition needs.",
+    "producer": """You are the PRODUCER. You oversee the creative vision and glue the composition together.
+
+YOUR RANGE: Full spectrum - use whatever octave serves the piece.
+YOUR JOB: Listen to what everyone has laid down, then fill gaps. If melody is carrying high, drop a mid-range counterpoint. If bass is sparse, reinforce it. If harmony is thick, add a simple rhythmic anchor.
+TYPICAL PATTERNS: Transitional phrases, punctuation notes, call-and-response fills.
+EXAMPLE: ['E3', 'R', 'G4', 'E4', 'R', 'C4'] -- sparse, intentional, connecting the parts.
+
+When the composition feels complete across roles, say so in your response.""",
+
+    "melody": """You are the MELODY player. You create the lead voice -- the part listeners hum after.
+
+YOUR RANGE: Octaves 4-5 (C4 through B5). Stay in the upper register.
+YOUR JOB: Create phrases that breathe. Use stepwise motion with occasional leaps. Leave space -- rests are melody too.
+TYPICAL PATTERNS: 4-8 note phrases with contour (rise, peak, fall). Repeat motifs with variation.
+EXAMPLE in C major: ['E4', 'F4', 'G4', 'A4', 'G4', 'R', 'E4', 'D4'] -- rising phrase that resolves.
+EXAMPLE in A minor: ['A4', 'C5', 'B4', 'A4', 'R', 'E4', 'G4', 'A4'] -- haunting arc.
+
+Listen to the BASS for root movement. Your melody should dance around the harmony, not duplicate it.""",
+
+    "bass": """You are the BASS player. You are the ground everything stands on.
+
+YOUR RANGE: Octaves 1-3 (C1 through B3). Stay LOW. Never go above C4.
+YOUR JOB: Anchor the key. Play root notes, fifths, and octaves. Move slowly -- bass notes ring longer than melody notes. Use duration=1.0 or higher for weight.
+TYPICAL PATTERNS: Root-fifth patterns, walking bass lines, pedal tones (same note repeated).
+EXAMPLE in C major: ['C2', 'C2', 'G2', 'C2'] with duration=1.0 -- solid foundation.
+EXAMPLE in A minor: ['A2', 'E2', 'A2', 'D2', 'E2'] with duration=1.0 -- walking line.
+
+You set the HARMONIC PACE. When you change notes, the whole piece shifts. Move deliberately.""",
+
+    "harmony": """You are the HARMONY player. You fill the space between melody and bass with color.
+
+YOUR RANGE: Octaves 3-4 (C3 through B4). The middle register is yours.
+YOUR JOB: Add chord tones that complement the bass root and support the melody. Play in clusters (multiple notes from the same chord) or arpeggiated patterns.
+TYPICAL PATTERNS: Broken chords, sustained pads (same chord repeated), countermelodies that move against the lead.
+EXAMPLE in C major: ['C3', 'E3', 'G3', 'C3', 'E3', 'G3'] -- arpeggiated triad.
+EXAMPLE in A minor: ['A3', 'C4', 'E4', 'R', 'F3', 'A3', 'C4'] -- two-chord movement.
+
+Listen to the BASS for which chord you're in. Listen to MELODY to avoid doubling their notes exactly.""",
+
+    "rhythm": """You are the RHYTHM section. You drive the groove and create motion.
+
+YOUR RANGE: Any octave, but prefer percussive short notes with duration=0.25 or less.
+YOUR JOB: Create rhythmic patterns using short notes and lots of rests. The pattern matters more than the pitch. Use velocity variation for accents (velocity=110 for strong beats, velocity=70 for ghost notes).
+TYPICAL PATTERNS: Syncopated hits, repeating motifs, call-and-response with rests.
+EXAMPLE: ['C4', 'R', 'C4', 'C4', 'R', 'R', 'C4', 'R'] with duration=0.25 -- syncopated pulse.
+
+Your job is FEEL, not melody. Keep it simple and repetitive. Groove is consistency.""",
+
+    "free": "You have no fixed role. Listen to what's been contributed and add whatever the composition needs most -- a missing melody, harmonic fill, rhythmic drive, or bass anchor.",
 }
 
 
 def build_jam_context(session: JamSession) -> str:
     """Build context from previous tracks for agent prompts."""
     if not session.tracks:
-        return "This is the first round. No tracks have been contributed yet."
+        return "This is the first round. No tracks have been contributed yet. You are laying the foundation."
 
     context_parts = ["Previous contributions:"]
 
@@ -773,10 +816,10 @@ def build_jam_context(session: JamSession) -> str:
     for round_num in sorted(rounds.keys()):
         context_parts.append(f"\n--- Round {round_num} ---")
         for track in rounds[round_num]:
-            note_preview = [n.get("note") for n in (track.notes or [])[:12]]
+            note_preview = [n.get("note") for n in (track.notes or [])[:24]]
             notes_str = ", ".join(str(n) for n in note_preview)
-            if len(track.notes or []) > 12:
-                notes_str += f" (+{len(track.notes) - 12} more)"
+            if len(track.notes or []) > 24:
+                notes_str += f" (+{len(track.notes) - 24} more)"
             desc = f' - "{track.description}"' if track.description else ""
             context_parts.append(f"  {track.agent_id} ({track.role}): [{notes_str}]{desc}")
 
@@ -831,12 +874,14 @@ Key: {session.musical_key}
 Round: {session.current_round} / {session.max_rounds}
 
 === INSTRUCTIONS ===
-1. Review what others have contributed
-2. Use jam_contribute() to add your notes that complement the existing composition
+1. Review what others have contributed so far
+2. Use jam_contribute() to add your notes -- this is REQUIRED, you MUST call the tool
 3. Choose notes that fit the key ({session.musical_key}) and style ({session.style or 'open'})
-4. Describe your musical intention when contributing
+4. Describe your musical intention in the description parameter
 5. Keep contributions focused: 4-12 notes per contribution is ideal
-6. Be concise in your discussion (1-2 short paragraphs)
+6. Be concise in your discussion (1-2 short sentences max)
+
+IMPORTANT: You MUST call jam_contribute() with actual notes. Do not just discuss music -- play it.
 
 === PREVIOUS CONTRIBUTIONS ===
 {context}
@@ -853,7 +898,19 @@ Round: {session.current_round} / {session.max_rounds}
         )
         tools = tool_executor.get_available_tools()
 
-    user_message = f"Round {session.current_round}: Listen to what's been played and add your contribution."
+    # Round-aware user message
+    round_num = session.current_round
+    max_rounds = session.max_rounds
+    if round_num == 1:
+        round_guidance = "This is the OPENING round. Establish the foundation -- lay down something others can build on."
+    elif round_num >= max_rounds:
+        round_guidance = "This is the FINAL round. Add finishing touches. Complement what's already there -- don't introduce new ideas, refine existing ones."
+    elif round_num <= max_rounds // 2:
+        round_guidance = "Build on what's been laid down. Listen to the other parts and add something that complements them."
+    else:
+        round_guidance = "The composition is taking shape. Fill any gaps, add variation to your earlier phrases, or reinforce the strongest ideas."
+
+    user_message = f"Round {round_num}/{max_rounds}: {round_guidance} Use jam_contribute() now."
     messages = [{"role": "user", "content": user_message}]
 
     total_input_tokens = 0
@@ -1114,19 +1171,24 @@ async def auto_jam(
             yield f"data: {json.dumps({'type': 'finalizing', 'total_notes': sum(len(t.notes or []) for t in session.tracks)})}\n\n"
 
             try:
-                # Merge notes
-                all_notes = []
-                for track in sorted(session.tracks, key=lambda t: t.round_number):
-                    if track.notes:
-                        for note in track.notes:
-                            all_notes.append(note.get("note", "C4"))
+                # Group tracks by agent for multi-track MIDI layering
+                tracks_by_agent = {}
+                for track in sorted(session.tracks, key=lambda t: (t.round_number, t.created_at)):
+                    if not track.notes:
+                        continue
+                    aid = track.agent_id or "UNKNOWN"
+                    if aid not in tracks_by_agent:
+                        tracks_by_agent[aid] = []
+                    tracks_by_agent[aid].append({
+                        "round_number": track.round_number,
+                        "notes": track.notes,
+                    })
 
-                if all_notes:
+                if tracks_by_agent:
                     midi_service = MidiService()
-                    midi_result = await midi_service.create_midi(
-                        notes=all_notes,
+                    midi_result = await midi_service.create_layered_midi(
+                        tracks_by_agent=tracks_by_agent,
                         tempo=session.tempo,
-                        note_duration=0.5,
                         title=session.title,
                         user_id=str(user.id),
                     )
@@ -1134,7 +1196,7 @@ async def auto_jam(
                     if midi_result.get("success"):
                         session.final_midi_path = midi_result["midi_file"]
 
-                        yield f"data: {json.dumps({'type': 'midi_created', 'note_count': len(all_notes), 'midi_file': midi_result['midi_file']})}\n\n"
+                        yield f"data: {json.dumps({'type': 'midi_created', 'note_count': midi_result.get('note_count', 0), 'track_count': midi_result.get('track_count', 1), 'midi_file': midi_result['midi_file']})}\n\n"
 
                         # Try full Suno pipeline
                         deps = midi_service.check_dependencies()
@@ -1168,6 +1230,13 @@ async def auto_jam(
                                         )
                                         db.add(music_task)
                                         session.final_music_task_id = music_task.id
+                                        await db.commit()
+
+                                        # Fire auto-completion background worker
+                                        from app.services.suno import auto_complete_music_task
+                                        asyncio.create_task(
+                                            auto_complete_music_task(str(music_task.id), str(user.id))
+                                        )
 
                                         yield f"data: {json.dumps({'type': 'suno_started', 'music_task_id': str(music_task.id)})}\n\n"
 
