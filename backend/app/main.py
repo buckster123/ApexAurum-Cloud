@@ -57,7 +57,7 @@ async def lifespan(app: FastAPI):
     """Application lifespan manager."""
     # Startup
     print("=" * 50)
-    print("ApexAurum Cloud v99 - Tier Alignment")
+    print("ApexAurum Cloud v100 - The Training Forge")
     print("=" * 50)
 
     # Import all models before database init to ensure SQLAlchemy
@@ -196,12 +196,12 @@ async def health_check():
     return {
         "status": "healthy",
         "version": "0.1.0",
-        "build": "v99-tier-alignment",
+        "build": "v100-training-forge",
         "agents": {
             "native": 5,
             "pac": 4,
         },
-        "tools": 58,  # 15 Tiers! Village Band + Nursery!
+        "tools": 62,  # 15 Tiers! Village Band + Nursery Training Forge!
         "features": [
             "streaming",
             "pac-mode",
@@ -243,6 +243,7 @@ async def health_check():
             "multi-provider-byok",
             "file-attachments-vision",
             "nursery-data-garden",
+            "nursery-training-forge",
         ],
     }
 

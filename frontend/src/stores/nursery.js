@@ -18,6 +18,15 @@ export const useNurseryStore = defineStore('nursery', () => {
   const extracting = ref(false)
   const tierRequired = ref(false)
 
+  // Training Forge state
+  const trainingJobs = ref([])
+  const trainableModels = ref([])
+  const costEstimate = ref(null)
+  const estimating = ref(false)
+  const startingTraining = ref(false)
+  const loadingJobs = ref(false)
+  const hasTogetherKey = ref(false)
+
   // Actions
   async function fetchDatasets() {
     loading.value = true
@@ -104,17 +113,110 @@ export const useNurseryStore = defineStore('nursery', () => {
     }
   }
 
+  async function fetchTrainingJobs(statusFilter) {
+    loadingJobs.value = true
+    try {
+      const params = statusFilter ? { status: statusFilter } : {}
+      const response = await api.get('/api/v1/nursery/training/jobs', { params })
+      trainingJobs.value = response.data.jobs || []
+    } catch (error) {
+      if (error.response?.status === 403) {
+        tierRequired.value = true
+      }
+      console.error('Failed to fetch training jobs:', error)
+    } finally {
+      loadingJobs.value = false
+    }
+  }
+
+  async function fetchTrainableModels() {
+    try {
+      const response = await api.get('/api/v1/nursery/training/models')
+      trainableModels.value = response.data.models || []
+    } catch (error) {
+      console.error('Failed to fetch trainable models:', error)
+    }
+  }
+
+  async function estimateCost(datasetId, baseModel, nEpochs, lora) {
+    estimating.value = true
+    costEstimate.value = null
+    try {
+      const response = await api.post('/api/v1/nursery/training/estimate', {
+        dataset_id: datasetId,
+        base_model: baseModel,
+        n_epochs: nEpochs,
+        lora: lora,
+      })
+      costEstimate.value = response.data
+      return response.data
+    } catch (error) {
+      console.error('Estimate failed:', error)
+      throw error
+    } finally {
+      estimating.value = false
+    }
+  }
+
+  async function startTraining(datasetId, baseModel, nEpochs, learningRate, lora, batchSize, suffix) {
+    startingTraining.value = true
+    try {
+      const payload = {
+        dataset_id: datasetId,
+        base_model: baseModel,
+        n_epochs: nEpochs,
+        learning_rate: learningRate,
+        lora: lora,
+      }
+      if (batchSize) payload.batch_size = batchSize
+      if (suffix) payload.suffix = suffix
+
+      const response = await api.post('/api/v1/nursery/training/start', payload)
+
+      // Refresh jobs and stats
+      await fetchTrainingJobs()
+      await fetchStats()
+
+      return response.data
+    } catch (error) {
+      console.error('Start training failed:', error)
+      throw error
+    } finally {
+      startingTraining.value = false
+    }
+  }
+
+  async function cancelJob(jobId) {
+    try {
+      await api.post(`/api/v1/nursery/training/jobs/${jobId}/cancel`)
+      await fetchTrainingJobs()
+      await fetchStats()
+      return true
+    } catch (error) {
+      console.error('Cancel failed:', error)
+      return false
+    }
+  }
+
+  async function checkTogetherKey() {
+    try {
+      const response = await api.get('/api/v1/api-key/status')
+      const providers = response.data.providers || response.data || {}
+      const together = providers.together || providers['together'] || {}
+      hasTogetherKey.value = !!together.configured
+    } catch (error) {
+      console.error('Failed to check API key status:', error)
+      hasTogetherKey.value = false
+    }
+  }
+
   return {
-    datasets,
-    stats,
-    loading,
-    generating,
-    extracting,
-    tierRequired,
-    fetchDatasets,
-    generateData,
-    extractData,
-    deleteDataset,
-    fetchStats,
+    // Data Garden
+    datasets, stats, loading, generating, extracting, tierRequired,
+    fetchDatasets, generateData, extractData, deleteDataset, fetchStats,
+    // Training Forge
+    trainingJobs, trainableModels, costEstimate, estimating, startingTraining,
+    loadingJobs, hasTogetherKey,
+    fetchTrainingJobs, fetchTrainableModels, estimateCost, startTraining, cancelJob, checkTogetherKey,
   }
 })
