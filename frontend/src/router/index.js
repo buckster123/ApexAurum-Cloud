@@ -6,7 +6,9 @@ const router = createRouter({
   routes: [
     {
       path: '/',
-      redirect: '/chat'
+      name: 'landing',
+      component: () => import('@/views/LandingView.vue'),
+      meta: { requiresGuest: true }
     },
     {
       path: '/login',
@@ -126,7 +128,7 @@ router.beforeEach((to, from, next) => {
   if (to.meta.requiresAuth && !auth.isAuthenticated) {
     next({ name: 'login', query: { redirect: to.fullPath } })
   } else if (to.meta.requiresGuest && auth.isAuthenticated) {
-    next({ name: 'chat' })
+    next('/chat')
   } else {
     next()
   }
