@@ -730,7 +730,7 @@ function renderMarkdown(content) {
           <div v-else-if="chat.messages.length === 0" class="text-center py-20">
             <div class="text-6xl font-serif font-bold text-gold mb-4">Au</div>
             <h2 class="text-2xl font-bold mb-2">Welcome to ApexAurum Cloud</h2>
-            <p class="text-gray-400 mb-8">140 Tools. Five Minds. One Village.</p>
+            <p class="text-gray-400 mb-8">55 Tools. Four Alchemists. One Village.</p>
             <div class="grid grid-cols-2 md:grid-cols-4 gap-3 max-w-xl mx-auto text-sm">
               <button
                 @click="inputMessage = 'What can you help me with?'"
