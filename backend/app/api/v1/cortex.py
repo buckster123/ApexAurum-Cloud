@@ -11,7 +11,7 @@ from typing import Optional, List
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import text
 
 from app.auth.deps import get_current_user
@@ -69,7 +69,7 @@ class CortexStats(BaseModel):
 
 class SearchRequest(BaseModel):
     """Search request body."""
-    query: str
+    query: str = Field(..., max_length=500)
     layers: Optional[List[str]] = None
     visibility: Optional[str] = None
     agent_id: Optional[str] = None

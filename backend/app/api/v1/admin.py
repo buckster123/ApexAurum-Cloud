@@ -108,7 +108,7 @@ async def list_users(
     db: AsyncSession = Depends(get_db),
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
-    search: Optional[str] = Query(None),
+    search: Optional[str] = Query(None, max_length=200),
 ):
     """List all users with their subscription info."""
     query = select(User).order_by(User.created_at.desc())

@@ -241,7 +241,7 @@ async def get_library(
     favorites_only: bool = False,
     agent_id: Optional[str] = None,
     status_filter: Optional[str] = Query(None, alias="status"),
-    search: Optional[str] = None,
+    search: Optional[str] = Query(None, max_length=200),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):

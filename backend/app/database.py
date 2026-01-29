@@ -520,6 +520,41 @@ async def init_db():
                 RAISE NOTICE 'Music tasks migration skipped';
             END $$;
             """,
+            # ═══════════════════════════════════════════════════════════════════════
+            # v95: Tier 2 security hardening - DB constraints
+            # ═══════════════════════════════════════════════════════════════════════
+            """
+            DO $$
+            BEGIN
+                IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'coupon_redemptions') THEN
+                    IF NOT EXISTS (
+                        SELECT 1 FROM pg_constraint
+                        WHERE conname = 'uq_coupon_user_redemption'
+                    ) THEN
+                        CREATE UNIQUE INDEX uq_coupon_user_redemption ON coupon_redemptions(coupon_id, user_id);
+                        RAISE NOTICE 'Added unique constraint on coupon_redemptions(coupon_id, user_id)';
+                    END IF;
+                END IF;
+            EXCEPTION WHEN OTHERS THEN
+                RAISE NOTICE 'Coupon unique constraint migration skipped';
+            END $$;
+            """,
+            """
+            DO $$
+            BEGIN
+                IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'credit_balances') THEN
+                    IF NOT EXISTS (
+                        SELECT 1 FROM pg_constraint
+                        WHERE conname = 'ck_credit_balance_non_negative'
+                    ) THEN
+                        ALTER TABLE credit_balances ADD CONSTRAINT ck_credit_balance_non_negative CHECK (balance_cents >= 0);
+                        RAISE NOTICE 'Added CHECK constraint on credit_balances.balance_cents >= 0';
+                    END IF;
+                END IF;
+            EXCEPTION WHEN OTHERS THEN
+                RAISE NOTICE 'Credit balance CHECK constraint migration skipped';
+            END $$;
+            """,
         ]
 
         from sqlalchemy import text

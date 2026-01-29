@@ -10,6 +10,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -578,7 +579,11 @@ async def redeem_coupon(
     # Increment coupon usage
     coupon.current_uses += 1
 
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(status_code=400, detail="You have already redeemed this coupon")
 
     logger.info(f"Coupon {coupon.code} redeemed by user {user.id}: {benefit_description}")
 

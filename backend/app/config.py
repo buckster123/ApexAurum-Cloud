@@ -82,6 +82,9 @@ class Settings(BaseSettings):
     rate_limit_window_seconds: int = 60
 
     # The Vault - File Storage
+    # Tool execution
+    tool_execution_timeout: int = 120  # seconds
+
     # Mount path is /data on Railway volume - use directly to avoid permission issues
     vault_path: str = "/data"
     max_file_size_bytes: int = 104_857_600  # 100MB

@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import Optional
 from uuid import uuid4
 
-from sqlalchemy import String, DateTime, Integer, Boolean, Float, Text, ForeignKey
+from sqlalchemy import String, DateTime, Integer, Boolean, Float, Text, ForeignKey, UniqueConstraint, CheckConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 
@@ -87,6 +87,9 @@ class CreditBalance(Base):
     """
 
     __tablename__ = "credit_balances"
+    __table_args__ = (
+        CheckConstraint('balance_cents >= 0', name='ck_credit_balance_non_negative'),
+    )
 
     id: Mapped[UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -290,6 +293,9 @@ class CouponRedemption(Base):
     """
 
     __tablename__ = "coupon_redemptions"
+    __table_args__ = (
+        UniqueConstraint('coupon_id', 'user_id', name='uq_coupon_user_redemption'),
+    )
 
     id: Mapped[UUID] = mapped_column(
         UUID(as_uuid=True),

@@ -5,6 +5,7 @@ Central registry for all available tools.
 "The hands that serve the mind"
 """
 
+import asyncio
 import logging
 from typing import Optional
 
@@ -121,10 +122,16 @@ class ToolRegistry:
         # Broadcast tool start to Village GUI
         await broadcaster.broadcast_tool_start(name, params, agent_id)
 
-        # Execute with timing
+        # Execute with timing and timeout
+        from app.config import get_settings
+        timeout = get_settings().tool_execution_timeout
+
         start_time = time.time()
         try:
-            result = await tool.execute(params, context)
+            result = await asyncio.wait_for(
+                tool.execute(params, context),
+                timeout=timeout,
+            )
             result.execution_time_ms = (time.time() - start_time) * 1000
 
             # Broadcast tool complete to Village GUI
@@ -136,6 +143,18 @@ class ToolRegistry:
             )
 
             return result
+        except asyncio.TimeoutError:
+            elapsed = (time.time() - start_time) * 1000
+            error_msg = f"Tool execution timed out after {timeout}s"
+            logger.warning(f"Tool timeout: {name} ({elapsed:.0f}ms)")
+
+            await broadcaster.broadcast_tool_error(name, error_msg, agent_id)
+
+            return ToolResult(
+                success=False,
+                error=error_msg,
+                execution_time_ms=elapsed,
+            )
         except Exception as e:
             logger.exception(f"Tool execution failed: {name}")
 

@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Optional
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File as FastAPIFile, status
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File as FastAPIFile, status
 from fastapi.responses import FileResponse as FastAPIFileResponse, StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import select, func, and_
@@ -1265,7 +1265,7 @@ async def bulk_delete(
 
 @router.get("/search/files", response_model=list[FileResponse])
 async def search_files(
-    q: str,
+    q: str = Query(..., max_length=200),
     file_type: Optional[str] = None,
     limit: int = 50,
     user: User = Depends(get_current_user),
@@ -1313,7 +1313,7 @@ class ContentSearchResponse(BaseModel):
 
 @router.get("/search/content", response_model=ContentSearchResponse)
 async def search_file_contents(
-    q: str,
+    q: str = Query(..., max_length=200),
     file_type: Optional[str] = None,
     folder_id: Optional[UUID] = None,
     limit: int = 20,
