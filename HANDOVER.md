@@ -1,8 +1,8 @@
 # ApexAurum-Cloud Handover Document
 
 **Date:** 2026-01-29
-**Build:** v86-village-band
-**Status:** PRODUCTION READY - Village Band Collaborative Music!
+**Build:** v87-auto-jam
+**Status:** PRODUCTION READY - Auto-Jam SSE + Village Memory!
 
 ---
 
@@ -805,6 +805,28 @@ uploadUrl + style → upload-cover API → AI-transformed track
 | `backend/app/tools/jam.py` | **NEW** - jam_create, jam_contribute, jam_listen, jam_finalize tools |
 | `backend/app/api/v1/chat.py` | Added !JAM trigger with mode detection |
 | `backend/app/main.py` | v86-village-band, 55 tools |
+
+### Auto-Jam SSE Streaming (v87) - COMPLETE
+- **SSE endpoint:** `POST /jam/sessions/{id}/auto-jam` with real-time streaming
+- **Agent execution:** Parallel agent turns with tool support (Council pattern)
+- **Role-specific prompts:** Each agent gets musical role instructions
+- **Auto-finalize:** After all rounds → merge MIDI → Suno pipeline
+- **Events:** start, round_start, agent_complete, round_complete, finalizing, end
+
+### Village Memory Injection (v87) - COMPLETE
+- **`inject_jam_village_memory()`** called on session completion
+- Records who played what role, notes contributed, collaboration story
+- Stored as `village`-visible cultural memory in `music` collection
+- Future jams can reference past collaborations
+
+### Key Files Modified (Session 13 - Auto-Jam):
+
+| File | Changes |
+|------|---------|
+| `backend/app/api/v1/jam.py` | Added auto-jam SSE endpoint, inject_jam_village_memory, execute_jam_agent_turn, build_jam_context |
+| `frontend/src/stores/jam.js` | Added startAutoJam SSE handler, streaming state |
+| `frontend/src/views/JamView.vue` | Auto-Jam modal, live streaming panel, event timeline |
+| `backend/app/main.py` | v87-auto-jam |
 
 ---
 
