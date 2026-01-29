@@ -25,6 +25,7 @@ COPY app ./app
 COPY alembic ./alembic
 COPY alembic.ini ./alembic.ini
 COPY native_prompts ./native_prompts
+COPY admin_static ./admin_static
 
 # Create non-root user
 RUN useradd -m -u 1000 apex && chown -R apex:apex /app

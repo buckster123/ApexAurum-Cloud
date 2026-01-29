@@ -134,6 +134,22 @@ app.add_middleware(
 )
 
 
+# Admin panel (served from backend - no CORS needed)
+@app.get("/admin", tags=["Admin"], include_in_schema=False)
+@app.get("/admin/", tags=["Admin"], include_in_schema=False)
+async def admin_panel():
+    """Serve the admin dashboard HTML."""
+    from pathlib import Path
+    from fastapi.responses import HTMLResponse
+    admin_path = Path(__file__).parent.parent / "admin_static" / "index.html"
+    if not admin_path.exists():
+        # Docker path
+        admin_path = Path("/app/admin_static/index.html")
+    if admin_path.exists():
+        return HTMLResponse(content=admin_path.read_text())
+    return HTMLResponse(content="<h1>Admin panel not found</h1>", status_code=404)
+
+
 # Health check (no auth required)
 @app.get("/health", tags=["Health"])
 async def health_check():
