@@ -1476,3 +1476,204 @@ Guidelines:
         "output_tokens": total_output_tokens,
         "tool_calls": all_tool_calls if all_tool_calls else None,
     }
+
+
+async def execute_agent_turn_streaming(
+    claude: ClaudeService,
+    session: DeliberationSession,
+    round_record: DeliberationRound,
+    agent: SessionAgent,
+    context: str,
+    db: AsyncSession,
+    on_token=None,
+    on_tool=None,
+    user: User = None,
+) -> dict:
+    """
+    Execute a single agent's turn with per-token streaming.
+
+    Same logic as execute_agent_turn but uses chat_stream() and invokes
+    callbacks as tokens arrive. Used by the council WebSocket endpoint.
+
+    Args:
+        on_token: async callback(agent_id: str, token: str) -- called per token
+        on_tool: async callback(agent_id: str, event: dict) -- called on tool events
+    """
+    # === SAME SETUP AS execute_agent_turn ===
+    if user and db:
+        base_prompt = await get_agent_prompt_with_memory(
+            agent_id=agent.agent_id,
+            user=user,
+            use_pac=False,
+            db=db,
+        )
+    else:
+        base_prompt = load_native_prompt(agent.agent_id, use_pac=False)
+
+    if not base_prompt:
+        base_prompt = f"You are {agent.agent_id}, an AI assistant with a distinct perspective."
+
+    village_memory_block = ""
+    if user and db:
+        try:
+            neural = NeuralMemoryService(db)
+            village_memories = await neural.get_village_memories(
+                user_id=user.id,
+                topic=session.topic,
+                limit=5,
+                collection="council",
+            )
+            if village_memories:
+                village_memory_block = neural.format_village_memories_for_prompt(
+                    village_memories, max_chars=1500,
+                )
+        except Exception as e:
+            logger.warning(f"Failed to get Village memories: {e}")
+
+    other_agents = [a.agent_id for a in session.agents if a.is_active and a.agent_id != agent.agent_id]
+    other_agents_str = ", ".join(other_agents) if other_agents else "none"
+
+    preamble = """You are an AI assistant participating in ApexAurum Cloud's Council feature - a structured multi-perspective deliberation system. This is a legitimate product feature for exploring topics through diverse viewpoints. Each agent brings a distinct analytical lens to help users examine ideas thoroughly.
+
+Your responses should be thoughtful, substantive, and helpful. Stay true to your perspective while engaging constructively with other viewpoints. You have access to tools to help research, analyze, and create."""
+
+    system_prompt = f"""{preamble}
+
+=== YOUR PERSPECTIVE ===
+{base_prompt}
+{village_memory_block}
+=== DELIBERATION CONTEXT ===
+Topic: "{session.topic}"
+Other participants: {other_agents_str}
+
+Guidelines:
+- Be concise but substantive (2-3 paragraphs)
+- Reference other participants' points when relevant
+- Clearly state agreements and disagreements
+- Move the discussion forward with new insights
+- Use tools when they would help analyze or research the topic
+- If consensus seems possible, propose specific wording
+- Draw on Village memories if they relate to this topic
+
+{f"Previous discussion:{chr(10)}{context}" if context else "This is Round 1. Share your initial thoughts on the topic."}
+"""
+
+    tools = None
+    tool_executor = None
+    if session.use_tools and user:
+        tool_executor = create_tool_executor(
+            user_id=user.id,
+            conversation_id=None,
+            agent_id=agent.agent_id,
+        )
+        tools = tool_executor.get_available_tools()
+
+    model = getattr(session, 'model', None) or COUNCIL_MODEL
+    user_message = f"Round {round_record.round_number}: Share your perspective on the current state of the discussion."
+    messages = [{"role": "user", "content": user_message}]
+
+    total_input_tokens = 0
+    total_output_tokens = 0
+    full_content = ""
+    all_tool_calls = []
+    max_tool_turns = 3
+
+    # === STREAMING LOOP ===
+    for turn in range(max_tool_turns):
+        tool_uses_this_turn = []
+        assistant_text_blocks = []
+        current_text = ""
+
+        async for event in claude.chat_stream(
+            messages=messages, model=model,
+            system=system_prompt, tools=tools,
+        ):
+            if event["type"] == "token":
+                current_text += event["content"]
+                if on_token:
+                    await on_token(agent.agent_id, event["content"])
+
+            elif event["type"] == "start":
+                total_input_tokens += event.get("input_tokens", 0)
+
+            elif event["type"] == "usage":
+                total_output_tokens += event.get("output_tokens", 0)
+
+            elif event["type"] == "tool_start":
+                # Flush accumulated text
+                if current_text:
+                    assistant_text_blocks.append(current_text)
+                    full_content += current_text
+                    current_text = ""
+                if on_tool:
+                    await on_tool(agent.agent_id, {
+                        "type": "tool_start",
+                        "tool_name": event["tool_name"],
+                    })
+
+            elif event["type"] == "tool_use":
+                tool_uses_this_turn.append(event)
+
+            elif event["type"] == "error":
+                logger.error(f"Stream error for {agent.agent_id}: {event.get('message')}")
+                break
+
+        # Flush remaining text
+        if current_text:
+            assistant_text_blocks.append(current_text)
+            full_content += current_text
+
+        # If no tool calls, we're done
+        if not tool_uses_this_turn or not tool_executor:
+            break
+
+        # Build assistant message with text + tool_use blocks
+        assistant_content = []
+        for text in assistant_text_blocks:
+            assistant_content.append({"type": "text", "text": text})
+        for tu in tool_uses_this_turn:
+            assistant_content.append({
+                "type": "tool_use",
+                "id": tu["id"],
+                "name": tu["name"],
+                "input": tu["input"],
+            })
+        messages.append({"role": "assistant", "content": assistant_content})
+
+        # Execute tools
+        tool_results = []
+        for tu in tool_uses_this_turn:
+            result = await tool_executor.execute_tool_use(tu)
+            tool_results.append(result)
+
+            result_text = ""
+            if result.get("type") == "tool_result":
+                result_content = result.get("content", "")
+                if isinstance(result_content, str):
+                    result_text = result_content
+                elif isinstance(result_content, list):
+                    for item in result_content:
+                        if isinstance(item, dict) and item.get("type") == "text":
+                            result_text += item.get("text", "")
+
+            all_tool_calls.append({
+                "name": tu["name"],
+                "input": tu["input"],
+                "result": result_text[:500] if result_text else None,
+            })
+
+            if on_tool:
+                await on_tool(agent.agent_id, {
+                    "type": "tool_complete",
+                    "tool_name": tu["name"],
+                    "result_preview": result_text[:200] if result_text else None,
+                })
+
+        messages.append({"role": "user", "content": tool_results})
+
+    return {
+        "content": full_content,
+        "input_tokens": total_input_tokens,
+        "output_tokens": total_output_tokens,
+        "tool_calls": all_tool_calls if all_tool_calls else None,
+    }

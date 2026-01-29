@@ -521,6 +521,235 @@ export const useCouncilStore = defineStore('council', () => {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════════
+  // WEBSOCKET STREAMING - Per-token council streaming
+  // ═══════════════════════════════════════════════════════════════════════════════
+
+  const councilWs = ref(null)
+  const wsConnected = ref(false)
+  const streamingAgentsDone = ref({})  // Track which agents have finished in current round
+
+  function connectCouncilWs(sessionId) {
+    if (councilWs.value) {
+      disconnectCouncilWs()
+    }
+
+    let apiUrl = import.meta.env.VITE_API_URL || ''
+    if (apiUrl && !apiUrl.startsWith('http://') && !apiUrl.startsWith('https://')) {
+      apiUrl = 'https://' + apiUrl
+    }
+    const wsProtocol = apiUrl.startsWith('https') ? 'wss:' : 'ws:'
+    let wsUrl
+    if (apiUrl) {
+      wsUrl = apiUrl.replace(/^https?:/, wsProtocol) + `/ws/council/${sessionId}`
+    } else {
+      wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws/council/${sessionId}`
+    }
+
+    const token = localStorage.getItem('accessToken')
+    wsUrl += `?token=${token}`
+
+    const ws = new WebSocket(wsUrl)
+
+    ws.onopen = () => {
+      console.log('Council WS connected')
+      wsConnected.value = true
+    }
+
+    ws.onclose = () => {
+      console.log('Council WS disconnected')
+      wsConnected.value = false
+      councilWs.value = null
+    }
+
+    ws.onerror = (e) => {
+      console.error('Council WS error:', e)
+      wsConnected.value = false
+    }
+
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data)
+        handleWsEvent(data)
+      } catch (e) {
+        console.warn('Failed to parse WS message:', event.data)
+      }
+    }
+
+    councilWs.value = ws
+  }
+
+  function disconnectCouncilWs() {
+    if (councilWs.value) {
+      councilWs.value.close()
+      councilWs.value = null
+      wsConnected.value = false
+    }
+  }
+
+  function sendWsCommand(type, data = {}) {
+    if (councilWs.value && councilWs.value.readyState === WebSocket.OPEN) {
+      councilWs.value.send(JSON.stringify({ type, ...data }))
+    }
+  }
+
+  function handleWsEvent(data) {
+    switch (data.type) {
+      case 'connected':
+        console.log('Council WS authenticated:', data.user)
+        break
+
+      case 'pong':
+        break
+
+      case 'start':
+        console.log('Streaming deliberation started:', data)
+        isAutoDeliberating.value = true
+        isExecutingRound.value = true
+        break
+
+      case 'round_start':
+        streamingRound.value = data.round_number
+        streamingAgents.value = {}
+        streamingAgentsDone.value = {}
+        break
+
+      case 'agent_token':
+        // Per-token streaming -- the hot path
+        if (!streamingAgents.value[data.agent_id]) {
+          streamingAgents.value[data.agent_id] = { content: '', input_tokens: 0, output_tokens: 0, tools: [] }
+        }
+        streamingAgents.value[data.agent_id].content += data.token
+        break
+
+      case 'agent_tool_start':
+        if (!streamingAgents.value[data.agent_id]) {
+          streamingAgents.value[data.agent_id] = { content: '', input_tokens: 0, output_tokens: 0, tools: [] }
+        }
+        streamingAgents.value[data.agent_id].tools.push({
+          name: data.tool_name,
+          status: 'running',
+        })
+        break
+
+      case 'agent_tool_complete':
+        if (streamingAgents.value[data.agent_id]) {
+          const tools = streamingAgents.value[data.agent_id].tools
+          const tool = tools.find(t => t.name === data.tool_name && t.status === 'running')
+          if (tool) {
+            tool.status = 'complete'
+            tool.result = data.result_preview
+          }
+        }
+        break
+
+      case 'agent_complete':
+        if (streamingAgents.value[data.agent_id]) {
+          streamingAgents.value[data.agent_id].input_tokens = data.input_tokens
+          streamingAgents.value[data.agent_id].output_tokens = data.output_tokens
+        }
+        streamingAgentsDone.value[data.agent_id] = true
+        break
+
+      case 'human_message_injected':
+        console.log('Human message injected:', data.content)
+        pendingButtIn.value = ''
+        break
+
+      case 'round_complete':
+        if (currentSession.value) {
+          currentSession.value.current_round = data.round_number
+          currentSession.value.total_cost_usd = data.total_cost_usd
+          currentSession.value.convergence_score = data.convergence_score
+        }
+        // Reload full session for round history
+        loadSession(currentSession.value?.id)
+        streamingRound.value = null
+        streamingAgents.value = {}
+        streamingAgentsDone.value = {}
+        break
+
+      case 'consensus':
+        console.log('Consensus reached!', data)
+        if (currentSession.value) {
+          currentSession.value.state = 'complete'
+          currentSession.value.convergence_score = data.score
+        }
+        break
+
+      case 'paused':
+        if (currentSession.value) {
+          currentSession.value.state = 'paused'
+        }
+        isAutoDeliberating.value = false
+        isExecutingRound.value = false
+        break
+
+      case 'stopped':
+        if (currentSession.value) {
+          currentSession.value.state = 'complete'
+        }
+        isAutoDeliberating.value = false
+        isExecutingRound.value = false
+        break
+
+      case 'resumed':
+        if (currentSession.value) {
+          currentSession.value.state = 'running'
+        }
+        break
+
+      case 'butt_in_queued':
+        pendingButtIn.value = ''
+        break
+
+      case 'end':
+        console.log('Streaming deliberation ended:', data)
+        if (currentSession.value) {
+          currentSession.value.state = data.state
+        }
+        loadSession(currentSession.value?.id)
+        isAutoDeliberating.value = false
+        isExecutingRound.value = false
+        streamingRound.value = null
+        streamingAgents.value = {}
+        streamingAgentsDone.value = {}
+        break
+
+      case 'error':
+        console.error('Council WS error:', data.message)
+        error.value = data.message
+        break
+    }
+  }
+
+  // WS-based actions
+  function startStreamingDeliberation(numRounds = 10) {
+    streamingRound.value = null
+    streamingAgents.value = {}
+    streamingAgentsDone.value = {}
+    error.value = null
+    sendWsCommand('start_deliberation', { num_rounds: numRounds })
+  }
+
+  function pauseStreamingDeliberation() {
+    sendWsCommand('pause')
+  }
+
+  function resumeStreamingDeliberation(numRounds = 10) {
+    sendWsCommand('resume', { num_rounds: numRounds })
+  }
+
+  function stopStreamingDeliberation() {
+    sendWsCommand('stop')
+  }
+
+  function submitStreamingButtIn() {
+    if (pendingButtIn.value.trim()) {
+      sendWsCommand('butt_in', { message: pendingButtIn.value.trim() })
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════════
   // PUBLIC API
   // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -561,12 +790,23 @@ export const useCouncilStore = defineStore('council', () => {
     // Agent management actions
     addAgentToSession,
     removeAgentFromSession,
-    // Auto-deliberation actions
+    // Auto-deliberation actions (SSE)
     startAutoDeliberation,
     stopAutoDeliberation,
     pauseAutoDeliberation,
     resumeAutoDeliberation,
     stopSession,
     submitButtIn,
+    // WebSocket streaming actions
+    councilWs,
+    wsConnected,
+    streamingAgentsDone,
+    connectCouncilWs,
+    disconnectCouncilWs,
+    startStreamingDeliberation,
+    pauseStreamingDeliberation,
+    resumeStreamingDeliberation,
+    stopStreamingDeliberation,
+    submitStreamingButtIn,
   }
 })

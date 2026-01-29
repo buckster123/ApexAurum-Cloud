@@ -6,7 +6,7 @@
  * in parallel rounds.
  */
 
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useCouncilStore, AGENT_COLORS, AVAILABLE_AGENTS, AVAILABLE_MODELS, DEPRECATED_MODELS } from '@/stores/council'
 import AgentCard from '@/components/council/AgentCard.vue'
@@ -47,12 +47,21 @@ const isPaused = computed(() => council.currentSession?.state === 'paused')
 watch(() => route.params.id, async (sessionId) => {
   if (sessionId) {
     await council.loadSession(sessionId)
+    // Connect WebSocket for per-token streaming
+    council.connectCouncilWs(sessionId)
+  } else {
+    council.disconnectCouncilWs()
   }
 }, { immediate: true })
 
 // Load sessions on mount
 onMounted(async () => {
   await council.fetchSessions()
+})
+
+// Disconnect WS on unmount
+onUnmounted(() => {
+  council.disconnectCouncilWs()
 })
 
 // Actions
@@ -82,25 +91,45 @@ async function handleExecuteRound() {
 }
 
 async function handleStartAuto() {
-  await council.startAutoDeliberation(autoRoundsToRun.value)
+  if (council.wsConnected) {
+    council.startStreamingDeliberation(autoRoundsToRun.value)
+  } else {
+    await council.startAutoDeliberation(autoRoundsToRun.value)
+  }
 }
 
 async function handlePauseAuto() {
-  await council.pauseAutoDeliberation()
+  if (council.wsConnected) {
+    council.pauseStreamingDeliberation()
+  } else {
+    await council.pauseAutoDeliberation()
+  }
 }
 
 async function handleResumeAuto() {
-  await council.resumeAutoDeliberation(autoRoundsToRun.value)
+  if (council.wsConnected) {
+    council.resumeStreamingDeliberation(autoRoundsToRun.value)
+  } else {
+    await council.resumeAutoDeliberation(autoRoundsToRun.value)
+  }
 }
 
 async function handleStopSession() {
   if (confirm('Stop the deliberation? This will mark it as complete.')) {
-    await council.stopSession()
+    if (council.wsConnected) {
+      council.stopStreamingDeliberation()
+    } else {
+      await council.stopSession()
+    }
   }
 }
 
 async function handleSubmitButtIn() {
-  await council.submitButtIn()
+  if (council.wsConnected) {
+    council.submitStreamingButtIn()
+  } else {
+    await council.submitButtIn()
+  }
 }
 
 async function handleAddAgent(agentId) {
@@ -596,18 +625,18 @@ function getStateClass(state) {
                 {{ council.streamingRound }}
               </div>
               <div class="flex-1 h-px bg-gold/30"></div>
-              <span class="text-xs text-gold">Deliberating...</span>
+              <span class="text-xs text-gold">{{ council.wsConnected ? 'Streaming...' : 'Deliberating...' }}</span>
             </div>
             <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               <AgentCard
                 v-for="(data, agentId) in council.streamingAgents"
                 :key="agentId"
                 :agent-id="agentId"
-                :content="data.content"
+                :content="data.content + (!council.streamingAgentsDone[agentId] ? '█' : '')"
                 :input-tokens="data.input_tokens"
                 :output-tokens="data.output_tokens"
                 :color="getAgentColor(agentId)"
-                :is-streaming="true"
+                :is-streaming="!council.streamingAgentsDone[agentId]"
                 :tools="data.tools"
               />
               <!-- Placeholder cards for agents still processing -->
@@ -693,7 +722,8 @@ function getStateClass(state) {
                   <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                   <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
-                <span>Auto-deliberating... Round {{ council.streamingRound || council.currentSession.current_round }}</span>
+                <span>{{ council.wsConnected ? 'Streaming' : 'Auto-deliberating' }}... Round {{ council.streamingRound || council.currentSession.current_round }}</span>
+                <span v-if="council.wsConnected" class="text-xs text-green-400 ml-2">WS</span>
               </div>
               <div class="text-gray-400">
                 {{ council.currentSession.current_round }} / {{ council.currentSession.max_rounds }} rounds

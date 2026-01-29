@@ -369,6 +369,12 @@ class ClaudeService:
                         yield {
                             "type": "start",
                             "model": event.message.model,
+                            "input_tokens": getattr(getattr(event.message, 'usage', None), 'input_tokens', 0),
+                        }
+                    elif event.type == "message_delta":
+                        yield {
+                            "type": "usage",
+                            "output_tokens": getattr(getattr(event, 'usage', None), 'output_tokens', 0),
                         }
                     elif event.type == "message_stop":
                         yield {

@@ -51,7 +51,7 @@ async def lifespan(app: FastAPI):
     """Application lifespan manager."""
     # Startup
     print("=" * 50)
-    print("ApexAurum Cloud v90 - Village Band Polish")
+    print("ApexAurum Cloud v91 - Council WebSocket Streaming")
     print("=" * 50)
 
     # Import all models before database init to ensure SQLAlchemy
@@ -120,7 +120,7 @@ async def health_check():
     return {
         "status": "healthy",
         "version": "0.1.0",
-        "build": "v90-village-band-polish",
+        "build": "v91-council-ws-streaming",
         "agents": {
             "native": 5,
             "pac": 4,
@@ -163,6 +163,7 @@ async def health_check():
             "suno-compiler",
             "midi-compose",
             "village-band",
+            "council-ws-streaming",
         ],
     }
 
@@ -183,9 +184,11 @@ async def root():
 # Mount API v1 router
 app.include_router(api_v1_router, prefix="/api/v1")
 
-# Mount WebSocket router for Village GUI
+# Mount WebSocket routers
 from app.api.v1.village_ws import router as village_ws_router
+from app.api.v1.council_ws import router as council_ws_router
 app.include_router(village_ws_router, prefix="/ws")
+app.include_router(council_ws_router, prefix="/ws")
 
 
 # Exception handlers
