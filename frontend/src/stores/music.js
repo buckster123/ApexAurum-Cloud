@@ -167,15 +167,6 @@ export const useMusicStore = defineStore('music', () => {
       return
     }
 
-    // Increment play count
-    try {
-      await api.post(`/api/v1/music/tasks/${task.id}/play`)
-      const libTask = library.value.find(t => t.id === task.id)
-      if (libTask) libTask.play_count++
-    } catch (e) {
-      console.warn('Failed to increment play count:', e)
-    }
-
     const isSameTrack = currentTrack.value?.id === task.id
     if (isSameTrack) {
       // Replaying same track - force restart via toggle
@@ -184,8 +175,17 @@ export const useMusicStore = defineStore('music', () => {
       await nextTick()
     }
 
+    // Set playback state FIRST (preserves user gesture chain for autoplay)
     currentTrack.value = task
     isPlaying.value = true
+
+    // Increment play count AFTER (fire-and-forget, non-blocking)
+    api.post(`/api/v1/music/tasks/${task.id}/play`).then(() => {
+      const libTask = library.value.find(t => t.id === task.id)
+      if (libTask) libTask.play_count++
+    }).catch(e => {
+      console.warn('Failed to increment play count:', e)
+    })
   }
 
   function pausePlayback() {

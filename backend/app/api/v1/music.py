@@ -19,7 +19,7 @@ from uuid import UUID
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query, BackgroundTasks
-from fastapi.responses import StreamingResponse, FileResponse
+from fastapi.responses import StreamingResponse, FileResponse, RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -379,8 +379,16 @@ async def get_audio_file(
             detail=f"Music not ready. Status: {task.status}"
         )
 
+    # If file_path is a URL (agent-polled tracks store Suno CDN URL),
+    # redirect to it directly instead of trying to serve from disk
+    if task.file_path.startswith("http"):
+        return RedirectResponse(url=task.file_path)
+
     file_path = Path(task.file_path)
     if not file_path.exists():
+        # Fallback: if audio_url exists, redirect to CDN
+        if task.audio_url:
+            return RedirectResponse(url=task.audio_url)
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Audio file not found on disk"

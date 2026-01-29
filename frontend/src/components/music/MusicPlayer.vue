@@ -31,7 +31,9 @@ watch(() => music.currentTrack, (newTrack) => {
     audioRef.value.src = music.getAudioUrl(newTrack.id)
     audioRef.value.load()
     if (music.isPlaying) {
-      audioRef.value.play()
+      audioRef.value.play().catch(e => {
+        console.warn('Track play failed (will retry on gesture):', e)
+      })
     }
   }
 }, { immediate: true })
@@ -91,7 +93,8 @@ function onEnded() {
 
 function onError(e) {
   console.error('Audio error:', e)
-  music.stopPlayback()
+  // Don't hide the player on error - just pause so user can retry or close
+  music.pausePlayback()
 }
 
 // Progress bar interaction
