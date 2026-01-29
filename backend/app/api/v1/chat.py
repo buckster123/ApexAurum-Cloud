@@ -4,8 +4,10 @@ Chat Endpoints
 Core chat functionality with streaming responses and tool execution.
 """
 
+import base64
 import json
 import logging
+import mimetypes
 import os
 from pathlib import Path
 from typing import Optional
@@ -21,6 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.models.user import User
 from app.models.conversation import Conversation, Message
+from app.models.file import File as VaultFile
 from app.auth.deps import get_current_user, get_current_user_optional
 from app.services.claude import (
     ClaudeService,
@@ -339,6 +342,97 @@ async def get_agent_prompt_with_memory(
         return base_prompt
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# FILE ATTACHMENT PROCESSING - Vision & Context Injection
+# ═══════════════════════════════════════════════════════════════════════════════
+
+IMAGE_EXTENSIONS = {'jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'}
+TEXT_EXTENSIONS = {'txt', 'md', 'py', 'js', 'ts', 'vue', 'html', 'css', 'json', 'csv', 'yaml', 'yml', 'toml', 'xml', 'sql', 'sh', 'bash', 'rs', 'go', 'java', 'c', 'cpp', 'h', 'rb', 'php', 'env', 'ini', 'conf', 'log', 'jsx', 'tsx', 'scss', 'less', 'svelte'}
+MAX_IMAGE_SIZE = 5 * 1024 * 1024  # 5MB
+MAX_TEXT_SIZE = 50 * 1024  # 50KB
+
+
+async def build_attachment_content(
+    file_ids: list[str],
+    user_id: UUID,
+    message_text: str,
+    db: AsyncSession,
+) -> list[dict]:
+    """
+    Build content blocks from attached vault files.
+
+    Images -> base64 content blocks for vision models
+    Text/code -> injected as text context before the user message
+    Returns Anthropic-format content block array.
+    """
+    content_blocks = []
+    text_context_parts = []
+
+    for file_id_str in file_ids[:5]:  # Max 5 attachments
+        try:
+            fid = UUID(file_id_str)
+        except ValueError:
+            continue
+
+        result = await db.execute(
+            select(VaultFile).where(VaultFile.id == fid, VaultFile.user_id == user_id)
+        )
+        vault_file = result.scalar_one_or_none()
+        if not vault_file or not vault_file.storage_path:
+            continue
+
+        file_path = Path(vault_file.storage_path)
+        if not file_path.exists():
+            continue
+
+        ext = file_path.suffix.lstrip('.').lower()
+
+        if ext in IMAGE_EXTENSIONS:
+            # Image: base64 encode for vision
+            if file_path.stat().st_size > MAX_IMAGE_SIZE:
+                text_context_parts.append(f"[Image '{vault_file.name}' skipped: exceeds 5MB limit]")
+                continue
+
+            media_type = mimetypes.guess_type(str(file_path))[0] or f"image/{ext}"
+            with open(file_path, 'rb') as f:
+                image_data = base64.standard_b64encode(f.read()).decode('utf-8')
+
+            content_blocks.append({
+                "type": "image",
+                "source": {
+                    "type": "base64",
+                    "media_type": media_type,
+                    "data": image_data,
+                }
+            })
+
+        elif ext in TEXT_EXTENSIONS:
+            # Text/code: read content and inject as context
+            if file_path.stat().st_size > MAX_TEXT_SIZE:
+                text_context_parts.append(f"[File '{vault_file.name}' skipped: exceeds 50KB limit]")
+                continue
+
+            try:
+                with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
+                    file_content = f.read()
+                text_context_parts.append(
+                    f"--- Attached file: {vault_file.name} ---\n{file_content}\n--- End of {vault_file.name} ---"
+                )
+            except Exception:
+                text_context_parts.append(f"[Could not read file '{vault_file.name}']")
+        else:
+            text_context_parts.append(f"[Attached file: {vault_file.name} ({vault_file.mime_type or ext})]")
+
+    # Build final content: text context + images + user message
+    combined_text = message_text
+    if text_context_parts:
+        combined_text = "\n\n".join(text_context_parts) + "\n\n" + message_text
+
+    content_blocks.append({"type": "text", "text": combined_text})
+
+    return content_blocks
+
+
 # Schemas
 class ChatRequest(BaseModel):
     message: str
@@ -352,6 +446,7 @@ class ChatRequest(BaseModel):
     save_conversation: bool = True  # Set to False for ephemeral chats (Cortex Diver code assist)
     use_tools: bool = False  # Enable tool calling (The Athanor's Hands)
     tool_categories: Optional[list[str]] = None  # Filter tools by category
+    file_ids: Optional[list[str]] = None  # Vault file IDs to attach (images for vision, text for context)
 
 
 class ConversationUpdate(BaseModel):
@@ -686,25 +781,7 @@ async def send_message(
                 }
             )
 
-    # Use user's BYOK key if they have one, otherwise use platform key
-    if provider == "anthropic":
-        user_api_key = get_user_api_key(user)
-        if user_api_key:
-            # User has BYOK - use their key
-            api_key = user_api_key
-        elif settings.anthropic_api_key:
-            # Use platform API key
-            api_key = settings.anthropic_api_key
-        else:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Anthropic API is not configured. Please contact support."
-            )
-    else:
-        # Other providers use platform API keys from environment
-        api_key = None  # Let the service get from env
-
-    # Check if provider is available (has API key configured)
+    # Universal BYOK routing: check user key first, then platform key
     provider_config = PROVIDERS.get(provider)
     if not provider_config:
         raise HTTPException(
@@ -712,10 +789,20 @@ async def send_message(
             detail=f"Unknown provider: {provider}"
         )
 
-    if provider != "anthropic" and not os.getenv(provider_config["key_env"]):
+    user_api_key = get_user_api_key(user, provider)
+    if user_api_key:
+        # User has BYOK for this provider
+        api_key = user_api_key
+    elif provider == "anthropic" and settings.anthropic_api_key:
+        # Anthropic platform key
+        api_key = settings.anthropic_api_key
+    elif os.getenv(provider_config["key_env"]):
+        # Platform key from environment for this provider
+        api_key = None  # Let the service get from env
+    else:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"Provider {provider_config['name']} is not configured. API key not set."
+            detail=f"{provider_config['name']} is not configured. No API key available."
         )
 
     # Create multi-provider LLM service
@@ -759,8 +846,14 @@ async def send_message(
         db.add(user_msg)
         await db.commit()  # Commit early so conversation is visible to other endpoints
 
-    # Build messages for Claude
-    messages = [{"role": "user", "content": request.message}]
+    # Build messages for Claude (with optional file attachments)
+    if request.file_ids:
+        user_content = await build_attachment_content(
+            request.file_ids, user.id, request.message, db
+        )
+        messages = [{"role": "user", "content": user_content}]
+    else:
+        messages = [{"role": "user", "content": request.message}]
 
     # ═══════════════════════════════════════════════════════════════════════════
     # !MUSIC TRIGGER DETECTION - apexXuno Creative Mode

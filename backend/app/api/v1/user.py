@@ -2,13 +2,16 @@
 User Endpoints
 
 User profile, settings, and API key management.
+Multi-provider BYOK support for all 6 LLM providers.
 """
 
 import logging
-from datetime import datetime
+import os
+from datetime import datetime, timezone
 from typing import Optional
 
 import anthropic
+from openai import OpenAI, AuthenticationError as OpenAIAuthError
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,10 +22,31 @@ from app.database import get_db
 from app.models.user import User
 from app.auth.deps import get_current_user
 from app.services.encryption import encrypt_value, decrypt_value, mask_api_key
+from app.services.llm_provider import PROVIDERS
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
 router = APIRouter()
+
+# Provider key format hints for UI
+PROVIDER_KEY_HINTS = {
+    "anthropic": "sk-ant-...",
+    "deepseek": "sk-...",
+    "groq": "gsk_...",
+    "together": "...",
+    "qwen": "sk-...",
+    "moonshot": "sk-...",
+}
+
+# Console URLs for each provider
+PROVIDER_CONSOLE_URLS = {
+    "anthropic": "https://console.anthropic.com/settings/keys",
+    "deepseek": "https://platform.deepseek.com/api_keys",
+    "groq": "https://console.groq.com/keys",
+    "together": "https://api.together.ai/settings/api-keys",
+    "qwen": "https://dashscope.console.aliyun.com",
+    "moonshot": "https://platform.moonshot.cn/console/api-keys",
+}
 
 
 # Schemas
@@ -178,11 +202,12 @@ async def update_preferences(
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# API KEY MANAGEMENT - BYOK (Bring Your Own Key)
+# API KEY MANAGEMENT - Multi-Provider BYOK (Bring Your Own Key)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 class ApiKeyRequest(BaseModel):
     api_key: str
+    provider: str = "anthropic"
 
 
 class ApiKeyStatusResponse(BaseModel):
@@ -191,31 +216,28 @@ class ApiKeyStatusResponse(BaseModel):
     added_at: Optional[str] = None
     last_used: Optional[str] = None
     valid: bool = False
-    subscription_status: str = "beta"  # beta, free, pro, enterprise
+    subscription_status: str = "beta"
 
 
-@router.post("/api-key")
-async def set_api_key(
-    request: ApiKeyRequest,
-    user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
-):
-    """
-    Set or update the user's Anthropic API key.
+class ProviderKeyInfo(BaseModel):
+    provider_id: str
+    provider_name: str
+    configured: bool
+    key_hint: Optional[str] = None
+    added_at: Optional[str] = None
+    last_used: Optional[str] = None
+    has_platform_key: bool = False
+    console_url: Optional[str] = None
+    key_placeholder: Optional[str] = None
 
-    The key is validated with a test API call, then encrypted and stored.
-    Only the encrypted version is saved - we never store or log the full key.
-    """
-    api_key = request.api_key.strip()
 
-    # Basic validation
+def _validate_anthropic_key(api_key: str):
+    """Validate an Anthropic API key with a minimal test call."""
     if not api_key.startswith("sk-ant"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid API key format. Anthropic keys start with 'sk-ant'"
         )
-
-    # Validate key with a minimal test call
     try:
         test_client = anthropic.Anthropic(api_key=api_key)
         test_client.messages.create(
@@ -229,113 +251,183 @@ async def set_api_key(
             detail="Invalid API key. Please check your key and try again."
         )
     except anthropic.RateLimitError:
-        # Key is valid but rate limited - that's okay
-        pass
+        pass  # Key is valid but rate limited
     except Exception as e:
-        logger.error(f"API key validation error: {e}")
+        logger.error(f"Anthropic key validation error: {e}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Could not validate API key. Please try again."
         )
 
+
+def _validate_openai_compat_key(api_key: str, provider_id: str):
+    """Validate an OpenAI-compatible provider key with a minimal test call."""
+    provider_config = PROVIDERS.get(provider_id)
+    if not provider_config:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unknown provider: {provider_id}"
+        )
+
+    try:
+        client = OpenAI(
+            api_key=api_key,
+            base_url=provider_config["base_url"],
+            timeout=15.0,
+        )
+        client.chat.completions.create(
+            model=provider_config["default_model"],
+            max_tokens=5,
+            messages=[{"role": "user", "content": "hi"}],
+        )
+    except OpenAIAuthError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid API key for {provider_config['name']}. Please check your key."
+        )
+    except Exception as e:
+        error_str = str(e).lower()
+        if "authentication" in error_str or "unauthorized" in error_str or "invalid api key" in error_str:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid API key for {provider_config['name']}."
+            )
+        if "rate" in error_str and "limit" in error_str:
+            pass  # Key is valid but rate limited
+        else:
+            logger.error(f"{provider_id} key validation error: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Could not validate {provider_config['name']} key. Please try again."
+            )
+
+
+@router.post("/api-key")
+async def set_api_key(
+    request: ApiKeyRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Set or update a provider API key.
+
+    The key is validated with a test API call, then encrypted and stored.
+    Only the encrypted version is saved - we never store or log the full key.
+    """
+    api_key = request.api_key.strip()
+    provider_id = request.provider.strip().lower()
+
+    if provider_id not in PROVIDERS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unknown provider: {provider_id}. Available: {', '.join(PROVIDERS.keys())}"
+        )
+
+    if not api_key or len(api_key) < 8:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="API key is too short."
+        )
+
+    # Validate with provider-specific test call
+    if provider_id == "anthropic":
+        _validate_anthropic_key(api_key)
+    else:
+        _validate_openai_compat_key(api_key, provider_id)
+
     # Encrypt and store
     encrypted_key = encrypt_value(api_key, settings.secret_key)
     key_hint = mask_api_key(api_key)
 
-    # Initialize settings structure if needed
     if not user.settings:
         user.settings = {}
-
     if "api_keys" not in user.settings:
         user.settings["api_keys"] = {}
 
-    user.settings["api_keys"]["anthropic"] = {
+    user.settings["api_keys"][provider_id] = {
         "encrypted_key": encrypted_key,
         "key_hint": key_hint,
-        "added_at": datetime.utcnow().isoformat(),
+        "added_at": datetime.now(timezone.utc).isoformat(),
         "last_used": None,
         "valid": True,
     }
 
-    # Initialize subscription info if not present
-    if "subscription" not in user.settings:
-        user.settings["subscription"] = {
-            "status": "beta",
-            "stripe_customer_id": None,
-            "plan_id": None,
-            "current_period_end": None,
-            "byok_allowed": True,
-        }
-
     flag_modified(user, "settings")
     await db.commit()
 
-    logger.info(f"API key configured for user {user.id}")
+    provider_name = PROVIDERS[provider_id]["name"]
+    logger.info(f"API key configured for user {user.id}, provider: {provider_id}")
 
     return {
         "status": "configured",
+        "provider": provider_id,
         "key_hint": key_hint,
-        "message": "API key saved successfully. You can now chat with the Agents!"
+        "message": f"{provider_name} API key saved successfully."
     }
 
 
-@router.delete("/api-key")
+@router.delete("/api-key/{provider}")
 async def remove_api_key(
+    provider: str,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Remove the user's API key."""
+    """Remove a provider API key."""
+    provider_id = provider.strip().lower()
     if user.settings and "api_keys" in user.settings:
-        user.settings["api_keys"].pop("anthropic", None)
+        user.settings["api_keys"].pop(provider_id, None)
         flag_modified(user, "settings")
         await db.commit()
 
-    return {"status": "removed", "message": "API key removed."}
+    provider_name = PROVIDERS.get(provider_id, {}).get("name", provider_id)
+    return {"status": "removed", "message": f"{provider_name} API key removed."}
 
 
-@router.get("/api-key/status", response_model=ApiKeyStatusResponse)
+@router.get("/api-key/status")
 async def get_api_key_status(
     user: User = Depends(get_current_user),
 ):
     """
-    Check if the user has an API key configured.
+    Get API key status for all providers.
 
-    Returns status without exposing the actual key.
+    Returns per-provider info: configured, key hint, platform key availability.
     """
     settings_data = user.settings or {}
     api_keys = settings_data.get("api_keys", {})
-    anthropic_key = api_keys.get("anthropic", {})
-    subscription = settings_data.get("subscription", {})
 
-    if not anthropic_key.get("encrypted_key"):
-        return ApiKeyStatusResponse(
-            configured=False,
-            subscription_status=subscription.get("status", "beta"),
+    providers = {}
+    for provider_id, provider_config in PROVIDERS.items():
+        user_key = api_keys.get(provider_id, {})
+        has_platform_key = bool(os.getenv(provider_config["key_env"]))
+
+        providers[provider_id] = ProviderKeyInfo(
+            provider_id=provider_id,
+            provider_name=provider_config["name"],
+            configured=bool(user_key.get("encrypted_key")),
+            key_hint=user_key.get("key_hint"),
+            added_at=user_key.get("added_at"),
+            last_used=user_key.get("last_used"),
+            has_platform_key=has_platform_key,
+            console_url=PROVIDER_CONSOLE_URLS.get(provider_id),
+            key_placeholder=PROVIDER_KEY_HINTS.get(provider_id),
         )
 
-    return ApiKeyStatusResponse(
-        configured=True,
-        key_hint=anthropic_key.get("key_hint"),
-        added_at=anthropic_key.get("added_at"),
-        last_used=anthropic_key.get("last_used"),
-        valid=anthropic_key.get("valid", True),
-        subscription_status=subscription.get("status", "beta"),
-    )
+    return {"providers": {k: v.model_dump() for k, v in providers.items()}}
 
 
-def get_user_api_key(user: User) -> Optional[str]:
+def get_user_api_key(user: User, provider: str = "anthropic") -> Optional[str]:
     """
-    Get the decrypted API key for a user.
+    Get the decrypted API key for a user and provider.
 
     Used internally by the chat service.
-    Returns None if no key is configured.
+    Returns None if no key is configured for that provider.
     """
     if not user or not user.settings:
         return None
 
     api_keys = user.settings.get("api_keys", {})
-    anthropic_config = api_keys.get("anthropic", {})
-    encrypted_key = anthropic_config.get("encrypted_key")
+    provider_config = api_keys.get(provider, {})
+    encrypted_key = provider_config.get("encrypted_key")
 
     if not encrypted_key:
         return None

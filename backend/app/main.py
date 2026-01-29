@@ -196,7 +196,7 @@ async def health_check():
     return {
         "status": "healthy",
         "version": "0.1.0",
-        "build": "v96-beta-polish",
+        "build": "v97-byok-attachments",
         "agents": {
             "native": 5,
             "pac": 4,
@@ -240,6 +240,8 @@ async def health_check():
             "midi-compose",
             "village-band",
             "council-ws-streaming",
+            "multi-provider-byok",
+            "file-attachments-vision",
         ],
     }
 

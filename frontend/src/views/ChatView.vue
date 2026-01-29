@@ -32,6 +32,12 @@ const conversationsList = ref(null)
 const isMobile = ref(window.innerWidth < 768)
 const toolsCount = ref(0)
 
+// File attachments
+const attachedFiles = ref([])  // Array of { id, name, file_type, mime_type }
+const showFilePicker = ref(false)
+const vaultFiles = ref([])
+const loadingVaultFiles = ref(false)
+
 // Conversation management state
 const searchQuery = ref('')
 const editingConvId = ref(null)
@@ -126,6 +132,49 @@ async function fetchCustomAgents() {
   } catch (e) {
     // Ignore errors (user might not be logged in)
     customAgents.value = []
+  }
+}
+
+// File attachment functions
+async function fetchVaultFiles() {
+  loadingVaultFiles.value = true
+  try {
+    const response = await api.get('/api/v1/files')
+    // Flatten: get files from root listing
+    vaultFiles.value = (response.data.files || []).filter(f =>
+      ['image', 'document', 'code', 'data'].includes(f.file_type)
+    )
+  } catch (e) {
+    console.error('Failed to fetch vault files:', e)
+  } finally {
+    loadingVaultFiles.value = false
+  }
+}
+
+function attachFile(file) {
+  // Don't attach duplicates
+  if (attachedFiles.value.some(f => f.id === file.id)) return
+  if (attachedFiles.value.length >= 5) {
+    showToast('Maximum 5 attachments', 'warning')
+    return
+  }
+  attachedFiles.value.push({
+    id: file.id,
+    name: file.name || file.original_filename,
+    file_type: file.file_type,
+    mime_type: file.mime_type,
+  })
+  showFilePicker.value = false
+}
+
+function removeAttachment(fileId) {
+  attachedFiles.value = attachedFiles.value.filter(f => f.id !== fileId)
+}
+
+function toggleFilePicker() {
+  showFilePicker.value = !showFilePicker.value
+  if (showFilePicker.value && vaultFiles.value.length === 0) {
+    fetchVaultFiles()
   }
 }
 
@@ -249,10 +298,14 @@ async function handleSubmit() {
   if (!message || chat.isStreaming) return
 
   inputMessage.value = ''
+  // Collect file_ids before clearing
+  const fileIds = attachedFiles.value.length > 0 ? attachedFiles.value.map(f => f.id) : undefined
+  attachedFiles.value = []
+  showFilePicker.value = false
   // Haptic feedback on send
   haptics.medium()
   // Use actualAgentId and pass isPac flag for PAC prompt loading
-  await chat.sendMessage(message, actualAgentId.value, undefined, isUsingPacAgent.value)
+  await chat.sendMessage(message, actualAgentId.value, undefined, isUsingPacAgent.value, fileIds)
 }
 
 function newConversation() {
@@ -892,9 +945,80 @@ function renderMarkdown(content) {
       <div
         class="border-t p-4 transition-all"
         :class="isUsingPacAgent ? 'border-purple-500/30' : 'border-apex-border'"
+        @click="showFilePicker = false"
       >
         <form @submit.prevent="handleSubmit" class="max-w-3xl mx-auto">
+          <!-- Attached Files Preview -->
+          <div v-if="attachedFiles.length > 0" class="flex flex-wrap gap-2 mb-2">
+            <div
+              v-for="file in attachedFiles"
+              :key="file.id"
+              class="flex items-center gap-1.5 bg-apex-darker border border-apex-border rounded-lg px-2.5 py-1 text-sm"
+            >
+              <span v-if="file.file_type === 'image'" class="text-xs">&#x1F5BC;</span>
+              <span v-else class="text-xs">&#x1F4C4;</span>
+              <span class="text-gray-300 max-w-[120px] truncate">{{ file.name }}</span>
+              <button
+                @click="removeAttachment(file.id)"
+                class="text-gray-500 hover:text-red-400 ml-1"
+                type="button"
+              >
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          </div>
+
           <div class="flex gap-3">
+            <!-- Attach File Button -->
+            <div class="relative" @click.stop>
+              <button
+                type="button"
+                @click="toggleFilePicker"
+                class="p-2.5 rounded-lg transition-colors"
+                :class="attachedFiles.length > 0 ? 'text-gold' : 'text-gray-500 hover:text-gray-300'"
+                title="Attach file from Vault"
+                :disabled="!auth.isAuthenticated"
+              >
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                </svg>
+              </button>
+
+              <!-- Vault File Picker Dropdown -->
+              <div
+                v-if="showFilePicker"
+                class="absolute bottom-full left-0 mb-2 w-72 bg-apex-dark border border-apex-border rounded-lg shadow-xl z-50 max-h-64 overflow-y-auto"
+              >
+                <div class="p-2 border-b border-apex-border">
+                  <span class="text-xs text-gray-400 font-medium">Attach from Vault</span>
+                </div>
+                <div v-if="loadingVaultFiles" class="p-4 text-center text-gray-400 text-sm">
+                  Loading files...
+                </div>
+                <div v-else-if="vaultFiles.length === 0" class="p-4 text-center text-gray-500 text-sm">
+                  No files in vault
+                </div>
+                <div v-else>
+                  <button
+                    v-for="file in vaultFiles"
+                    :key="file.id"
+                    @click="attachFile(file)"
+                    type="button"
+                    class="w-full text-left px-3 py-2 hover:bg-apex-darker flex items-center gap-2 text-sm transition-colors"
+                    :class="{ 'opacity-50': attachedFiles.some(f => f.id === file.id) }"
+                  >
+                    <span v-if="file.file_type === 'image'" class="text-xs">&#x1F5BC;</span>
+                    <span v-else-if="file.file_type === 'code'" class="text-xs">&#x2697;&#xFE0F;</span>
+                    <span v-else class="text-xs">&#x1F4C4;</span>
+                    <span class="truncate text-gray-300">{{ file.name || file.original_filename }}</span>
+                    <span class="text-xs text-gray-500 ml-auto shrink-0">{{ file.file_type }}</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
             <input
               ref="inputRef"
               v-model="inputMessage"

@@ -108,17 +108,13 @@ const showPromptViewer = ref(false)
 const showCodexViewer = ref(false)
 const viewingCodex = ref(null)
 
-// API Key Management (BYOK - Beta)
-const apiKeyStatus = ref({
-  configured: false,
-  key_hint: null,
-  added_at: null,
-  subscription_status: 'beta',
-})
-const newApiKey = ref('')
-const savingApiKey = ref(false)
-const apiKeyError = ref('')
-const apiKeySuccess = ref('')
+// Multi-Provider API Key Management
+const providerKeys = ref({})
+const activeProvider = ref(null)
+const newProviderKey = ref('')
+const savingProvider = ref(null)
+const providerError = ref('')
+const providerSuccess = ref('')
 
 // Memory (The Cortex)
 const memoryStats = ref({ by_agent: {}, total: 0 })
@@ -168,9 +164,7 @@ onMounted(async () => {
   await billing.fetchStatus() // Fetch tier info first
   await fetchPreferences()
   await fetchUsage()
-  if (canUseBYOK.value) {
-    await fetchApiKeyStatus()
-  }
+  await fetchProviderKeys()
   await fetchTools()
 
   if (devMode.value) {
@@ -197,64 +191,70 @@ async function fetchUsage() {
   }
 }
 
-// API Key Management
-async function fetchApiKeyStatus() {
+// Multi-Provider API Key Management
+async function fetchProviderKeys() {
   try {
     const response = await api.get('/api/v1/user/api-key/status')
-    apiKeyStatus.value = response.data
+    providerKeys.value = response.data.providers || {}
   } catch (e) {
-    console.error('Failed to fetch API key status:', e)
+    console.error('Failed to fetch provider keys:', e)
   }
 }
 
-async function saveApiKey() {
-  if (!newApiKey.value.trim()) {
-    apiKeyError.value = 'Please enter an API key'
-    return
-  }
+async function saveProviderKey(providerId) {
+  if (!newProviderKey.value.trim()) return
 
-  savingApiKey.value = true
-  apiKeyError.value = ''
-  apiKeySuccess.value = ''
+  savingProvider.value = providerId
+  providerError.value = ''
+  providerSuccess.value = ''
 
   try {
     const response = await api.post('/api/v1/user/api-key', {
-      api_key: newApiKey.value.trim()
+      api_key: newProviderKey.value.trim(),
+      provider: providerId,
     })
-    apiKeyStatus.value = {
-      configured: true,
-      key_hint: response.data.key_hint,
-      added_at: new Date().toISOString(),
-      subscription_status: 'beta',
-    }
-    newApiKey.value = ''
-    apiKeySuccess.value = response.data.message || 'API key saved successfully!'
-    setTimeout(() => apiKeySuccess.value = '', 5000)
+    newProviderKey.value = ''
+    activeProvider.value = null
+    providerSuccess.value = response.data.message || 'Key saved!'
+    showToast(providerSuccess.value, 'success')
+    setTimeout(() => providerSuccess.value = '', 3000)
+    await fetchProviderKeys()
   } catch (e) {
-    apiKeyError.value = e.response?.data?.detail || 'Failed to save API key'
+    providerError.value = e.response?.data?.detail || 'Failed to save key'
+    showToast(providerError.value, 'error')
   } finally {
-    savingApiKey.value = false
+    savingProvider.value = null
   }
 }
 
-async function removeApiKey() {
-  if (!confirm('Remove your API key? You won\'t be able to chat until you add a new one.')) {
-    return
-  }
+async function removeProviderKey(providerId) {
+  const providerName = providerKeys.value[providerId]?.provider_name || providerId
+  if (!confirm(`Remove your ${providerName} API key?`)) return
 
   try {
-    await api.delete('/api/v1/user/api-key')
-    apiKeyStatus.value = {
-      configured: false,
-      key_hint: null,
-      added_at: null,
-      subscription_status: 'beta',
-    }
-    apiKeySuccess.value = 'API key removed'
-    setTimeout(() => apiKeySuccess.value = '', 3000)
+    await api.delete(`/api/v1/user/api-key/${providerId}`)
+    showToast(`${providerName} key removed`, 'success')
+    await fetchProviderKeys()
   } catch (e) {
-    apiKeyError.value = 'Failed to remove API key'
+    showToast('Failed to remove key', 'error')
   }
+}
+
+function toggleProvider(providerId) {
+  if (activeProvider.value === providerId) {
+    activeProvider.value = null
+  } else {
+    activeProvider.value = providerId
+    newProviderKey.value = ''
+    providerError.value = ''
+  }
+}
+
+function canConfigureProvider(providerId) {
+  // Alchemist can configure Anthropic, Adept can configure all
+  if (billing.isOpus) return true
+  if (billing.isPro && providerId === 'anthropic') return true
+  return false
 }
 
 async function fetchNativeAgents() {
@@ -768,89 +768,6 @@ function getAgentSymbol(agentId) {
           >
             {{ loading ? 'Saving...' : 'Save Preferences' }}
           </button>
-        </div>
-      </div>
-
-      <!-- API Key (BYOK) - Only for Alchemist and Adept tiers -->
-      <div v-if="canUseBYOK" class="card mb-6" :class="{ 'border-gold/30': apiKeyStatus.configured }">
-        <div class="flex items-center justify-between mb-4">
-          <h2 class="text-xl font-bold">API Key</h2>
-          <span
-            class="text-xs px-2 py-1 rounded"
-            :class="apiKeyStatus.configured
-              ? 'bg-green-500/20 text-green-400'
-              : 'bg-yellow-500/20 text-yellow-400'"
-          >
-            {{ apiKeyStatus.configured ? 'Configured' : 'Required' }}
-          </span>
-        </div>
-
-        <p class="text-sm text-gray-400 mb-4">
-          Optionally use your own API key for direct billing to your provider account.
-          <a
-            href="https://console.anthropic.com/settings/keys"
-            target="_blank"
-            class="text-gold hover:underline"
-          >
-            Get one here
-          </a>
-        </p>
-
-        <!-- Current Key Status -->
-        <div v-if="apiKeyStatus.configured" class="bg-apex-darker rounded-lg p-4 mb-4">
-          <div class="flex items-center justify-between">
-            <div>
-              <div class="text-sm text-gray-400">Current Key</div>
-              <div class="font-mono text-gold">{{ apiKeyStatus.key_hint }}</div>
-            </div>
-            <button
-              @click="removeApiKey"
-              class="text-sm text-red-400 hover:text-red-300"
-            >
-              Remove
-            </button>
-          </div>
-          <div v-if="apiKeyStatus.added_at" class="text-xs text-gray-500 mt-2">
-            Added {{ new Date(apiKeyStatus.added_at).toLocaleDateString() }}
-          </div>
-        </div>
-
-        <!-- Add/Update Key Form -->
-        <div class="space-y-3">
-          <div>
-            <label class="block text-sm text-gray-400 mb-2">
-              {{ apiKeyStatus.configured ? 'Update Key' : 'Enter API Key' }}
-            </label>
-            <input
-              v-model="newApiKey"
-              type="password"
-              class="input font-mono"
-              placeholder="sk-ant-api03-..."
-              @keyup.enter="saveApiKey"
-            />
-          </div>
-
-          <div v-if="apiKeyError" class="text-sm text-red-400 bg-red-500/10 p-3 rounded-lg">
-            {{ apiKeyError }}
-          </div>
-
-          <div v-if="apiKeySuccess" class="text-sm text-green-400 bg-green-500/10 p-3 rounded-lg">
-            {{ apiKeySuccess }}
-          </div>
-
-          <button
-            @click="saveApiKey"
-            class="btn-primary"
-            :disabled="savingApiKey || !newApiKey.trim()"
-          >
-            {{ savingApiKey ? 'Validating...' : (apiKeyStatus.configured ? 'Update Key' : 'Save Key') }}
-          </button>
-        </div>
-
-        <div class="mt-4 pt-4 border-t border-apex-border">
-          <p class="text-xs text-gray-500">
-            Your key is encrypted and stored securely. We never see or log your full API key.
-          </p>
         </div>
       </div>
 
@@ -1572,14 +1489,126 @@ function getAgentSymbol(agentId) {
       </div>
     </template>
 
-    <!-- API TAB (Dev Mode only - placeholder) -->
+    <!-- API TAB - Multi-Provider Key Management -->
     <template v-if="devMode && activeTab === 'api'">
       <div class="card">
-        <h2 class="text-xl font-bold mb-4">API Settings</h2>
+        <div class="flex items-center justify-between mb-6">
+          <h2 class="text-xl font-bold">API Keys</h2>
+          <span class="text-xs text-gray-400">Bring Your Own Key</span>
+        </div>
 
-        <div class="text-center py-12 text-gray-400">
-          <div class="text-4xl mb-4">Coming Soon</div>
-          <p>API key management, webhooks, and integrations</p>
+        <p class="text-sm text-gray-400 mb-6">
+          Use your own API keys for direct provider billing. Platform keys are used by default when available.
+        </p>
+
+        <!-- Provider Grid -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div
+            v-for="(info, providerId) in providerKeys"
+            :key="providerId"
+            class="rounded-lg border transition-all cursor-pointer"
+            :class="{
+              'border-green-500/40 bg-green-500/5': info.configured,
+              'border-blue-500/30 bg-blue-500/5': !info.configured && info.has_platform_key,
+              'border-apex-border bg-apex-darker': !info.configured && !info.has_platform_key,
+              'ring-1 ring-gold/50': activeProvider === providerId,
+            }"
+            @click="canConfigureProvider(providerId) ? toggleProvider(providerId) : null"
+          >
+            <!-- Provider Header -->
+            <div class="p-4">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                  <span class="text-lg font-bold" :class="{
+                    'text-gold': providerId === 'anthropic',
+                    'text-blue-400': providerId === 'deepseek',
+                    'text-orange-400': providerId === 'groq',
+                    'text-purple-400': providerId === 'together',
+                    'text-cyan-400': providerId === 'qwen',
+                    'text-indigo-400': providerId === 'moonshot',
+                  }">{{ info.provider_name }}</span>
+                </div>
+                <div class="flex items-center gap-2">
+                  <!-- Status Badge -->
+                  <span v-if="info.configured" class="text-xs px-2 py-0.5 rounded bg-green-500/20 text-green-400">
+                    Your Key
+                  </span>
+                  <span v-else-if="info.has_platform_key" class="text-xs px-2 py-0.5 rounded bg-blue-500/20 text-blue-400">
+                    Platform
+                  </span>
+                  <span v-else class="text-xs px-2 py-0.5 rounded bg-gray-500/20 text-gray-500">
+                    Not Set
+                  </span>
+                  <!-- Lock for insufficient tier -->
+                  <span v-if="!canConfigureProvider(providerId)" class="text-gray-500" title="Upgrade tier to configure">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                    </svg>
+                  </span>
+                </div>
+              </div>
+
+              <!-- Key Hint (if configured) -->
+              <div v-if="info.configured" class="mt-2 text-xs">
+                <span class="font-mono text-gold">{{ info.key_hint }}</span>
+                <span v-if="info.added_at" class="text-gray-500 ml-2">
+                  added {{ new Date(info.added_at).toLocaleDateString() }}
+                </span>
+              </div>
+            </div>
+
+            <!-- Expanded: Key Input (when clicked) -->
+            <div v-if="activeProvider === providerId && canConfigureProvider(providerId)" class="px-4 pb-4 border-t border-apex-border" @click.stop>
+              <div class="pt-3 space-y-3">
+                <input
+                  v-model="newProviderKey"
+                  type="password"
+                  class="input font-mono text-sm w-full"
+                  :placeholder="info.key_placeholder || 'Enter API key...'"
+                  @keyup.enter="saveProviderKey(providerId)"
+                />
+                <div class="flex items-center gap-2">
+                  <button
+                    @click.stop="saveProviderKey(providerId)"
+                    class="btn-primary text-sm px-4"
+                    :disabled="savingProvider === providerId || !newProviderKey.trim()"
+                  >
+                    {{ savingProvider === providerId ? 'Validating...' : (info.configured ? 'Update' : 'Save Key') }}
+                  </button>
+                  <button
+                    v-if="info.configured"
+                    @click.stop="removeProviderKey(providerId)"
+                    class="text-sm text-red-400 hover:text-red-300 px-2"
+                  >
+                    Remove
+                  </button>
+                  <a
+                    v-if="info.console_url"
+                    :href="info.console_url"
+                    target="_blank"
+                    @click.stop
+                    class="text-sm text-gold/70 hover:text-gold ml-auto"
+                  >
+                    Get key &rarr;
+                  </a>
+                </div>
+              </div>
+            </div>
+
+            <!-- Tier gate message -->
+            <div v-if="activeProvider === providerId && !canConfigureProvider(providerId)" class="px-4 pb-4 border-t border-apex-border" @click.stop>
+              <p class="pt-3 text-sm text-amber-400">
+                {{ providerId === 'anthropic' ? 'Upgrade to Alchemist to bring your own key.' : 'Upgrade to Adept to configure all providers.' }}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Security Note -->
+        <div class="mt-6 pt-4 border-t border-apex-border">
+          <p class="text-xs text-gray-500">
+            Keys are encrypted at rest and never logged. Validation uses a minimal test call. Your key is used instead of the platform key when configured.
+          </p>
         </div>
       </div>
     </template>

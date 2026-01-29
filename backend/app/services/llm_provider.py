@@ -342,10 +342,22 @@ def convert_messages_for_openai(messages: list[dict], system: Optional[str] = No
             tool_calls = []
             tool_results = []
 
+            image_blocks = []
+
             for block in content:
                 if isinstance(block, dict):
                     if block.get("type") == "text":
                         text_parts.append(block.get("text", ""))
+                    elif block.get("type") == "image":
+                        # Convert Anthropic image format to OpenAI vision format
+                        source = block.get("source", {})
+                        if source.get("type") == "base64":
+                            media_type = source.get("media_type", "image/png")
+                            data = source.get("data", "")
+                            image_blocks.append({
+                                "type": "image_url",
+                                "image_url": {"url": f"data:{media_type};base64,{data}"}
+                            })
                     elif block.get("type") == "tool_use":
                         tool_calls.append({
                             "id": block.get("id"),
@@ -379,8 +391,19 @@ def convert_messages_for_openai(messages: list[dict], system: Optional[str] = No
                     msg_dict["content"] = "\n".join(text_parts)
                 msg_dict["tool_calls"] = tool_calls
                 openai_messages.append(msg_dict)
+            elif image_blocks:
+                # Vision message: mix of text and images as content array
+                vision_content = []
+                for img in image_blocks:
+                    vision_content.append(img)
+                if text_parts:
+                    vision_content.append({"type": "text", "text": "\n".join(text_parts)})
+                openai_messages.append({
+                    "role": role,
+                    "content": vision_content,
+                })
             else:
-                # Regular message
+                # Regular text message
                 openai_messages.append({
                     "role": role,
                     "content": "\n".join(text_parts) if text_parts else "",

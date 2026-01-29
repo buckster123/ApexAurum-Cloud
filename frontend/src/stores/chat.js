@@ -133,7 +133,7 @@ export const useChatStore = defineStore('chat', () => {
     messages.value = []
   }
 
-  async function sendMessage(content, agent = 'AZOTH', model = null, usePac = false) {
+  async function sendMessage(content, agent = 'AZOTH', model = null, usePac = false, fileIds = undefined) {
     // Use selected model if not specified
     const useModel = model || selectedModel.value || defaultModel.value
     // Add user message immediately
@@ -181,6 +181,7 @@ export const useChatStore = defineStore('chat', () => {
           use_pac: usePac,
           max_tokens: maxTokens.value,
           use_tools: toolsEnabled.value,
+          ...(fileIds && { file_ids: fileIds }),
         })
       })
 

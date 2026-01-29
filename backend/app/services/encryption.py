@@ -69,7 +69,11 @@ def mask_api_key(key: str) -> str:
     """
     Create a masked version of an API key for display.
 
-    Example: "sk-ant-api03-abc...xyz" -> "sk-ant-...xyz4"
+    Handles multiple provider key formats:
+    - Anthropic: sk-ant-... -> sk-ant-...xxxx
+    - Groq: gsk_... -> gsk_...xxxx
+    - Generic sk-: sk-...xxxx
+    - Other: ***...xxxx
 
     Args:
         key: The full API key
@@ -80,11 +84,13 @@ def mask_api_key(key: str) -> str:
     if not key or len(key) < 10:
         return "****"
 
-    # For Anthropic keys: sk-ant-api03-xxx...
-    # Show first part up to first dash after "sk-ant", then last 4
-    if key.startswith("sk-ant"):
-        prefix = "sk-ant-..."
-    else:
-        prefix = key[:7] + "..."
+    suffix = key[-4:]
 
-    return f"{prefix}{key[-4:]}"
+    if key.startswith("sk-ant"):
+        return f"sk-ant-...{suffix}"
+    elif key.startswith("gsk_"):
+        return f"gsk_...{suffix}"
+    elif key.startswith("sk-"):
+        return f"sk-...{suffix}"
+    else:
+        return f"***...{suffix}"
