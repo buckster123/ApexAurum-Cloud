@@ -20,7 +20,7 @@ from typing import Optional
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File as FastAPIFile, status
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse as FastAPIFileResponse, StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import select, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -686,7 +686,7 @@ async def download_file(
     file.last_accessed_at = datetime.utcnow()
     await db.commit()
 
-    return FileResponse(
+    return FastAPIFileResponse(
         path=str(file_path),
         filename=file.original_filename,
         media_type=file.mime_type or "application/octet-stream",
@@ -733,7 +733,7 @@ async def preview_file(
 
     # Image preview - return the file
     if file.file_type == "image":
-        return FileResponse(
+        return FastAPIFileResponse(
             path=str(file_path),
             filename=file.name,
             media_type=file.mime_type or "image/png",
