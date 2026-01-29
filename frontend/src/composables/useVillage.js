@@ -438,6 +438,10 @@ export function useVillage() {
       case 'connection':
         console.log('Connection confirmed:', event.message)
         break
+      case 'music_complete':
+        // Dispatch DOM event for MusicPlayer notification (decoupled from Village)
+        window.dispatchEvent(new CustomEvent('music-complete', { detail: event }))
+        break
       default:
         console.log('Unknown event type:', event.type)
     }

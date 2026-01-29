@@ -274,9 +274,18 @@ Generation takes 2-4 minutes.""",
                     status="generating",
                     suno_task_id=suno_task_id,
                     agent_id=context.agent_id,
+                    model=model,
+                    instrumental=is_instrumental,
                 )
                 db.add(task)
                 await db.commit()
+
+                # Fire-and-forget background auto-completion
+                import asyncio
+                from app.services.suno import auto_complete_music_task
+                asyncio.create_task(
+                    auto_complete_music_task(str(task.id), str(user_uuid))
+                )
 
                 return ToolResult(
                     success=True,
@@ -286,7 +295,7 @@ Generation takes 2-4 minutes.""",
                         "status": "generating",
                         "model": model,
                         "is_instrumental": is_instrumental,
-                        "message": f"Music generation started. Use music_status('{task.id}') to check progress. Takes 2-4 minutes.",
+                        "message": "Generation started. Your song will appear in the library when ready (2-4 minutes). You can also check with music_status.",
                     },
                 )
 

@@ -29,6 +29,7 @@ class EventType(str, Enum):
     CONNECTION = "connection"
     APPROVAL_NEEDED = "approval_needed"
     INPUT_NEEDED = "input_needed"
+    MUSIC_COMPLETE = "music_complete"
 
 
 # Zone mapping - which tools belong to which village zone

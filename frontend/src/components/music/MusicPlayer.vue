@@ -140,6 +140,23 @@ function onVolumeChange(e) {
 // Waveform animation
 let waveformInterval = null
 
+// Song ready notification (from Village WebSocket)
+const songReadyBanner = ref(null)
+let bannerTimeout = null
+
+function onMusicComplete(e) {
+  const detail = e.detail || {}
+  songReadyBanner.value = {
+    title: detail.message || 'Song ready!',
+    agent: detail.agent_id,
+  }
+  // Auto-dismiss after 8 seconds
+  if (bannerTimeout) clearTimeout(bannerTimeout)
+  bannerTimeout = setTimeout(() => { songReadyBanner.value = null }, 8000)
+  // Refresh the library
+  music.fetchLibrary()
+}
+
 onMounted(() => {
   waveformInterval = setInterval(() => {
     if (music.isPlaying) {
@@ -148,14 +165,20 @@ onMounted(() => {
       )
     }
   }, 150)
+
+  window.addEventListener('music-complete', onMusicComplete)
 })
 
 onUnmounted(() => {
   if (waveformInterval) {
     clearInterval(waveformInterval)
   }
+  if (bannerTimeout) {
+    clearTimeout(bannerTimeout)
+  }
   window.removeEventListener('mousemove', onProgressMouseMove)
   window.removeEventListener('mouseup', onProgressMouseUp)
+  window.removeEventListener('music-complete', onMusicComplete)
 })
 </script>
 
@@ -168,6 +191,20 @@ onUnmounted(() => {
     @ended="onEnded"
     @error="onError"
   />
+
+  <!-- Song ready notification banner -->
+  <Transition name="slide-up">
+    <div
+      v-if="songReadyBanner"
+      class="fixed bottom-20 left-0 right-0 z-50 flex justify-center pointer-events-none"
+    >
+      <div class="bg-gold/90 text-apex-dark px-6 py-3 rounded-xl shadow-lg flex items-center gap-3 pointer-events-auto">
+        <span class="text-lg">🎵</span>
+        <span class="font-medium">{{ songReadyBanner.title }}</span>
+        <button @click="songReadyBanner = null" class="ml-2 text-apex-dark/60 hover:text-apex-dark text-lg">&times;</button>
+      </div>
+    </div>
+  </Transition>
 
   <!-- Player UI - only show when track is loaded -->
   <Transition name="slide-up">

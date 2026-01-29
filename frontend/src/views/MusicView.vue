@@ -6,7 +6,7 @@
  * and experience AI-powered music creation with real-time SSE streaming.
  */
 
-import { ref, onMounted, computed, watch } from 'vue'
+import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { useMusicStore } from '@/stores/music'
 
 const music = useMusicStore()
@@ -99,15 +99,24 @@ function getStatusIcon(status) {
 }
 
 // Actions
+let pollInterval = null
+
 onMounted(async () => {
   await music.fetchLibrary()
 
   // Poll pending tracks every 10 seconds
-  setInterval(() => {
+  pollInterval = setInterval(() => {
     if (music.pendingTracks.length > 0) {
       music.pollPendingTracks()
     }
   }, 10000)
+})
+
+onUnmounted(() => {
+  if (pollInterval) {
+    clearInterval(pollInterval)
+    pollInterval = null
+  }
 })
 
 async function handleGenerate() {

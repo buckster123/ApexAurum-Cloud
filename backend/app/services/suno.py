@@ -459,3 +459,201 @@ async def generate_music_stream(
         }
 
     yield f"data: {json.dumps(event)}\n\n"
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# BACKGROUND AUTO-COMPLETION
+# Fire-and-forget task for agent-initiated music generation.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+async def auto_complete_music_task(task_id: str, user_id: str):
+    """
+    Background auto-completion for agent-initiated music generation.
+
+    Called via asyncio.create_task() after MusicGenerateTool creates the
+    DB record and gets a suno_task_id. Handles the full pipeline:
+
+    Phase 1: Poll every 15s until Suno reports SUCCESS
+    Phase 2: Wait 60s for audio URLs to become downloadable
+    Phase 3: Download both tracks, save to Vault, inject Village memory
+
+    Never raises -- failures update task status but don't crash the server.
+    """
+    from app.database import get_db_context
+    from app.tools.music import _poll_suno_status
+
+    logger.info(f"Auto-complete started for task {task_id}")
+
+    try:
+        async with get_db_context() as db:
+            # Load the task
+            result = await db.execute(
+                select(MusicTask)
+                .where(MusicTask.id == UUID(task_id))
+                .where(MusicTask.user_id == UUID(user_id))
+            )
+            task = result.scalar_one_or_none()
+
+            if not task or not task.suno_task_id:
+                logger.error(f"Auto-complete: task {task_id} not found or no suno_task_id")
+                return
+
+            # ═══════════════════════════════════════════════════════════════
+            # Phase 1: Poll for SUCCESS status (every 15 seconds)
+            # ═══════════════════════════════════════════════════════════════
+            max_wait = 600  # 10 minutes
+            elapsed = 0
+            tracks = None
+
+            while elapsed < max_wait:
+                poll_result = await _poll_suno_status(task.suno_task_id)
+
+                if poll_result["status"] == "completed":
+                    tracks = poll_result.get("tracks", [])
+                    task.progress = "Audio ready, preparing download..."
+                    await db.commit()
+                    logger.info(f"Auto-complete: Suno SUCCESS for task {task_id} ({len(tracks)} tracks)")
+                    break
+
+                elif poll_result["status"] == "failed":
+                    task.status = "failed"
+                    task.error = poll_result.get("error", "Generation failed")
+                    task.progress = f"Failed: {task.error[:100]}"
+                    task.completed_at = datetime.utcnow()
+                    await db.commit()
+                    logger.warning(f"Auto-complete: Suno FAILED for task {task_id}: {task.error}")
+                    return
+
+                else:
+                    task.progress = poll_result.get("progress", "Processing...")
+                    await db.commit()
+
+                await asyncio.sleep(15)
+                elapsed += 15
+
+            if not tracks:
+                task.status = "failed"
+                task.error = f"Timeout after {max_wait}s waiting for Suno"
+                task.progress = "Timed out"
+                task.completed_at = datetime.utcnow()
+                await db.commit()
+                logger.warning(f"Auto-complete: timeout for task {task_id}")
+                return
+
+            # ═══════════════════════════════════════════════════════════════
+            # Phase 2: Wait 60s for audio URLs to stabilize
+            # ═══════════════════════════════════════════════════════════════
+            task.progress = "Waiting for audio to finalize..."
+            await db.commit()
+            await asyncio.sleep(60)
+
+            # ═══════════════════════════════════════════════════════════════
+            # Phase 3: Download tracks to Vault
+            # ═══════════════════════════════════════════════════════════════
+            service = SunoService(db)
+
+            # Download primary track (retry up to 3 times)
+            primary = tracks[0]
+            file_path = None
+            for attempt in range(3):
+                try:
+                    task.progress = f"Downloading track 1/{len(tracks)}..."
+                    await db.commit()
+                    file_path = await service._download_audio(task, primary)
+                    break
+                except Exception as dl_err:
+                    logger.warning(f"Auto-complete: download attempt {attempt+1} failed: {dl_err}")
+                    if attempt < 2:
+                        await asyncio.sleep(15)
+
+            if not file_path:
+                # Fallback: store CDN URL directly
+                file_path = primary.get("audio_url", "")
+                logger.warning(f"Auto-complete: using CDN URL fallback for task {task_id}")
+
+            # Update primary task
+            task.status = "completed"
+            task.file_path = file_path
+            task.audio_url = primary.get("audio_url")
+            task.duration = primary.get("duration", 0.0)
+            task.clip_id = primary.get("clip_id")
+            task.title = primary.get("title") or task.title or f"Track_{task_id[:8]}"
+            task.progress = "Complete"
+            task.completed_at = datetime.utcnow()
+            await db.commit()
+
+            # Download and save alt tracks
+            for i, extra in enumerate(tracks[1:], 2):
+                try:
+                    task.progress = f"Downloading track {i}/{len(tracks)}..."
+                    await db.commit()
+                    extra_path = await service._download_audio(task, extra)
+                    extra_title = extra.get("title") or task.title or "Untitled"
+                    extra_task = MusicTask(
+                        id=uuid4(),
+                        user_id=task.user_id,
+                        prompt=task.prompt,
+                        style=task.style,
+                        title=f"{extra_title} (Alt)",
+                        model=task.model,
+                        instrumental=task.instrumental,
+                        status="completed",
+                        suno_task_id=task.suno_task_id,
+                        file_path=extra_path,
+                        audio_url=extra.get("audio_url"),
+                        duration=extra.get("duration", 0.0),
+                        clip_id=extra.get("clip_id"),
+                        agent_id=task.agent_id,
+                        completed_at=datetime.utcnow(),
+                        progress="Complete",
+                    )
+                    db.add(extra_task)
+                    logger.info(f"Auto-complete: saved alt track {extra_task.id}")
+                except Exception as dl_err:
+                    logger.warning(f"Auto-complete: alt track download failed: {dl_err}")
+
+            await db.commit()
+
+            # ═══════════════════════════════════════════════════════════════
+            # Village memory injection
+            # ═══════════════════════════════════════════════════════════════
+            try:
+                await service._inject_village_memory(task)
+            except Exception as mem_err:
+                logger.warning(f"Auto-complete: village memory failed (non-fatal): {mem_err}")
+
+            # ═══════════════════════════════════════════════════════════════
+            # WebSocket broadcast -- notify all connected clients
+            # ═══════════════════════════════════════════════════════════════
+            try:
+                from app.services.village_events import get_village_broadcaster, VillageEvent, EventType
+                broadcaster = get_village_broadcaster()
+                event = VillageEvent(
+                    type=EventType.MUSIC_COMPLETE,
+                    agent_id=task.agent_id or "SYSTEM",
+                    tool="music_generate",
+                    zone="dj_booth",
+                    message=f"Song ready: {task.title}",
+                )
+                await broadcaster.broadcast(event)
+            except Exception as ws_err:
+                logger.warning(f"Auto-complete: WebSocket broadcast failed (non-fatal): {ws_err}")
+
+            logger.info(f"Auto-complete DONE: task {task_id} - '{task.title}' ({len(tracks)} tracks)")
+
+    except Exception as e:
+        logger.error(f"Auto-complete FATAL for task {task_id}: {e}")
+        try:
+            from app.database import get_db_context as _get_db
+            async with _get_db() as db:
+                result = await db.execute(
+                    select(MusicTask).where(MusicTask.id == UUID(task_id))
+                )
+                task = result.scalar_one_or_none()
+                if task and task.status != "completed":
+                    task.status = "failed"
+                    task.error = f"Auto-complete error: {str(e)[:200]}"
+                    task.completed_at = datetime.utcnow()
+                    await db.commit()
+        except Exception:
+            logger.error(f"Auto-complete: couldn't mark task {task_id} as failed")

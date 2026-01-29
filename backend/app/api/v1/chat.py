@@ -876,6 +876,32 @@ Work together to create something beautiful!
     if jam_context_injection:
         system_prompt = f"{system_prompt}\n\n{jam_context_injection}"
 
+    # ═══════════════════════════════════════════════════════════════════════════
+    # MUSIC COMPLETION NOTIFICATION - Tell agent about recently finished songs
+    # ═══════════════════════════════════════════════════════════════════════════
+    try:
+        from app.models.music import MusicTask
+        from datetime import timedelta
+        ten_min_ago = datetime.utcnow() - timedelta(minutes=10)
+
+        recent_music = await db.execute(
+            select(MusicTask)
+            .where(MusicTask.user_id == user.id)
+            .where(MusicTask.status == "completed")
+            .where(MusicTask.completed_at >= ten_min_ago)
+            .where(MusicTask.agent_id != None)  # noqa: E711 - SQLAlchemy requires this syntax
+            .order_by(MusicTask.completed_at.desc())
+            .limit(3)
+        )
+        completed_songs = recent_music.scalars().all()
+
+        if completed_songs:
+            titles = [f'"{s.title}"' for s in completed_songs]
+            music_note = f"\n\n[SYSTEM NOTE: Music generation completed - {', '.join(titles)} {'is' if len(titles) == 1 else 'are'} now in the user's music library.]"
+            system_prompt += music_note
+    except Exception as e:
+        logger.debug(f"Music notification check failed (non-fatal): {e}")
+
     # Get tools if enabled (The Athanor's Hands)
     # Auto-enable tools for !MUSIC and !JAM modes
     tools = None
