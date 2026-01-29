@@ -15,6 +15,7 @@ from app.auth import (
     create_access_token,
     create_refresh_token,
     verify_token,
+    get_current_user,
 )
 
 router = APIRouter()
@@ -142,6 +143,17 @@ async def refresh_tokens(
         access_token=access_token,
         refresh_token=refresh_token,
     )
+
+
+@router.get("/me")
+async def get_me(user: User = Depends(get_current_user)):
+    """Get current authenticated user info (used by admin panel)."""
+    return {
+        "id": str(user.id),
+        "email": user.email,
+        "display_name": user.display_name,
+        "is_admin": getattr(user, "is_admin", False),
+    }
 
 
 @router.post("/logout")
