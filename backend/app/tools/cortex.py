@@ -301,6 +301,7 @@ Example: cortex_recall(query="user preferences", layers=["long_term", "cortex"])
                     where_clauses.append("attention_weight >= :min_attention")
                     params_dict["min_attention"] = min_attention
 
+                where_clauses.append("embedding IS NOT NULL")
                 where_sql = " AND ".join(where_clauses)
 
                 result = await db.execute(
@@ -344,9 +345,9 @@ Example: cortex_recall(query="user preferences", layers=["long_term", "cortex"])
                         "agent_id": row.agent_id,
                         "message_type": row.message_type,
                         "tags": tags,
-                        "attention_weight": round(float(row.attention_weight), 2),
+                        "attention_weight": round(float(row.attention_weight), 2) if row.attention_weight is not None else 1.0,
                         "access_count": row.access_count,
-                        "similarity": round(float(row.similarity), 4),
+                        "similarity": round(float(row.similarity), 4) if row.similarity is not None else 0.0,
                         "created_at": row.created_at.isoformat() if row.created_at else None,
                     })
 

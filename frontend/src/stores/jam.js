@@ -85,7 +85,7 @@ export const useJamStore = defineStore('jam', () => {
     error.value = null
 
     try {
-      const response = await api.get('/jam/sessions', { params: { limit } })
+      const response = await api.get('/api/v1/jam/sessions', { params: { limit } })
       sessions.value = response.data
     } catch (err) {
       console.error('Failed to fetch jam sessions:', err)
@@ -100,7 +100,7 @@ export const useJamStore = defineStore('jam', () => {
     error.value = null
 
     try {
-      const response = await api.get(`/jam/sessions/${sessionId}`)
+      const response = await api.get(`/api/v1/jam/sessions/${sessionId}`)
       currentSession.value = response.data
       return response.data
     } catch (err) {
@@ -126,7 +126,7 @@ export const useJamStore = defineStore('jam', () => {
     error.value = null
 
     try {
-      const response = await api.post('/jam/sessions', {
+      const response = await api.post('/api/v1/jam/sessions', {
         title,
         style,
         tempo,
@@ -164,7 +164,7 @@ export const useJamStore = defineStore('jam', () => {
     error.value = null
 
     try {
-      const response = await api.post(`/jam/sessions/${sessionId}/start`)
+      const response = await api.post(`/api/v1/jam/sessions/${sessionId}/start`)
 
       if (currentSession.value?.id === sessionId) {
         currentSession.value.state = 'jamming'
@@ -198,7 +198,7 @@ export const useJamStore = defineStore('jam', () => {
         velocity: 100
       }))
 
-      const response = await api.post(`/jam/sessions/${sessionId}/contribute`, {
+      const response = await api.post(`/api/v1/jam/sessions/${sessionId}/contribute`, {
         agent_id: 'USER',  // User contributions
         notes: noteObjects,
         description,
@@ -230,7 +230,7 @@ export const useJamStore = defineStore('jam', () => {
     error.value = null
 
     try {
-      const response = await api.post(`/jam/sessions/${sessionId}/next-round`)
+      const response = await api.post(`/api/v1/jam/sessions/${sessionId}/next-round`)
 
       if (currentSession.value?.id === sessionId) {
         currentSession.value.current_round = response.data.round
@@ -249,7 +249,7 @@ export const useJamStore = defineStore('jam', () => {
     error.value = null
 
     try {
-      const response = await api.post(`/jam/sessions/${sessionId}/finalize`, {
+      const response = await api.post(`/api/v1/jam/sessions/${sessionId}/finalize`, {
         audio_influence: audioInfluence,
         style_override: styleOverride,
         title_override: titleOverride
@@ -280,7 +280,7 @@ export const useJamStore = defineStore('jam', () => {
     error.value = null
 
     try {
-      await api.delete(`/jam/sessions/${sessionId}`)
+      await api.delete(`/api/v1/jam/sessions/${sessionId}`)
 
       sessions.value = sessions.value.filter(s => s.id !== sessionId)
 
