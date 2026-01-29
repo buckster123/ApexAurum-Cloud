@@ -1,8 +1,8 @@
 # ApexAurum-Cloud Handover Document
 
 **Date:** 2026-01-29
-**Build:** v89-suno-auto-complete
-**Status:** PRODUCTION READY - Suno Auto-Completion Engine!
+**Build:** v91-council-ws-streaming
+**Status:** PRE-LAUNCH - All features complete, community testing next!
 
 ---
 
@@ -874,17 +874,48 @@ uploadUrl + style → upload-cover API → AI-transformed track
 
 ---
 
-## Known Issues & Next Session Priorities
+## Session 15 Accomplishments
 
-### Polish: Jam Session Edge Cases
-- Some quirks in agent collaboration (first session testing)
-- Tune agent role prompts for more musical output
-- Ensure `jam_contribute` tool calls are properly parsed and tracked
+### Village Band Polish (v90) - COMPLETE
+- **Rich role prompts** - Each agent role (Producer/Melody/Bass/Harmony/Rhythm) now includes note range guidance, pattern examples, musical personality, and role-specific listening instructions
+- **Round-aware prompts** - Opening: "Establish foundation." Middle: "Build on what's laid down." Final: "Add finishing touches." Plus hard instruction: "You MUST call jam_contribute()"
+- **Multi-track MIDI layering** - New `create_layered_midi()` in MidiService. Each agent gets own MIDI track/channel. Same-round parts play simultaneously, rounds stack sequentially
+- **Auto-completion connected** - Both auto-jam and manual `jam_finalize` now fire `auto_complete_music_task()` background worker. Jam songs auto-download and notify frontend
+- **Context visibility** - Agents now see 24 notes per track (was 12)
 
-### Nice-to-have: Suno Callback URL
-- Current auto-polling works well but callback would eliminate polling entirely
-- Would need a public webhook endpoint and Suno API verification
-- Low priority since auto-complete engine handles it
+### Council WebSocket Streaming (v91) - COMPLETE
+- **Per-token streaming** via WebSocket at `/ws/council/{session_id}?token=JWT`
+- **All agents stream in parallel** - Tokens appear simultaneously in all agent cards
+- **`execute_agent_turn_streaming()`** uses `chat_stream()` with `on_token`/`on_tool` callbacks
+- **Bidirectional commands** - start/pause/resume/stop/butt-in all via WebSocket
+- **Block cursor** on agents still typing, "WS" indicator in status bar
+- **SSE fallback** - Original auto-deliberate SSE endpoint untouched
+- **Token counting** - `chat_stream()` now yields usage stats from `message_delta` events
+- **Frontend auto-detects** - Uses WS when connected, falls back to SSE if not
+
+### Key Files Modified/Created (Session 15)
+
+| File | Changes |
+|------|---------|
+| `backend/app/api/v1/jam.py` | Rich role prompts, round-aware messages, layered MIDI merge, auto-completion |
+| `backend/app/services/midi.py` | `create_layered_midi()` -- multi-track MIDI with per-agent channels |
+| `backend/app/tools/jam.py` | Layered MIDI in `jam_finalize`, auto-completion fire |
+| `backend/app/api/v1/council_ws.py` | **NEW** -- WebSocket endpoint with streaming deliberation loop |
+| `backend/app/api/v1/council.py` | `execute_agent_turn_streaming()` with token callbacks |
+| `backend/app/services/claude.py` | `chat_stream()` usage stats (message_delta handling) |
+| `backend/app/main.py` | v91, mount council WS router, council-ws-streaming feature |
+| `frontend/src/stores/council.js` | WS connection, token accumulation, WS-based commands |
+| `frontend/src/views/CouncilView.vue` | WS connect/disconnect, streaming display, typing cursor |
+
+---
+
+## Pre-Launch Status
+
+All feature development complete. Next steps:
+- Community beta testing with access coupons
+- Compute/scaling review (current dev instance over-provisioned)
+- Edge case refinement based on real user traffic
+- Final review pass before official launch
 
 ---
 
@@ -896,4 +927,4 @@ uploadUrl + style → upload-cover API → AI-transformed track
 
 ---
 
-*"The Council convenes. The Athanor blazes. The gold multiplies. The Athanor sings."*
+*"The Council convenes. The Athanor blazes. The gold multiplies. The Athanor sings. The Athanor streams."*
