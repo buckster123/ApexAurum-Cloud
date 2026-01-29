@@ -100,16 +100,19 @@ async function fetchAvailableTools() {
 // Tool selection helpers
 // ---------------------------------------------------------------------------
 function toggleTool(toolName, list) {
-  const idx = list.value.indexOf(toolName)
+  // list may be a ref (from script) or unwrapped array (from template)
+  const arr = Array.isArray(list) ? list : list.value
+  const idx = arr.indexOf(toolName)
   if (idx === -1) {
-    list.value.push(toolName)
+    arr.push(toolName)
   } else {
-    list.value.splice(idx, 1)
+    arr.splice(idx, 1)
   }
 }
 
 function isToolSelected(toolName, list) {
-  return list.value.includes(toolName)
+  const arr = Array.isArray(list) ? list : list.value
+  return arr.includes(toolName)
 }
 
 function getToolDisplayName(tool) {
@@ -245,8 +248,23 @@ function formatRelativeDate(dateStr) {
         <p class="text-gray-400 mt-1">Model Training Studio</p>
       </div>
 
+      <!-- Tier Gate -->
+      <div v-if="nursery.tierRequired" class="card border-amber-500/30 bg-amber-500/5 mb-8">
+        <h2 class="text-xl font-bold text-amber-400 mb-2">Adept Tier Required</h2>
+        <p class="text-gray-400 mb-4">
+          The Nursery is available to Adept-tier subscribers ($30/mo).
+          Train models, generate datasets, and raise apprentice minds.
+        </p>
+        <router-link
+          to="/billing"
+          class="inline-block px-6 py-2 bg-gold text-black font-bold rounded-lg hover:bg-gold/90 transition-colors"
+        >
+          Upgrade to Adept
+        </router-link>
+      </div>
+
       <!-- Tab Bar -->
-      <div class="flex gap-4 mb-8 border-b border-apex-border overflow-x-auto">
+      <div v-if="!nursery.tierRequired" class="flex gap-4 mb-8 border-b border-apex-border overflow-x-auto">
         <button
           v-for="tab in tabs"
           :key="tab.id"
@@ -260,6 +278,8 @@ function formatRelativeDate(dateStr) {
         </button>
       </div>
 
+      <!-- Tab content (hidden when tier-gated) -->
+      <template v-if="!nursery.tierRequired">
       <!-- ================================================================= -->
       <!-- Tab 1: Data Garden (functional)                                    -->
       <!-- ================================================================= -->
@@ -635,6 +655,7 @@ function formatRelativeDate(dateStr) {
           Coming soon -- Training events and model discovery
         </p>
       </div>
+      </template>
 
     </div>
   </div>

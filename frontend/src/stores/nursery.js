@@ -16,6 +16,7 @@ export const useNurseryStore = defineStore('nursery', () => {
   const loading = ref(false)
   const generating = ref(false)
   const extracting = ref(false)
+  const tierRequired = ref(false)
 
   // Actions
   async function fetchDatasets() {
@@ -23,7 +24,11 @@ export const useNurseryStore = defineStore('nursery', () => {
     try {
       const response = await api.get('/api/v1/nursery/datasets')
       datasets.value = response.data.datasets || []
+      tierRequired.value = false
     } catch (error) {
+      if (error.response?.status === 403) {
+        tierRequired.value = true
+      }
       console.error('Failed to fetch datasets:', error)
     } finally {
       loading.value = false
@@ -105,6 +110,7 @@ export const useNurseryStore = defineStore('nursery', () => {
     loading,
     generating,
     extracting,
+    tierRequired,
     fetchDatasets,
     generateData,
     extractData,
