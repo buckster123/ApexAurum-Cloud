@@ -830,6 +830,36 @@ uploadUrl + style → upload-cover API → AI-transformed track
 
 ---
 
+## Known Issues & Next Session Priorities
+
+### Bug: Music Player Won't Replay
+- Clicking play again after a track finishes (or stopping/restarting) fails
+- Likely HTML audio element needs `load()` called before `play()` on re-trigger
+- Check `frontend/src/components/music/MusicPlayer.vue` watch logic
+
+### Bug: Suno Returns 2 Songs, Only 1 Captured
+- Suno API generates 2 clips per request (standard behavior)
+- Current logic in `backend/app/services/suno.py:_poll_completion()` only takes `tracks[0]`
+- **Fix:** Save BOTH tracks as separate MusicTask entries (or add a secondary file)
+- Same issue in `backend/app/tools/music.py` MusicStatusTool
+
+### Enhancement: Auto-Fetch / Callback for Suno Completion
+- Currently requires manual polling via `music_status` tool
+- **Preferred: Callback URL** - Suno pushes completion to our server
+  - Need a webhook endpoint: `POST /api/v1/music/suno-callback`
+  - Register real callback URL instead of `https://localhost/callback`
+  - On callback: download audio, update MusicTask, inject Village memory
+- **Alternative: Auto-polling** - Background task polls after generation starts
+  - Less ideal but simpler if callback URL doesn't work with Suno's API
+- Apply to BOTH songs per generation
+
+### Polish: Jam Session Edge Cases
+- Some quirks in agent collaboration (first session testing)
+- Tune agent role prompts for more musical output
+- Ensure `jam_contribute` tool calls are properly parsed and tracked
+
+---
+
 ## Easter Eggs
 
 - **Dev Mode:** Konami code (↑↑↓↓←→←→BA) or 7-tap on Au logo (Adept only!)
