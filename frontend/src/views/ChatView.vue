@@ -77,7 +77,7 @@ const allAgents = computed(() => {
   return [...pacAgents.value, ...nativeAgents.map(a => ({ ...a, isPac: false })), ...custom]
 })
 
-const selectedAgent = ref('AZOTH')
+const selectedAgent = ref(localStorage.getItem('selectedAgent') || 'AZOTH')
 
 // Model tier icons/colors
 const modelTierStyles = {
@@ -105,6 +105,7 @@ function selectAgent(agentId) {
   }
   haptics.light()
   selectedAgent.value = agentId
+  localStorage.setItem('selectedAgent', agentId)
 }
 
 // Check if currently using a PAC agent
