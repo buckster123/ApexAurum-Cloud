@@ -1031,7 +1031,6 @@ Work together to create something beautiful!
                     except Exception as e:
                         logger.error(f"Failed to record streaming usage: {e}")
 
-                # Store chat exchange as neural memories (for Neo-Cortex visualization)
                 # Get the accumulated response from all turns
                 final_response = full_response
                 if not final_response:
@@ -1046,6 +1045,20 @@ Work together to create something beautiful!
                                         break
                             break
 
+                # Save assistant message to database (streaming path)
+                if conversation and final_response:
+                    assistant_msg = Message(
+                        id=uuid4(),
+                        conversation_id=conversation.id,
+                        role="assistant",
+                        content=final_response,
+                        tool_calls=tool_calls if tool_calls else None,
+                        tool_results=tool_results if tool_results else None,
+                    )
+                    db.add(assistant_msg)
+                    await db.commit()
+
+                # Store chat exchange as neural memories (for Neo-Cortex visualization)
                 if final_response and len(final_response) > 10:
                     try:
                         await store_chat_memory(

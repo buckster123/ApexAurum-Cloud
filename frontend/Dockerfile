@@ -14,7 +14,7 @@ ARG VITE_API_URL=https://backend-production-507c.up.railway.app
 ENV VITE_API_URL=$VITE_API_URL
 
 # Cache buster - change this to force rebuild
-ARG CACHE_BUST=13
+ARG CACHE_BUST=14
 
 # Build the app (VITE_API_URL is now available to Vite)
 COPY . .
