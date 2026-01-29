@@ -545,7 +545,7 @@ function renderMarkdown(content) {
           </option>
         </select>
         <p class="text-xs text-gray-600 mt-1">
-          {{ chat.selectedProvider === 'anthropic' ? 'Claude models' : 'Alternative provider' }}
+          {{ chat.selectedProvider === 'anthropic' ? 'Default models' : 'Alternative provider' }}
         </p>
       </div>
 

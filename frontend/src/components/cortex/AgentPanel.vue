@@ -237,7 +237,7 @@ async function sendMessage() {
       },
       body: JSON.stringify({
         message: contextMessage,
-        agent: 'CLAUDE',  // Use Claude for code assistance
+        agent: 'AZOTH',  // Use Azoth for code assistance
         stream: true,
         max_tokens: 4096,
         // Don't save to conversation history - ephemeral code chat

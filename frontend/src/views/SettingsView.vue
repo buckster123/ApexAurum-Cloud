@@ -780,7 +780,7 @@ function getAgentSymbol(agentId) {
         </div>
 
         <p class="text-sm text-gray-400 mb-4">
-          Optionally use your own Anthropic API key for direct billing to your Anthropic account.
+          Optionally use your own API key for direct billing to your provider account.
           <a
             href="https://console.anthropic.com/settings/keys"
             target="_blank"
