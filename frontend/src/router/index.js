@@ -51,6 +51,18 @@ const router = createRouter({
       meta: { requiresAuth: true }
     },
     {
+      path: '/jam',
+      name: 'jam',
+      component: () => import('@/views/JamView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/jam/:id',
+      name: 'jam-session',
+      component: () => import('@/views/JamView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
       path: '/settings',
       name: 'settings',
       component: () => import('@/views/SettingsView.vue'),
