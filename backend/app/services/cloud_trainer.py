@@ -60,6 +60,9 @@ class CloudTrainerService:
 
         Returns: {"file_id": "file-xxx", "filename": "...", "bytes": N}
         """
+        if not os.path.exists(file_path) or os.path.getsize(file_path) == 0:
+            raise ValueError("Dataset file is empty or missing")
+
         async with httpx.AsyncClient(timeout=120.0) as client:
             with open(file_path, "rb") as f:
                 response = await client.post(
@@ -310,6 +313,8 @@ async def auto_complete_training_job(job_db_id: str, user_id: str):
                         job.provider_job_id, api_key
                     )
 
+                    poll_interval = 30  # Reset on success
+
                     new_status = status_data["status"]
 
                     # Update job in DB
@@ -407,14 +412,22 @@ async def auto_complete_training_job(job_db_id: str, user_id: str):
                                 if ap:
                                     ap.status = "failed"
                                     await db.commit()
-                            except Exception:
-                                pass
+                            except Exception as broadcast_err:
+                                logger.warning(f"Village broadcast failed (non-fatal): {broadcast_err}")
 
                         logger.warning(f"Training FAILED: job {job_db_id}: {error_msg}")
                         return
 
                 except Exception as poll_err:
-                    logger.warning(f"Training poll error (will retry): {poll_err}")
+                    error_str = str(poll_err)
+                    if "429" in error_str or "rate" in error_str.lower():
+                        poll_interval = min(poll_interval * 2, 300)
+                        logger.warning(f"Together.ai rate limited, backing off to {poll_interval}s")
+                    else:
+                        logger.warning(f"Training poll error (will retry): {poll_err}")
+                    await asyncio.sleep(poll_interval)
+                    elapsed += poll_interval
+                    continue
 
                 await asyncio.sleep(poll_interval)
                 elapsed += poll_interval
@@ -437,8 +450,8 @@ async def auto_complete_training_job(job_db_id: str, user_id: str):
                     if ap:
                         ap.status = "failed"
                         await db.commit()
-                except Exception:
-                    pass
+                except Exception as broadcast_err:
+                    logger.warning(f"Village broadcast failed (non-fatal): {broadcast_err}")
 
             logger.warning(f"Training TIMEOUT: job {job_db_id}")
 
@@ -456,5 +469,5 @@ async def auto_complete_training_job(job_db_id: str, user_id: str):
                     job.error_message = f"Internal error: {str(e)[:200]}"
                     job.completed_at = datetime.now(timezone.utc)
                     await db.commit()
-        except Exception:
-            pass
+        except Exception as broadcast_err:
+            logger.warning(f"Village broadcast failed (non-fatal): {broadcast_err}")

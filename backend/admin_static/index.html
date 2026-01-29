@@ -226,7 +226,7 @@
 
           <!-- Features Row -->
           <h3 class="text-sm font-semibold text-gray-400 mb-3 uppercase tracking-wider">Features</h3>
-          <div class="grid md:grid-cols-3 gap-4 mb-6">
+          <div class="grid md:grid-cols-4 gap-4 mb-6">
             <!-- Music -->
             <div class="card">
               <div class="flex items-center justify-between mb-3">
@@ -249,6 +249,20 @@
                 <span class="text-sm font-semibold">Jam Sessions</span>
                 <span class="text-xl font-bold text-pink-400" id="stat-jam-total">-</span>
               </div>
+            </div>
+            <!-- Nursery -->
+            <div class="card">
+              <div class="flex items-center justify-between mb-3">
+                <span class="text-sm font-semibold text-gray-300">Nursery</span>
+                <span class="text-xl font-bold text-emerald-400" id="stat-nursery-jobs">-</span>
+              </div>
+              <div class="text-xs text-gray-400 space-y-1">
+                <div class="flex justify-between"><span>Datasets</span><span class="font-mono" id="stat-nursery-datasets">-</span></div>
+                <div class="flex justify-between"><span>Training Jobs</span><span class="font-mono" id="stat-nursery-jobs-val">-</span></div>
+                <div class="flex justify-between"><span>Models</span><span class="font-mono" id="stat-nursery-models">-</span></div>
+                <div class="flex justify-between"><span>Apprentices</span><span class="font-mono" id="stat-nursery-apprentices">-</span></div>
+              </div>
+              <div id="stat-nursery-breakdown" class="text-xs text-gray-400 space-y-1 mt-2 pt-2 border-t border-gray-700"></div>
             </div>
           </div>
 
@@ -746,6 +760,25 @@
 
         // Jam
         document.getElementById('stat-jam-total').textContent = (stats.total_jam_sessions || 0).toLocaleString();
+
+        // Nursery
+        const nurseryJobsEl = document.getElementById('stat-nursery-jobs');
+        if (nurseryJobsEl) nurseryJobsEl.textContent = (stats.total_nursery_jobs || 0).toLocaleString();
+        const nurseryDsEl = document.getElementById('stat-nursery-datasets');
+        if (nurseryDsEl) nurseryDsEl.textContent = (stats.total_nursery_datasets || 0).toLocaleString();
+        const nurseryJobsValEl = document.getElementById('stat-nursery-jobs-val');
+        if (nurseryJobsValEl) nurseryJobsValEl.textContent = (stats.total_nursery_jobs || 0).toLocaleString();
+        const nurseryModelsEl = document.getElementById('stat-nursery-models');
+        if (nurseryModelsEl) nurseryModelsEl.textContent = (stats.total_nursery_models || 0).toLocaleString();
+        const nurseryApEl = document.getElementById('stat-nursery-apprentices');
+        if (nurseryApEl) nurseryApEl.textContent = (stats.total_nursery_apprentices || 0).toLocaleString();
+        const nurseryBreakdownEl = document.getElementById('stat-nursery-breakdown');
+        if (nurseryBreakdownEl && stats.nursery_jobs_by_status) {
+          const statusColors = { completed: 'text-green-400', running: 'text-yellow-400', pending: 'text-gray-400', failed: 'text-red-400', uploading: 'text-blue-400' };
+          nurseryBreakdownEl.innerHTML = Object.entries(stats.nursery_jobs_by_status).map(([s, c]) =>
+            `<div class="flex justify-between"><span class="capitalize">${s}</span><span class="${statusColors[s] || 'text-gray-400'} font-mono">${c}</span></div>`
+          ).join('');
+        }
 
         // Storage & Memory
         document.getElementById('stat-vectors').textContent = (stats.total_neural_vectors || 0).toLocaleString();

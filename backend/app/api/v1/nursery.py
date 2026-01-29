@@ -13,10 +13,12 @@ from uuid import UUID, uuid4
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.requests import Request
 
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 
+from app.main import limiter
 from app.database import get_db
 from app.api.v1.auth import get_current_user
 from app.models.user import User
@@ -103,30 +105,32 @@ async def list_datasets(
 
 
 @router.post("/datasets/generate")
+@limiter.limit("5/minute")
 async def generate_data(
-    request: GenerateDataRequest,
+    request: Request,
+    body: GenerateDataRequest,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Generate synthetic training data."""
     await _check_adept_tier(user, db)
 
-    if not request.tool_names:
+    if not body.tool_names:
         raise HTTPException(status_code=400, detail="At least one tool name is required")
 
-    if request.num_examples < 1 or request.num_examples > 500:
+    if body.num_examples < 1 or body.num_examples > 500:
         raise HTTPException(status_code=400, detail="num_examples must be between 1 and 500")
 
-    if request.variation_level not in ("low", "medium", "high"):
+    if body.variation_level not in ("low", "medium", "high"):
         raise HTTPException(status_code=400, detail="variation_level must be low, medium, or high")
 
     from app.services.nursery import NurseryService
     result = await NurseryService.generate_synthetic_data(
-        tool_names=request.tool_names,
-        num_examples=request.num_examples,
-        variation_level=request.variation_level,
+        tool_names=body.tool_names,
+        num_examples=body.num_examples,
+        variation_level=body.variation_level,
         user_id=str(user.id),
-        dataset_name=request.dataset_name,
+        dataset_name=body.dataset_name,
     )
 
     if not result.get("success"):
@@ -136,8 +140,10 @@ async def generate_data(
 
 
 @router.post("/datasets/extract")
+@limiter.limit("5/minute")
 async def extract_data(
-    request: ExtractDataRequest,
+    request: Request,
+    body: ExtractDataRequest,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -147,9 +153,9 @@ async def extract_data(
     from app.services.nursery import NurseryService
     result = await NurseryService.extract_conversation_data(
         user_id=str(user.id),
-        tools_filter=request.tools_filter,
-        min_examples=request.min_examples,
-        dataset_name=request.dataset_name,
+        tools_filter=body.tools_filter,
+        min_examples=body.min_examples,
+        dataset_name=body.dataset_name,
     )
 
     if not result.get("success"):
@@ -233,8 +239,10 @@ async def estimate_training_cost(
 
 
 @router.post("/training/start")
+@limiter.limit("3/minute")
 async def start_training(
-    request: StartTrainingRequest,
+    request: Request,
+    body: StartTrainingRequest,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -244,7 +252,6 @@ async def start_training(
     from app.services.nursery import NurseryService
     from app.services.cloud_trainer import CloudTrainerService, auto_complete_training_job
     from app.api.v1.user import get_user_api_key
-    from app.models.nursery import NurseryTrainingJob
 
     # Get Together API key
     api_key = get_user_api_key(user, "together")
@@ -255,18 +262,36 @@ async def start_training(
         )
 
     # Validate dataset
-    dataset = await NurseryService.get_dataset(request.dataset_id, str(user.id))
+    dataset = await NurseryService.get_dataset(body.dataset_id, str(user.id))
     if not dataset:
         raise HTTPException(status_code=404, detail="Dataset not found")
 
+    # Empty dataset validation
+    if not dataset.get("num_examples") or dataset.get("num_examples", 0) < 1:
+        raise HTTPException(status_code=400, detail="Dataset has 0 examples. Generate or extract data first.")
+
     num_examples = dataset.get("num_examples", 0)
+
+    # Check concurrent job limit
+    running_count_result = await db.execute(
+        select(func.count(NurseryTrainingJob.id)).where(
+            NurseryTrainingJob.user_id == user.id,
+            NurseryTrainingJob.status.in_(["pending", "running", "uploading"]),
+        )
+    )
+    running_count = running_count_result.scalar() or 0
+    if running_count >= 3:
+        raise HTTPException(
+            status_code=429,
+            detail="Maximum 3 concurrent training jobs. Wait for a job to complete or cancel one."
+        )
 
     # Get cost estimate
     estimate = CloudTrainerService.estimate_cost(
         num_examples=num_examples,
-        base_model=request.base_model,
-        n_epochs=request.n_epochs,
-        lora=request.lora,
+        base_model=body.base_model,
+        n_epochs=body.n_epochs,
+        lora=body.lora,
     )
 
     # Upload dataset to Together
@@ -276,33 +301,33 @@ async def start_training(
     # Create training job on Together
     job_info = await CloudTrainerService.create_training_job(
         file_id=file_id,
-        base_model=request.base_model,
+        base_model=body.base_model,
         api_key=api_key,
-        n_epochs=request.n_epochs,
-        learning_rate=request.learning_rate,
-        lora=request.lora,
-        suffix=request.suffix,
+        n_epochs=body.n_epochs,
+        learning_rate=body.learning_rate,
+        lora=body.lora,
+        suffix=body.suffix,
     )
 
     # Save job to DB
     config = {
-        "n_epochs": request.n_epochs,
-        "learning_rate": request.learning_rate,
-        "lora": request.lora,
-        "batch_size": request.batch_size,
-        "suffix": request.suffix,
+        "n_epochs": body.n_epochs,
+        "learning_rate": body.learning_rate,
+        "lora": body.lora,
+        "batch_size": body.batch_size,
+        "suffix": body.suffix,
         "file_id": file_id,
     }
-    if request.apprentice_id:
-        config["apprentice_id"] = request.apprentice_id
+    if body.apprentice_id:
+        config["apprentice_id"] = body.apprentice_id
 
     job = NurseryTrainingJob(
         id=uuid4(),
         user_id=user.id,
-        dataset_id=UUID(request.dataset_id),
+        dataset_id=UUID(body.dataset_id),
         provider="together",
         provider_job_id=job_info.get("job_id"),
-        base_model=request.base_model,
+        base_model=body.base_model,
         output_name=job_info.get("output_name"),
         status="running",
         progress=0.0,
@@ -314,10 +339,10 @@ async def start_training(
     await db.flush()
 
     # Update apprentice status if linked
-    if request.apprentice_id:
+    if body.apprentice_id:
         ap_result = await db.execute(
             select(NurseryApprentice).where(
-                NurseryApprentice.id == UUID(request.apprentice_id),
+                NurseryApprentice.id == UUID(body.apprentice_id),
                 NurseryApprentice.user_id == user.id,
             )
         )
@@ -335,12 +360,12 @@ async def start_training(
         "job_id": str(job.id),
         "provider_job_id": job_info.get("job_id"),
         "status": "running",
-        "base_model": request.base_model,
+        "base_model": body.base_model,
         "output_name": job_info.get("output_name"),
         "estimated_cost": estimate.get("estimated_cost_usd"),
         "num_examples": num_examples,
-        "n_epochs": request.n_epochs,
-        "message": f"Training job started. Fine-tuning {request.base_model} with {num_examples} examples.",
+        "n_epochs": body.n_epochs,
+        "message": f"Training job started. Fine-tuning {body.base_model} with {num_examples} examples.",
     }
 
 
@@ -696,8 +721,8 @@ async def register_model_in_village(
             message=f"Model registered in Village: {model.name} ({model.base_model})",
         )
         await broadcaster.broadcast(event)
-    except Exception:
-        pass
+    except Exception as broadcast_err:
+        logger.warning(f"Village broadcast failed (non-fatal): {broadcast_err}")
     return {"success": True, "model_id": str(model.id), "name": model.name, "message": f"Model '{model.name}' registered in the Village."}
 
 
@@ -770,8 +795,10 @@ async def list_apprentices(
 
 
 @router.post("/apprentices")
+@limiter.limit("2/minute")
 async def create_apprentice(
-    request: CreateApprenticeRequest,
+    request: Request,
+    body: CreateApprenticeRequest,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -779,30 +806,30 @@ async def create_apprentice(
     await _check_adept_tier(user, db)
 
     valid_masters = {"AZOTH", "ELYSIAN", "VAJRA", "KETHER"}
-    if request.master_agent not in valid_masters:
+    if body.master_agent not in valid_masters:
         raise HTTPException(status_code=400, detail=f"Invalid master_agent. Must be one of: {', '.join(sorted(valid_masters))}")
 
-    if not request.apprentice_name or len(request.apprentice_name.strip()) < 2:
+    if not body.apprentice_name or len(body.apprentice_name.strip()) < 2:
         raise HTTPException(status_code=400, detail="Apprentice name must be at least 2 characters")
 
     apprentice = NurseryApprentice(
         id=uuid4(),
         user_id=user.id,
-        master_agent=request.master_agent,
-        apprentice_name=request.apprentice_name.strip(),
-        specialization=request.specialization.strip() if request.specialization else None,
+        master_agent=body.master_agent,
+        apprentice_name=body.apprentice_name.strip(),
+        specialization=body.specialization.strip() if body.specialization else None,
         status="dataset_ready",
     )
 
     # Optional: auto-generate training dataset
-    if request.auto_generate:
+    if body.auto_generate:
         from app.services.nursery import NurseryService
         from app.tools import registry
 
         # Parse specialization as comma-separated tool names
         tool_names = []
-        if request.specialization:
-            tool_names = [t.strip() for t in request.specialization.split(",") if t.strip()]
+        if body.specialization:
+            tool_names = [t.strip() for t in body.specialization.split(",") if t.strip()]
 
         # Validate tool names
         all_tools = registry.get_all_tools()
@@ -815,13 +842,13 @@ async def create_apprentice(
             tool_names = [t for t in fallback if t in valid_tool_names]
 
         if tool_names:
-            ds_name = f"apprentice_{request.apprentice_name.strip().lower().replace(' ', '_')}_{request.master_agent.lower()}"
+            ds_name = f"apprentice_{body.apprentice_name.strip().lower().replace(' ', '_')}_{body.master_agent.lower()}"
             result = await NurseryService.generate_synthetic_data(
                 tool_names=tool_names,
-                num_examples=min(request.num_examples, 500),
-                variation_level=request.variation_level,
+                num_examples=min(body.num_examples, 500),
+                variation_level=body.variation_level,
                 user_id=str(user.id),
-                agent_id=request.master_agent,
+                agent_id=body.master_agent,
                 dataset_name=ds_name,
             )
             if result.get("success"):
@@ -841,7 +868,7 @@ async def create_apprentice(
         "dataset_id": str(apprentice.dataset_id) if apprentice.dataset_id else None,
         "message": f"Apprentice '{apprentice.apprentice_name}' created under {apprentice.master_agent}.",
     }
-    if request.auto_generate and apprentice.dataset_id:
+    if body.auto_generate and apprentice.dataset_id:
         response["message"] += f" Dataset generated with {apprentice.num_examples} examples."
 
     return response

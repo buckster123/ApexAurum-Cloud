@@ -399,59 +399,72 @@ Use to:
             from app.models.user import User
             from app.api.v1.user import get_user_api_key
             from app.database import get_db_context
-            from sqlalchemy import select
+            from sqlalchemy import select, func
+            from uuid import uuid4
 
             # 1. Validate dataset
             dataset = await NurseryService.get_dataset(dataset_id, str(context.user_id))
             if not dataset:
                 return ToolResult(success=False, error="Dataset not found")
 
-            # 2. Get Together API key from user settings
+            # Single DB context for user lookup, concurrent check, and job save
             async with get_db_context() as db:
+                # 2. Get Together API key from user settings
                 result = await db.execute(
                     select(User).where(User.id == UUID(str(context.user_id)))
                 )
                 user = result.scalar_one_or_none()
 
-            if not user:
-                return ToolResult(success=False, error="User not found")
+                if not user:
+                    return ToolResult(success=False, error="User not found")
 
-            api_key = get_user_api_key(user, "together")
-            if not api_key:
-                return ToolResult(
-                    success=False,
-                    error="Together.ai API key required. Configure in Settings > API Keys.",
+                api_key = get_user_api_key(user, "together")
+                if not api_key:
+                    return ToolResult(
+                        success=False,
+                        error="Together.ai API key required. Configure in Settings > API Keys.",
+                    )
+
+                # 3. Check concurrent job limit
+                running_count_result = await db.execute(
+                    select(func.count(NurseryTrainingJob.id)).where(
+                        NurseryTrainingJob.user_id == UUID(str(context.user_id)),
+                        NurseryTrainingJob.status.in_(["pending", "running", "uploading"]),
+                    )
+                )
+                running_count = running_count_result.scalar() or 0
+                if running_count >= 3:
+                    return ToolResult(
+                        success=False,
+                        error="Maximum 3 concurrent training jobs. Wait for a job to complete or cancel one.",
+                    )
+
+                # 4. Get cost estimate
+                num_examples = dataset.get("num_examples", 0)
+                estimate = CloudTrainerService.estimate_cost(
+                    num_examples=num_examples,
+                    base_model=base_model,
+                    n_epochs=n_epochs,
+                    lora=lora,
                 )
 
-            # 3. Get cost estimate
-            num_examples = dataset.get("num_examples", 0)
-            estimate = CloudTrainerService.estimate_cost(
-                num_examples=num_examples,
-                base_model=base_model,
-                n_epochs=n_epochs,
-                lora=lora,
-            )
+                # 5. Upload dataset to Together
+                storage_path = dataset.get("storage_path", "")
+                file_id = await CloudTrainerService.upload_dataset(storage_path, api_key)
 
-            # 4. Upload dataset to Together
-            storage_path = dataset.get("storage_path", "")
-            file_id = await CloudTrainerService.upload_dataset(storage_path, api_key)
+                # 6. Create training job on Together
+                job_info = await CloudTrainerService.create_training_job(
+                    file_id=file_id,
+                    base_model=base_model,
+                    api_key=api_key,
+                    n_epochs=n_epochs,
+                    learning_rate=learning_rate,
+                    lora=lora,
+                    suffix=suffix,
+                )
 
-            # 5. Create training job on Together
-            job_info = await CloudTrainerService.create_training_job(
-                file_id=file_id,
-                base_model=base_model,
-                api_key=api_key,
-                n_epochs=n_epochs,
-                learning_rate=learning_rate,
-                lora=lora,
-                suffix=suffix,
-            )
-
-            # 6. Save job to DB
-            from uuid import uuid4
-
-            job_id = uuid4()
-            async with get_db_context() as db:
+                # 7. Save job to DB
+                job_id = uuid4()
                 job = NurseryTrainingJob(
                     id=job_id,
                     user_id=UUID(str(context.user_id)),
@@ -476,7 +489,7 @@ Use to:
                 db.add(job)
                 await db.commit()
 
-            # 7. Fire background polling task
+            # 8. Fire background polling task
             asyncio.create_task(
                 auto_complete_training_job(str(job_id), str(context.user_id))
             )
@@ -1192,10 +1205,10 @@ Use to:
             from app.services.nursery import NurseryService
             from app.services.cloud_trainer import CloudTrainerService, auto_complete_training_job
             from app.api.v1.user import get_user_api_key
-            from sqlalchemy import select
+            from sqlalchemy import select, func
             from uuid import uuid4
 
-            # 1. Resolve apprentice and dataset
+            # 1. Resolve apprentice, user, and check concurrent jobs in one DB context
             async with get_db_context() as db:
                 ap_result = await db.execute(
                     select(NurseryApprentice).where(
@@ -1205,8 +1218,30 @@ Use to:
                 )
                 apprentice = ap_result.scalar_one_or_none()
 
-            if not apprentice:
-                return ToolResult(success=False, error="Apprentice not found")
+                if not apprentice:
+                    return ToolResult(success=False, error="Apprentice not found")
+
+                user_result = await db.execute(
+                    select(User).where(User.id == UUID(str(context.user_id)))
+                )
+                user = user_result.scalar_one_or_none()
+
+                if not user:
+                    return ToolResult(success=False, error="User not found")
+
+                # Check concurrent job limit
+                running_count_result = await db.execute(
+                    select(func.count(NurseryTrainingJob.id)).where(
+                        NurseryTrainingJob.user_id == UUID(str(context.user_id)),
+                        NurseryTrainingJob.status.in_(["pending", "running", "uploading"]),
+                    )
+                )
+                running_count = running_count_result.scalar() or 0
+                if running_count >= 3:
+                    return ToolResult(
+                        success=False,
+                        error="Maximum 3 concurrent training jobs. Wait for a job to complete or cancel one.",
+                    )
 
             # Resolve dataset: prefer explicit param, fall back to apprentice's dataset
             resolved_dataset_id = dataset_id or (str(apprentice.dataset_id) if apprentice.dataset_id else None)
@@ -1221,15 +1256,6 @@ Use to:
             num_examples = dataset.get("num_examples", 0)
 
             # 3. Get Together API key
-            async with get_db_context() as db:
-                user_result = await db.execute(
-                    select(User).where(User.id == UUID(str(context.user_id)))
-                )
-                user = user_result.scalar_one_or_none()
-
-            if not user:
-                return ToolResult(success=False, error="User not found")
-
             api_key = get_user_api_key(user, "together")
             if not api_key:
                 return ToolResult(

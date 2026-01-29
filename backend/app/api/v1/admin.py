@@ -77,6 +77,12 @@ class StatsResponse(BaseModel):
     total_council_sessions: int
     council_by_state: dict
     total_jam_sessions: int
+    # Nursery
+    total_nursery_datasets: int = 0
+    total_nursery_jobs: int = 0
+    nursery_jobs_by_status: dict = {}
+    total_nursery_models: int = 0
+    total_nursery_apprentices: int = 0
     # Storage
     total_vault_files: int
     total_vault_storage_mb: float
@@ -322,6 +328,36 @@ async def get_stats(
     except Exception as e:
         logger.debug(f"Jam stats unavailable: {e}")
 
+    # --- Nursery ---
+    total_nursery_datasets = 0
+    total_nursery_jobs = 0
+    nursery_jobs_by_status = {}
+    total_nursery_models = 0
+    total_nursery_apprentices = 0
+    try:
+        from app.models.nursery import NurseryDataset, NurseryTrainingJob, NurseryModelRecord, NurseryApprentice
+
+        ds_count = await db.execute(select(func.count(NurseryDataset.id)))
+        total_nursery_datasets = ds_count.scalar() or 0
+
+        job_count = await db.execute(select(func.count(NurseryTrainingJob.id)))
+        total_nursery_jobs = job_count.scalar() or 0
+
+        # Jobs by status breakdown
+        job_status_query = await db.execute(
+            select(NurseryTrainingJob.status, func.count(NurseryTrainingJob.id))
+            .group_by(NurseryTrainingJob.status)
+        )
+        nursery_jobs_by_status = {status: count for status, count in job_status_query.fetchall()}
+
+        model_count = await db.execute(select(func.count(NurseryModelRecord.id)))
+        total_nursery_models = model_count.scalar() or 0
+
+        ap_count = await db.execute(select(func.count(NurseryApprentice.id)))
+        total_nursery_apprentices = ap_count.scalar() or 0
+    except Exception as e:
+        logger.debug(f"Nursery stats unavailable: {e}")
+
     # --- Vault (files) ---
     total_vault_files = 0
     total_vault_storage_mb = 0.0
@@ -367,6 +403,11 @@ async def get_stats(
         total_council_sessions=total_council_sessions,
         council_by_state=council_by_state,
         total_jam_sessions=total_jam_sessions,
+        total_nursery_datasets=total_nursery_datasets,
+        total_nursery_jobs=total_nursery_jobs,
+        nursery_jobs_by_status=nursery_jobs_by_status,
+        total_nursery_models=total_nursery_models,
+        total_nursery_apprentices=total_nursery_apprentices,
         total_vault_files=total_vault_files,
         total_vault_storage_mb=total_vault_storage_mb,
         total_neural_vectors=total_neural_vectors,

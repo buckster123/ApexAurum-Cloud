@@ -1,4 +1,4 @@
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 import api from '@/services/api'
 
@@ -43,6 +43,21 @@ export const useNurseryStore = defineStore('nursery', () => {
   const loadingApprentices = ref(false)
   const creatingApprentice = ref(false)
 
+  // Error tracking
+  const lastError = ref(null)
+
+  // Computed properties
+  const totalDatasets = computed(() => stats.value.datasets || datasets.value.length)
+  const totalExamples = computed(() => {
+    if (stats.value.total_examples) return stats.value.total_examples
+    return datasets.value.reduce((sum, d) => sum + (d.num_examples || 0), 0)
+  })
+  const runningJobs = computed(() => trainingJobs.value.filter(j => ['running', 'uploading', 'pending'].includes(j.status)).length)
+  const completedJobs = computed(() => trainingJobs.value.filter(j => j.status === 'completed').length)
+  const trainedApprentices = computed(() => apprentices.value.filter(a => a.status === 'trained').length)
+  const trainingApprentices = computed(() => apprentices.value.filter(a => a.status === 'training').length)
+  const villageModels = computed(() => models.value.filter(m => m.village_posted).length)
+
   // Actions
   async function fetchDatasets() {
     loading.value = true
@@ -50,11 +65,13 @@ export const useNurseryStore = defineStore('nursery', () => {
       const response = await api.get('/api/v1/nursery/datasets')
       datasets.value = response.data.datasets || []
       tierRequired.value = false
+      lastError.value = null
     } catch (error) {
       if (error.response?.status === 403) {
         tierRequired.value = true
       }
       console.error('Failed to fetch datasets:', error)
+      lastError.value = { action: 'fetchDatasets', message: error.response?.data?.detail || error.message, timestamp: Date.now() }
     } finally {
       loading.value = false
     }
@@ -76,9 +93,11 @@ export const useNurseryStore = defineStore('nursery', () => {
       await fetchDatasets()
       await fetchStats()
 
+      lastError.value = null
       return response.data
     } catch (error) {
       console.error('Generate failed:', error)
+      lastError.value = { action: 'generateData', message: error.response?.data?.detail || error.message, timestamp: Date.now() }
       throw error
     } finally {
       generating.value = false
@@ -99,9 +118,11 @@ export const useNurseryStore = defineStore('nursery', () => {
       await fetchDatasets()
       await fetchStats()
 
+      lastError.value = null
       return response.data
     } catch (error) {
       console.error('Extract failed:', error)
+      lastError.value = { action: 'extractData', message: error.response?.data?.detail || error.message, timestamp: Date.now() }
       throw error
     } finally {
       extracting.value = false
@@ -113,9 +134,11 @@ export const useNurseryStore = defineStore('nursery', () => {
       await api.delete(`/api/v1/nursery/datasets/${datasetId}`)
       datasets.value = datasets.value.filter(d => d.id !== datasetId)
       await fetchStats()
+      lastError.value = null
       return true
     } catch (error) {
       console.error('Delete failed:', error)
+      lastError.value = { action: 'deleteDataset', message: error.response?.data?.detail || error.message, timestamp: Date.now() }
       return false
     }
   }
@@ -124,8 +147,10 @@ export const useNurseryStore = defineStore('nursery', () => {
     try {
       const response = await api.get('/api/v1/nursery/stats')
       stats.value = response.data
+      lastError.value = null
     } catch (error) {
       console.error('Failed to fetch stats:', error)
+      lastError.value = { action: 'fetchStats', message: error.response?.data?.detail || error.message, timestamp: Date.now() }
     }
   }
 
@@ -135,11 +160,13 @@ export const useNurseryStore = defineStore('nursery', () => {
       const params = statusFilter ? { status: statusFilter } : {}
       const response = await api.get('/api/v1/nursery/training/jobs', { params })
       trainingJobs.value = response.data.jobs || []
+      lastError.value = null
     } catch (error) {
       if (error.response?.status === 403) {
         tierRequired.value = true
       }
       console.error('Failed to fetch training jobs:', error)
+      lastError.value = { action: 'fetchTrainingJobs', message: error.response?.data?.detail || error.message, timestamp: Date.now() }
     } finally {
       loadingJobs.value = false
     }
@@ -149,8 +176,10 @@ export const useNurseryStore = defineStore('nursery', () => {
     try {
       const response = await api.get('/api/v1/nursery/training/models')
       trainableModels.value = response.data.models || []
+      lastError.value = null
     } catch (error) {
       console.error('Failed to fetch trainable models:', error)
+      lastError.value = { action: 'fetchTrainableModels', message: error.response?.data?.detail || error.message, timestamp: Date.now() }
     }
   }
 
@@ -165,16 +194,19 @@ export const useNurseryStore = defineStore('nursery', () => {
         lora: lora,
       })
       costEstimate.value = response.data
+      lastError.value = null
       return response.data
     } catch (error) {
       console.error('Estimate failed:', error)
+      lastError.value = { action: 'estimateCost', message: error.response?.data?.detail || error.message, timestamp: Date.now() }
       throw error
     } finally {
       estimating.value = false
     }
   }
 
-  async function startTraining(datasetId, baseModel, nEpochs, learningRate, lora, batchSize, suffix) {
+  async function startTraining(options = {}) {
+    const { datasetId, baseModel, nEpochs, learningRate, lora, batchSize, suffix, apprenticeId } = options
     startingTraining.value = true
     try {
       const payload = {
@@ -186,6 +218,7 @@ export const useNurseryStore = defineStore('nursery', () => {
       }
       if (batchSize) payload.batch_size = batchSize
       if (suffix) payload.suffix = suffix
+      if (apprenticeId) payload.apprentice_id = apprenticeId
 
       const response = await api.post('/api/v1/nursery/training/start', payload)
 
@@ -193,9 +226,11 @@ export const useNurseryStore = defineStore('nursery', () => {
       await fetchTrainingJobs()
       await fetchStats()
 
+      lastError.value = null
       return response.data
     } catch (error) {
       console.error('Start training failed:', error)
+      lastError.value = { action: 'startTraining', message: error.response?.data?.detail || error.message, timestamp: Date.now() }
       throw error
     } finally {
       startingTraining.value = false
@@ -207,9 +242,11 @@ export const useNurseryStore = defineStore('nursery', () => {
       await api.post(`/api/v1/nursery/training/jobs/${jobId}/cancel`)
       await fetchTrainingJobs()
       await fetchStats()
+      lastError.value = null
       return true
     } catch (error) {
       console.error('Cancel failed:', error)
+      lastError.value = { action: 'cancelJob', message: error.response?.data?.detail || error.message, timestamp: Date.now() }
       return false
     }
   }
@@ -220,13 +257,15 @@ export const useNurseryStore = defineStore('nursery', () => {
       const providers = response.data.providers || response.data || {}
       const together = providers.together || providers['together'] || {}
       hasTogetherKey.value = !!together.configured
+      lastError.value = null
     } catch (error) {
       console.error('Failed to check API key status:', error)
+      lastError.value = { action: 'checkTogetherKey', message: error.response?.data?.detail || error.message, timestamp: Date.now() }
       hasTogetherKey.value = false
     }
   }
 
-  // ── Model Cradle ──────────────────────────────────────────────
+  // -- Model Cradle --
 
   async function fetchModels() {
     loadingModels.value = true
@@ -234,9 +273,11 @@ export const useNurseryStore = defineStore('nursery', () => {
       const response = await api.get('/api/v1/nursery/models')
       models.value = response.data.models || []
       tierRequired.value = false
+      lastError.value = null
     } catch (error) {
       if (error.response?.status === 403) tierRequired.value = true
       console.error('Failed to fetch models:', error)
+      lastError.value = { action: 'fetchModels', message: error.response?.data?.detail || error.message, timestamp: Date.now() }
     } finally {
       loadingModels.value = false
     }
@@ -245,9 +286,11 @@ export const useNurseryStore = defineStore('nursery', () => {
   async function fetchModelDetail(modelId) {
     try {
       const response = await api.get(`/api/v1/nursery/models/${modelId}`)
+      lastError.value = null
       return response.data
     } catch (error) {
       console.error('Failed to fetch model detail:', error)
+      lastError.value = { action: 'fetchModelDetail', message: error.response?.data?.detail || error.message, timestamp: Date.now() }
       return null
     }
   }
@@ -258,9 +301,11 @@ export const useNurseryStore = defineStore('nursery', () => {
       const idx = models.value.findIndex(m => m.id === modelId)
       if (idx !== -1) models.value[idx].village_posted = true
       await fetchStats()
+      lastError.value = null
       return response.data
     } catch (error) {
       console.error('Register model failed:', error)
+      lastError.value = { action: 'registerModel', message: error.response?.data?.detail || error.message, timestamp: Date.now() }
       throw error
     }
   }
@@ -270,14 +315,16 @@ export const useNurseryStore = defineStore('nursery', () => {
       await api.delete(`/api/v1/nursery/models/${modelId}`)
       models.value = models.value.filter(m => m.id !== modelId)
       await fetchStats()
+      lastError.value = null
       return true
     } catch (error) {
       console.error('Delete model failed:', error)
+      lastError.value = { action: 'deleteModel', message: error.response?.data?.detail || error.message, timestamp: Date.now() }
       return false
     }
   }
 
-  // ── Village Feed ──────────────────────────────────────────────
+  // -- Village Feed --
 
   async function discoverModels(query) {
     loadingDiscovery.value = true
@@ -286,8 +333,10 @@ export const useNurseryStore = defineStore('nursery', () => {
       if (query) params.query = query
       const response = await api.get('/api/v1/nursery/discover', { params })
       discoveredModels.value = response.data.models || []
+      lastError.value = null
     } catch (error) {
       console.error('Discover models failed:', error)
+      lastError.value = { action: 'discoverModels', message: error.response?.data?.detail || error.message, timestamp: Date.now() }
     } finally {
       loadingDiscovery.value = false
     }
@@ -298,14 +347,16 @@ export const useNurseryStore = defineStore('nursery', () => {
     try {
       const response = await api.get('/api/v1/nursery/village-activity')
       villageActivity.value = response.data.activity || []
+      lastError.value = null
     } catch (error) {
       console.error('Failed to fetch village activity:', error)
+      lastError.value = { action: 'fetchVillageActivity', message: error.response?.data?.detail || error.message, timestamp: Date.now() }
     } finally {
       loadingActivity.value = false
     }
   }
 
-  // ── Apprentice Protocol ───────────────────────────────────────
+  // -- Apprentice Protocol --
 
   async function fetchApprentices() {
     loadingApprentices.value = true
@@ -313,9 +364,11 @@ export const useNurseryStore = defineStore('nursery', () => {
       const response = await api.get('/api/v1/nursery/apprentices')
       apprentices.value = response.data.apprentices || []
       tierRequired.value = false
+      lastError.value = null
     } catch (error) {
       if (error.response?.status === 403) tierRequired.value = true
       console.error('Failed to fetch apprentices:', error)
+      lastError.value = { action: 'fetchApprentices', message: error.response?.data?.detail || error.message, timestamp: Date.now() }
     } finally {
       loadingApprentices.value = false
     }
@@ -336,9 +389,11 @@ export const useNurseryStore = defineStore('nursery', () => {
       const response = await api.post('/api/v1/nursery/apprentices', payload)
       await fetchApprentices()
       await fetchStats()
+      lastError.value = null
       return response.data
     } catch (error) {
       console.error('Create apprentice failed:', error)
+      lastError.value = { action: 'createApprentice', message: error.response?.data?.detail || error.message, timestamp: Date.now() }
       throw error
     } finally {
       creatingApprentice.value = false
@@ -350,9 +405,11 @@ export const useNurseryStore = defineStore('nursery', () => {
       await api.delete(`/api/v1/nursery/apprentices/${apprenticeId}`)
       apprentices.value = apprentices.value.filter(a => a.id !== apprenticeId)
       await fetchStats()
+      lastError.value = null
       return true
     } catch (error) {
       console.error('Delete apprentice failed:', error)
+      lastError.value = { action: 'deleteApprentice', message: error.response?.data?.detail || error.message, timestamp: Date.now() }
       return false
     }
   }
@@ -374,5 +431,8 @@ export const useNurseryStore = defineStore('nursery', () => {
     // Apprentice Protocol
     apprentices, loadingApprentices, creatingApprentice,
     fetchApprentices, createApprentice, deleteApprentice,
+    // Computed + error
+    lastError, totalDatasets, totalExamples, runningJobs, completedJobs,
+    trainedApprentices, trainingApprentices, villageModels,
   }
 })
