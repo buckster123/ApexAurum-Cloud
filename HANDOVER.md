@@ -1299,38 +1299,108 @@ uploadUrl + style → upload-cover API → AI-transformed track
 
 ---
 
+## Session 23 Accomplishments
+
+### Nursery Session C: Model Cradle + Village (v101) - COMPLETE
+- **6 new API endpoints:** list models, model detail, register in Village, delete model, discover Village models, village activity feed
+- **3 new tools:** nursery_list_models, nursery_register_model, nursery_discover_models (65 tools total)
+- **Model Cradle tab (Tab 3):** Stats bar (model count, village-posted count), model cards grid with type badges (LoRA/Cloud/Uploaded), capability gold tags, Village registration button, confirm-delete pattern, empty state linking to Forge
+- **Village Feed tab (Tab 5):** Activity feed merging training jobs + model events sorted by time, model discovery search with semantic query via neural memory
+- **Store extended:** models, loadingModels, villageActivity, loadingActivity, discoveredModels, loadingDiscovery, discoveryQuery state + 6 actions (fetchModels, fetchModelDetail, registerModel, deleteModel, discoverModels, fetchVillageActivity)
+- **Bug fixes discovered during planning:**
+  - `EventType.TOOL_RESULT` (nonexistent) fixed to `EventType.TOOL_COMPLETE` in cloud_trainer.py
+  - Removed invalid `user_id` kwarg from VillageEvent constructor -- both bugs caused Village broadcasts to silently fail on training completion
+- **Village zone map:** All 10 nursery tools registered in `TOOL_ZONE_MAP` in village_events.py
+- **Route ordering:** GET /discover and GET /village-activity placed before GET /models/{model_id} to avoid FastAPI path capture
+
+### Nursery Session D: Apprentice Protocol + Autonomy (v102) - COMPLETE
+- **3 new API endpoints:** GET/POST/DELETE /apprentices with full CRUD
+- **Enhanced start_training endpoint:** Now accepts optional `apprentice_id` to link training jobs to apprentices
+- **3 new tools:** nursery_create_apprentice, nursery_list_apprentices, nursery_auto_train (68 tools total)
+- **nursery_auto_train tool** -- Full autonomous pipeline:
+  1. Resolve dataset from apprentice_id or direct dataset_id
+  2. Validate dataset, get Together API key
+  3. Estimate cost (CloudTrainerService.estimate_cost)
+  4. **Cost guard:** abort if estimated_cost > max_cost ($5.00 default)
+  5. Upload dataset, create training job (stores apprentice_id in config JSONB)
+  6. Update apprentice status to "training"
+  7. Fire asyncio.create_task(auto_complete_training_job)
+- **Apprentice lifecycle in auto_complete_training_job:**
+  - On completion: sets apprentice status="trained", links model_id
+  - On failure: sets apprentice status="failed"
+  - On timeout: sets apprentice status="failed"
+  - Reads apprentice_id from job.config JSONB (no schema change needed)
+- **POST /apprentices with auto-generate:** Parses specialization as comma-separated tool names, validates against registry, calls NurseryService.generate_synthetic_data to create dataset
+- **Apprentice tab (Tab 4):** Two-column layout:
+  - Left: Create form with master agent selector (4 color-coded buttons), name input, specialization input, auto-generate toggle with examples slider (10-500), error/success messages
+  - Right: Stats bar (total/training/trained), apprentice cards with master color, status badge (dataset_ready/training/trained/failed), dataset/model info, "Start Training" button for dataset_ready apprentices, confirm-delete
+- **NURSERY_KEEPER.txt:** Internal prompt file (NOT added to NATIVE_AGENTS, preserves "Four Alchemists")
+- **Store:** apprentices, loadingApprentices, creatingApprentice state + fetchApprentices, createApprentice, deleteApprentice actions
+
+### Environment
+- Build: v102-apprentice-protocol
+- Frontend CACHE_BUST: 21
+- Tools: 68 (13 Nursery tools: 3 Data Garden + 4 Training Forge + 3 Model Cradle + 3 Apprentice Protocol)
+- Commits: e3e7cf9 (v101), 4d31bef (v102)
+
+### Key Files Modified/Created (Session 23)
+
+| File | Status | Changes |
+|------|--------|---------|
+| `backend/app/services/cloud_trainer.py` | EDIT | Fix Village broadcast bugs + apprentice lifecycle hooks |
+| `backend/app/services/village_events.py` | EDIT | Add 10 nursery tools to TOOL_ZONE_MAP |
+| `backend/app/api/v1/nursery.py` | EDIT | 9 new endpoints + schemas, enhanced start_training |
+| `backend/app/tools/nursery.py` | EDIT | 6 new tools (13 total nursery tools) |
+| `backend/native_prompts/NURSERY_KEEPER.txt` | NEW | Internal keeper prompt for autonomous operations |
+| `frontend/src/stores/nursery.js` | EDIT | Model + Village + Apprentice state + 9 actions |
+| `frontend/src/views/NurseryView.vue` | EDIT | Tab 3 (Model Cradle), Tab 4 (Apprentices), Tab 5 (Village Feed) |
+| `backend/app/main.py` | EDIT | v102, 68 tools, 2 new feature flags |
+| `frontend/src/views/ChatView.vue` | EDIT | 68 Tools tagline |
+| `frontend/src/views/LoginView.vue` | EDIT | 68 Tools tagline |
+| `frontend/src/views/LandingView.vue` | EDIT | 68 Tools tagline |
+| `backend/app/api/v1/billing.py` | EDIT | 68 tools in Alchemist text |
+| `frontend/Dockerfile` | EDIT | CACHE_BUST=21 |
+
+---
+
 ## Nursery Roadmap Progress
 
 | Session | Scope | Status |
 |---------|-------|--------|
 | **A: Foundation** | Models, migrations, Data Garden tools, NurseryView | DONE (Session 21) |
 | **B: Training Forge** | CloudTrainerService, Together.ai, training tools/endpoints/tab | DONE (Session 22) |
-| **C: Model Cradle + Village** | Model management, Village registration, model discovery | TODO |
-| **D: Apprentice Protocol + Autonomy** | Apprentice creation, auto_train, cost guards | TODO |
+| **C: Model Cradle + Village** | Model management, Village registration, model discovery | DONE (Session 23) |
+| **D: Apprentice Protocol + Autonomy** | Apprentice creation, auto_train, cost guards | DONE (Session 23) |
 | **E: Polish** | Stats dashboard, error handling, end-to-end testing | TODO |
 
-### Session C: Model Cradle + Village (next)
+### Session E: Polish (next)
 Per `NURSERY_MASTERPLAN.md` (local, .gitignored):
-- **Model management** - list/detail/delete trained models (NurseryModelRecord already exists in DB)
-- **Village registration** - post training events, share models
-- **Model discovery** - search Village for shared models
-- **Model Cradle tab** (Tab 3) - trained models grid, per-model stats, "Register in Village" button
-- **Village Feed tab** (Tab 5) - recent training events, model discovery search
-- **Tools:** nursery_list_models, nursery_register_model, nursery_discover_models
-- **Endpoints:** GET /models, GET /models/{id}, POST /models/{id}/register, DELETE /models/{id}, GET /models/discover, GET /village-activity
-- The NurseryModelRecord is already auto-created by `auto_complete_training_job` on training completion, so models will exist when jobs finish
+- **Stats dashboard improvements** - Nursery-specific stats in admin panel, per-user training cost tracking
+- **Error handling** - edge cases in auto_train pipeline (missing datasets, expired API keys, concurrent job limits)
+- **Rate limiting** - per-user nursery endpoint rate limits (training jobs are expensive)
+- **End-to-end testing** - test with real Together.ai key: create dataset -> estimate -> train -> poll -> complete -> model record -> Village registration
+- **UI polish** - loading states, transition animations, mobile responsiveness of 5-tab interface
+- **NurseryView.vue** is now ~1500+ lines -- consider extracting tab components if needed
 
-### Session D: Apprentice Protocol + Autonomy
-- Apprentice creation from Village knowledge (NurseryApprentice model already in DB)
-- nursery_create_apprentice, nursery_auto_train tools
-- Apprentice tab (Tab 4) in NurseryView
-- Autonomy mode with cost guards ($5 max default)
-- NURSERY_KEEPER agent prompt
+### Nursery Architecture Summary
+```
+NurseryView.vue (5 tabs)
+├── Tab 1: Data Garden (generate/extract datasets)
+├── Tab 2: Training Forge (Together.ai fine-tuning)
+├── Tab 3: Model Cradle (trained models, Village registration)
+├── Tab 4: Apprentices (create, auto-train, lifecycle)
+└── Tab 5: Village Feed (activity + model discovery)
 
-### Session E: Polish
-- Stats dashboard improvements
-- Error handling, edge cases, rate limiting
-- End-to-end testing with real Together.ai key
+Backend:
+├── models/nursery.py (4 tables: Dataset, TrainingJob, ModelRecord, Apprentice)
+├── services/nursery.py (NurseryService: data generation, extraction)
+├── services/cloud_trainer.py (CloudTrainerService: Together.ai + background poller)
+├── api/v1/nursery.py (~20 endpoints across all 5 feature areas)
+├── tools/nursery.py (13 tools across Data Garden, Forge, Cradle, Apprentice)
+└── native_prompts/NURSERY_KEEPER.txt (internal prompt)
+
+Store: frontend/src/stores/nursery.js (~400 lines, ~20 state refs, ~15 actions)
+```
 
 ### Remaining Beta Items
 - DNS setup for apexaurum.cloud
