@@ -33,6 +33,9 @@
     .input {
       @apply w-full px-3 py-2 bg-apex-dark border border-apex-border rounded-lg text-white placeholder-gray-500 focus:border-gold focus:outline-none;
     }
+    /* Ensure password dots and all input text are visible on dark bg */
+    input, select, textarea { color: #ffffff !important; }
+    input::placeholder { color: #6b7280 !important; }
     .card {
       @apply bg-apex-card border border-apex-border rounded-xl p-6;
     }
@@ -306,6 +309,9 @@
       const email = document.getElementById('login-email').value;
       const password = document.getElementById('login-password').value;
       const errorEl = document.getElementById('login-error');
+      errorEl.classList.add('hidden');
+
+      console.log('[Admin] Logging in as:', email, '→', API_BASE);
 
       try {
         const res = await fetch(`${API_BASE}/api/v1/auth/login`, {
@@ -314,19 +320,23 @@
           body: JSON.stringify({ email, password })
         });
 
+        console.log('[Admin] Login response:', res.status);
+
         if (!res.ok) {
-          const data = await res.json();
-          throw new Error(data.detail || 'Login failed');
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.detail || `Login failed (${res.status})`);
         }
 
         const data = await res.json();
         token = data.access_token;
         localStorage.setItem('admin_token', token);
+        console.log('[Admin] Token received, checking admin status...');
 
         // Check if user is admin
         await checkAuth();
       } catch (err) {
-        errorEl.textContent = err.message;
+        console.error('[Admin] Login error:', err);
+        errorEl.textContent = err.message || 'Connection failed - check console';
         errorEl.classList.remove('hidden');
       }
     });
@@ -337,12 +347,17 @@
           headers: { 'Authorization': `Bearer ${token}` }
         });
 
+        console.log('[Admin] Auth check:', res.status);
+
         if (!res.ok) throw new Error('Not authenticated');
 
         const user = await res.json();
+        console.log('[Admin] User:', user.email, 'is_admin:', user.is_admin);
 
         if (!user.is_admin) {
-          alert('Admin access required');
+          const errorEl = document.getElementById('login-error');
+          errorEl.textContent = `Logged in as ${user.email} but is_admin is false. Set INITIAL_ADMIN_EMAIL=${user.email} in Railway backend env vars and redeploy.`;
+          errorEl.classList.remove('hidden');
           logout();
           return;
         }
@@ -353,6 +368,7 @@
 
         showTab('coupons');
       } catch (err) {
+        console.error('[Admin] Auth check failed:', err);
         logout();
       }
     }
