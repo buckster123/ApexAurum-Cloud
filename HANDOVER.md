@@ -1047,7 +1047,7 @@ uploadUrl + style → upload-cover API → AI-transformed track
 ## Session 19 Accomplishments
 
 ### Tier 2 Security Hardening (v95) - COMPLETE
-**Commits:** 497fcd0
+**Commits:** 497fcd0, 42854e3, af6cd2d, e8a9e88, 8841b80
 
 1. **Tool execution timeout** - `asyncio.wait_for()` wraps all tool execution, 120s default, configurable via `TOOL_EXECUTION_TIMEOUT` env var
 2. **Coupon unique constraint** - DB-level `UniqueConstraint('coupon_id', 'user_id')` on `coupon_redemptions` + `IntegrityError` catch returns clean 400
@@ -1097,29 +1097,39 @@ uploadUrl + style → upload-cover API → AI-transformed track
 | `frontend/src/components/BugReportModal.vue` | **NEW** - bug report form modal |
 | `frontend/src/App.vue` | Mount ToastContainer |
 | `frontend/src/components/Navbar.vue` | Bug report button + BugReportModal |
-| `frontend/src/views/ChatView.vue` | Replace alert() with toast |
+| `frontend/src/views/ChatView.vue` | Replace alert() with toast, persist selectedAgent in localStorage |
 | `frontend/src/views/FilesView.vue` | Replace alert() calls with toasts |
 | `frontend/src/views/SettingsView.vue` | Surface save/delete failures via toast |
 | `frontend/Dockerfile` | CACHE_BUST=16 |
 | `backend/app/main.py` | v96-beta-polish |
+| `frontend/src/views/LoginView.vue` | Fix stale tagline (140 -> 55 tools) |
+| `frontend/src/views/LandingView.vue` | **NEW** - Public landing page |
+| `frontend/src/router/index.js` | Landing route for guests, /chat redirect for authenticated |
+
+### Additional Fixes
+- **Stale tagline fixed** - "140 Tools. Five Minds." updated to "55 Tools. Four Alchemists." on login and chat welcome
+- **Landing page** - Hero, agent showcase, feature grid, pricing tiers, CTAs. Guests see at `/`, authenticated users go to `/chat`
+- **Agent selection persistence** - `selectedAgent` saved to localStorage, survives navigation between pages
 
 ---
 
 ## Beta Launch Status
 
-**All security audit items complete (Tier 1 + Tier 2).** Beta polish applied.
+**All security audit items complete (Tier 1 + Tier 2).** Beta polish applied. Landing page live.
 
 ### Ready for Beta
 - Security: rate limiting, auth on all WebSockets, input validation, exception hiding
 - Data integrity: DB constraints on credits and coupons
-- UX: toast notifications replace silent failures, bug reporting for testers
+- UX: toast notifications, bug reporting, agent persistence across navigation
 - Admin: full dashboard with user management, coupons, stats, and bug reports
+- Landing page with pricing, features, and agent showcase
+- INITIAL_ADMIN_PASSWORD set in Railway
 
 ### Remaining Before Public Launch
-- Set `INITIAL_ADMIN_PASSWORD` env var in Railway
-- Landing page
+- DNS setup for apexaurum.cloud (CNAME to Railway frontend)
 - Backfill assistant messages from neural memory (pre-streaming-fix conversations)
 - Community beta testing with access coupons
+- Landing page copy refinement (optional, iterate based on feedback)
 
 ### Future Ideas (Not Blocking Launch)
 - Additional LLM providers (expand OSS model coverage)
