@@ -1198,6 +1198,74 @@ uploadUrl + style → upload-cover API → AI-transformed track
 
 ---
 
+## Session 21 Accomplishments
+
+### Nursery Session A: Foundation (v98) - COMPLETE
+- **4 SQLAlchemy models** - NurseryDataset, NurseryTrainingJob, NurseryModelRecord, NurseryApprentice
+- **DB migrations** - 4 CREATE TABLE + 8 indexes, idempotent
+- **NurseryService** - synthetic data generation (rule-based, no LLM), conversation extraction (mines tool calls from chat history, deduplicates via MD5, ChatML JSONL output)
+- **3 Data Garden tools** (Tier 15) - nursery_generate_data, nursery_extract_data, nursery_list_datasets
+- **5 API endpoints** - /nursery/datasets CRUD + /nursery/stats, all Adept-tier gated
+- **NurseryView.vue** - 5-tab interface, functional Data Garden (generate, extract, dataset list with preview), 4 placeholder tabs
+- **Pinia store** - nursery.js with full state management
+- **Navbar + router** - "Nursery" link between Neural and Jam
+
+### Bug Fix: Nursery Page Crash - COMPLETE
+- **Root cause:** Vue 3 `<script setup>` auto-unwraps refs in templates. `isToolSelected()` and `toggleTool()` received unwrapped arrays from template, but called `.value` on them (undefined on arrays). Crashed the render on every page load.
+- **Fix:** `Array.isArray(list) ? list : list.value` handles both ref and unwrapped cases
+- **Tier gate:** Added `tierRequired` flag in store (set on 403), NurseryView shows amber "Adept Tier Required" card with upgrade link for non-Adept users
+
+### Environment
+- Build: v98-nursery-foundation
+- Frontend CACHE_BUST: 18
+- Tools: 58 (3 new Nursery Data Garden tools)
+- Commits: 309aee7, b838869
+
+### Key Files Modified/Created (Session 21)
+
+| File | Status | Changes |
+|------|--------|---------|
+| `backend/app/models/nursery.py` | NEW | 4 SQLAlchemy models |
+| `backend/app/services/nursery.py` | NEW | NurseryService with data generation + extraction |
+| `backend/app/tools/nursery.py` | NEW | 3 Data Garden tools (Tier 15) |
+| `backend/app/api/v1/nursery.py` | NEW | 5 endpoints, Adept-gated |
+| `frontend/src/views/NurseryView.vue` | NEW | Data Garden tab + placeholders + tier gate |
+| `frontend/src/stores/nursery.js` | NEW | Pinia store with tierRequired flag |
+| `backend/app/models/__init__.py` | EDIT | Import 4 nursery models |
+| `backend/app/models/user.py` | EDIT | 4 nursery relationship back_populates |
+| `backend/app/database.py` | EDIT | 4 table migrations + indexes |
+| `backend/app/tools/base.py` | EDIT | NURSERY category |
+| `backend/app/tools/__init__.py` | EDIT | Register nursery tools (Tier 15) |
+| `backend/app/api/v1/__init__.py` | EDIT | Include nursery router |
+| `backend/app/main.py` | EDIT | v98, 58 tools, nursery-data-garden feature |
+| `frontend/Dockerfile` | EDIT | CACHE_BUST=18 |
+| `frontend/src/router/index.js` | EDIT | /nursery route |
+| `frontend/src/components/Navbar.vue` | EDIT | Nursery nav link |
+
+---
+
+## Next Session Priorities
+
+### 1. Tier Alignment + Billing Text (HIGH)
+- **Tier badges on BillingView** need updating to mention Nursery access for Adept
+- **Tool count taglines** need updating (55 -> 58 tools) on login, landing, chat welcome
+- **Tier descriptions** across the app need review for consistency with new features
+- **Adept tier check** in nursery API uses `user.settings.subscription_tier` -- verify this matches Stripe subscription flow
+
+### 2. Nursery Session B: Training Forge
+- Together.ai integration (upload dataset -> start job -> poll status)
+- nursery_train, nursery_estimate_cost, nursery_job_status tools
+- Training Forge tab with job monitoring
+- BYOK key retrieval for GPU providers
+- See `NURSERY_MASTERPLAN.md` (local, .gitignored) for full spec
+
+### 3. Remaining Beta Items
+- DNS setup for apexaurum.cloud
+- Backfill old assistant messages
+- Community beta testing with access coupons
+
+---
+
 ## Easter Eggs
 
 - **Dev Mode:** Konami code (up up down down left right left right BA) or 7-tap on Au logo (Adept only!)
