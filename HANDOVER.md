@@ -1244,22 +1244,95 @@ uploadUrl + style → upload-cover API → AI-transformed track
 
 ---
 
-## Next Session Priorities
+## Session 22 Accomplishments
 
-### 1. Tier Alignment + Billing Text (HIGH)
-- **Tier badges on BillingView** need updating to mention Nursery access for Adept
-- **Tool count taglines** need updating (55 -> 58 tools) on login, landing, chat welcome
-- **Tier descriptions** across the app need review for consistency with new features
-- **Adept tier check** in nursery API uses `user.settings.subscription_tier` -- verify this matches Stripe subscription flow
+### Tier Alignment (v99) - COMPLETE
+- **Critical bug fixed:** Nursery tier check was reading `user.settings.subscription_tier` (never populated by Stripe/admin). Changed to query the `Subscription` model directly (same pattern as chat.py). Without this fix, ALL users including Adept subscribers would be blocked from the Nursery.
+- **Tool count updated** 55 -> 58 across LoginView, ChatView, LandingView
+- **Billing text updated:** Alchemist "35 tools" -> "58 tools", Adept now lists "The Nursery (model training studio)" and "Dev Mode + PAC Mode"
+- **Landing page** Adept tier card now mentions Nursery
 
-### 2. Nursery Session B: Training Forge
-- Together.ai integration (upload dataset -> start job -> poll status)
-- nursery_train, nursery_estimate_cost, nursery_job_status tools
-- Training Forge tab with job monitoring
-- BYOK key retrieval for GPU providers
-- See `NURSERY_MASTERPLAN.md` (local, .gitignored) for full spec
+### Nursery Session B: Training Forge (v100) - COMPLETE
+- **CloudTrainerService** (`backend/app/services/cloud_trainer.py`) - Together.ai fine-tuning API integration via httpx:
+  - `upload_dataset()` - POST multipart to `/v1/files`
+  - `create_training_job()` - POST to `/v1/fine-tunes` with model, epochs, LoRA, learning rate
+  - `get_job_status()` / `list_jobs()` / `cancel_job()` - status polling and management
+  - `estimate_cost()` - local calculation (no API call) based on token counts and model pricing
+  - `TRAINABLE_MODELS` dict: Llama 3.2 1B, Llama 3.2 3B, Llama 3.1 8B, Qwen 2.5 7B
+- **Background poller** (`auto_complete_training_job()`) - fire-and-forget asyncio task following the proven `auto_complete_music_task` pattern:
+  - Polls Together.ai every 30s, max 2 hours
+  - Updates NurseryTrainingJob status + progress in DB
+  - On completion: creates NurseryModelRecord, broadcasts Village event
+  - On failure: sets error_message, never crashes server
+  - Retrieves BYOK key via `get_user_api_key(user, "together")`
+- **4 new tools** (Tier 15): nursery_estimate_cost, nursery_train, nursery_job_status, nursery_list_jobs
+- **6 new API endpoints:** GET /training/models, POST /training/estimate, POST /training/start, GET /training/jobs, GET /training/jobs/{id}, POST /training/jobs/{id}/cancel
+- **Training Forge tab** replaces placeholder in NurseryView.vue:
+  - Left column: dataset selector, base model picker (4 models), epochs slider, learning rate, LoRA toggle, batch size, suffix, live cost estimate, start training button
+  - Right column: job stats (total/active/completed), job cards with status badges, progress bars, cost, timestamps, cancel button
+  - Together.ai key warning with Settings link if no key configured
+  - 15-second auto-refresh polling when tab is active (clearInterval on tab change/unmount)
+- **Store updated:** nursery.js now has trainingJobs, costEstimate, estimating, startingTraining, loadingJobs, hasTogetherKey state + 6 new actions
+- **Tool count:** 58 -> 62, taglines updated everywhere
 
-### 3. Remaining Beta Items
+### Environment
+- Build: v100-training-forge
+- Frontend CACHE_BUST: 19
+- Tools: 62 (7 Nursery tools: 3 Data Garden + 4 Training Forge)
+- Commits: 46adadd (v99), c6098c0 (v100)
+
+### Key Files Modified/Created (Session 22)
+
+| File | Status | Changes |
+|------|--------|---------|
+| `backend/app/services/cloud_trainer.py` | NEW | CloudTrainerService + auto_complete_training_job (~410 lines) |
+| `backend/app/api/v1/nursery.py` | EDIT | 6 training endpoints + request schemas, fixed tier check |
+| `backend/app/tools/nursery.py` | EDIT | 4 Training Forge tools added (7 total nursery tools) |
+| `backend/app/api/v1/billing.py` | EDIT | Tool count 35->62, Nursery in Adept features |
+| `backend/app/main.py` | EDIT | v100, 62 tools, nursery-training-forge feature |
+| `frontend/src/views/NurseryView.vue` | EDIT | Training Forge tab (1077 lines total) |
+| `frontend/src/stores/nursery.js` | EDIT | Training state + 6 actions (223 lines) |
+| `frontend/src/views/ChatView.vue` | EDIT | 62 Tools tagline |
+| `frontend/src/views/LoginView.vue` | EDIT | 62 Tools tagline |
+| `frontend/src/views/LandingView.vue` | EDIT | 62 Tools + Nursery in Adept tier |
+| `frontend/Dockerfile` | EDIT | CACHE_BUST=19 |
+
+---
+
+## Nursery Roadmap Progress
+
+| Session | Scope | Status |
+|---------|-------|--------|
+| **A: Foundation** | Models, migrations, Data Garden tools, NurseryView | DONE (Session 21) |
+| **B: Training Forge** | CloudTrainerService, Together.ai, training tools/endpoints/tab | DONE (Session 22) |
+| **C: Model Cradle + Village** | Model management, Village registration, model discovery | TODO |
+| **D: Apprentice Protocol + Autonomy** | Apprentice creation, auto_train, cost guards | TODO |
+| **E: Polish** | Stats dashboard, error handling, end-to-end testing | TODO |
+
+### Session C: Model Cradle + Village (next)
+Per `NURSERY_MASTERPLAN.md` (local, .gitignored):
+- **Model management** - list/detail/delete trained models (NurseryModelRecord already exists in DB)
+- **Village registration** - post training events, share models
+- **Model discovery** - search Village for shared models
+- **Model Cradle tab** (Tab 3) - trained models grid, per-model stats, "Register in Village" button
+- **Village Feed tab** (Tab 5) - recent training events, model discovery search
+- **Tools:** nursery_list_models, nursery_register_model, nursery_discover_models
+- **Endpoints:** GET /models, GET /models/{id}, POST /models/{id}/register, DELETE /models/{id}, GET /models/discover, GET /village-activity
+- The NurseryModelRecord is already auto-created by `auto_complete_training_job` on training completion, so models will exist when jobs finish
+
+### Session D: Apprentice Protocol + Autonomy
+- Apprentice creation from Village knowledge (NurseryApprentice model already in DB)
+- nursery_create_apprentice, nursery_auto_train tools
+- Apprentice tab (Tab 4) in NurseryView
+- Autonomy mode with cost guards ($5 max default)
+- NURSERY_KEEPER agent prompt
+
+### Session E: Polish
+- Stats dashboard improvements
+- Error handling, edge cases, rate limiting
+- End-to-end testing with real Together.ai key
+
+### Remaining Beta Items
 - DNS setup for apexaurum.cloud
 - Backfill old assistant messages
 - Community beta testing with access coupons
@@ -1274,4 +1347,4 @@ uploadUrl + style → upload-cover API → AI-transformed track
 
 ---
 
-*"The Council convenes. The Athanor blazes. The gold multiplies. The Nursery tends. New minds are born."*
+*"The Council convenes. The Athanor blazes. The gold multiplies. The Nursery tends. The Forge burns. New minds are born."*
