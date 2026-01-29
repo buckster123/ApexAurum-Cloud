@@ -832,7 +832,7 @@ function renderMarkdown(content) {
               <div
                 v-if="message.role === 'assistant'"
                 class="prose prose-sm max-w-none"
-                :class="isUsingPacAgent ? 'prose-purple' : 'prose-invert'"
+                :class="isUsingPacAgent ? 'prose-invert pac-prose' : 'prose-invert'"
                 :style="isUsingPacAgent ? { color: '#E8B4FF' } : {}"
                 v-html="renderMarkdown(message.content)"
               />

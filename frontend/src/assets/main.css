@@ -206,6 +206,25 @@
     inset 0 0 30px rgba(232, 180, 255, 0.03);
 }
 
+/* PAC Prose - high-contrast overrides for markdown on purple bg */
+.pac-prose h1, .pac-prose h2, .pac-prose h3, .pac-prose h4 {
+  color: #FFD700 !important;
+}
+.pac-prose strong, .pac-prose b {
+  color: #ffffff !important;
+}
+.pac-prose a {
+  color: #E8B4FF !important;
+  text-decoration: underline;
+}
+.pac-prose code {
+  color: #FFD700 !important;
+  background: rgba(255, 215, 0, 0.1) !important;
+}
+.pac-prose li::marker {
+  color: #FFD700 !important;
+}
+
 /* PAC Activation Flash */
 @keyframes pac-activate {
   0% {
