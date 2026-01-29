@@ -1,8 +1,8 @@
 # ApexAurum-Cloud Handover Document
 
 **Date:** 2026-01-29
-**Build:** v91-council-ws-streaming
-**Status:** PRE-LAUNCH - All features complete, community testing next!
+**Build:** v92-bugfixes
+**Status:** PRE-LAUNCH - Bug sweep complete, ready for community beta!
 
 ---
 
@@ -909,19 +909,57 @@ uploadUrl + style → upload-cover API → AI-transformed track
 
 ---
 
+## Session 16 Accomplishments
+
+### Bug Sweep (v92) - COMPLETE
+- **cortex_recall NULL crash** - `float(None)` when user_vectors had NULL embeddings. Fixed: `AND embedding IS NOT NULL` in WHERE clause + safety fallbacks on similarity/attention_weight
+- **Jam store 404s** - All 8 API calls in `jam.js` missing `/api/v1` prefix. Fixed: added prefix to match every other store
+- **Branches 404 race condition** - Conversation created with `db.flush()` (uncommitted), SSE `start` event sent ID to frontend, frontend called `/branches` which couldn't see uncommitted row. Fixed: early `db.commit()` before streaming
+- **File download broken** - Pydantic `FileResponse` schema (line 90) shadowed FastAPI `FileResponse` import (file serving). Download and image preview endpoints were calling Pydantic model instead of serving files. Fixed: aliased import as `FastAPIFileResponse`
+- **Debranding sweep** - Removed "Claude models" from ChatView, "Anthropic" from SettingsView BYOK text, fixed CLAUDE agent reference in AgentPanel (missed in Session 8)
+
+### Azoth Comms
+- **azoth_3.md** - Music pipeline test report: full suno_compile -> music_generate validated end-to-end. "BLAZING SUCCESS"
+
+### Key Files Modified (Session 16)
+
+| File | Changes |
+|------|---------|
+| `backend/app/tools/cortex.py` | NULL embedding filter, safety fallbacks |
+| `backend/app/api/v1/chat.py` | Early commit before streaming |
+| `backend/app/api/v1/files.py` | FastAPIFileResponse alias fix |
+| `backend/app/main.py` | v92-bugfixes |
+| `frontend/src/stores/jam.js` | /api/v1 prefix on all API calls |
+| `frontend/src/views/ChatView.vue` | "Claude models" -> "Default models" |
+| `frontend/src/views/SettingsView.vue` | Remove Anthropic branding from BYOK |
+| `frontend/src/components/cortex/AgentPanel.vue` | CLAUDE -> AZOTH agent |
+
+### Commits
+- `4c50c1a` - Fix cortex_recall NULL similarity crash and jam store 404s
+- `d964559` - Fix branches 404 race condition during chat streaming
+- `ea65b07` - Fix file download/preview: FileResponse name collision
+- `a95db50` - Remove Claude/Anthropic branding from user-facing frontend
+
+---
+
 ## Pre-Launch Status
 
-All feature development complete. Next steps:
+All feature development and bug sweep complete. Next steps:
 - Community beta testing with access coupons
 - Compute/scaling review (current dev instance over-provisioned)
 - Edge case refinement based on real user traffic
 - Final review pass before official launch
 
+### Future Ideas (Not Blocking Launch)
+- Additional LLM providers (Kimi K2.5, open-source models)
+- 3D Neural view enhancements (trinkets, interactive elements)
+- Village GUI visual polish
+
 ---
 
 ## Easter Eggs
 
-- **Dev Mode:** Konami code (↑↑↓↓←→←→BA) or 7-tap on Au logo (Adept only!)
+- **Dev Mode:** Konami code (up up down down left right left right BA) or 7-tap on Au logo (Adept only!)
 - **PAC Mode:** Type "AZOTH" while in Dev Mode
 - **PAC prompts:** `backend/native_prompts/*-PAC.txt`
 
