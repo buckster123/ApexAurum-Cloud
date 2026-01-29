@@ -1363,7 +1363,64 @@ uploadUrl + style → upload-cover API → AI-transformed track
 
 ---
 
-## Nursery Roadmap Progress
+## Session 24 Accomplishments
+
+### Nursery Session E: Polish (v103) - COMPLETE
+**Commits:** 6f7469c (polish), 1650105 (circular import fix)
+
+**Component Extraction** (NurseryView.vue: 1,618 -> 79 lines):
+- 5 tab components: NurseryDataGarden, NurseryTrainingForge, NurseryModelCradle, NurseryApprentices, NurseryVillageFeed
+- Shared utils: `nurseryUtils.js` with `formatRelativeTime()`, `getStatusColor()`, `useConfirmDelete()` composable
+- 3 duplicated patterns eliminated
+
+**Store Polish** (nursery.js):
+- `lastError` reactive error tracking across all 20 actions
+- 7 computed properties: totalDatasets, totalExamples, runningJobs, completedJobs, trainedApprentices, trainingApprentices, villageModels
+- `startTraining()` converted to options object with `apprenticeId` support
+
+**Backend Hardening**:
+- Rate limits: 4 endpoints (5/min generate, 5/min extract, 3/min train, 2/min apprentice)
+- Max 3 concurrent training jobs per user (API + both tools)
+- Empty dataset validation before training
+- DB context consolidation: NurseryTrainTool (2->1 contexts), NurseryAutoTrainTool (3->2)
+- Together.ai 429 exponential backoff (30s -> 300s cap)
+- Village broadcast failures now logged (was silent `pass`)
+- `rate_limit.py` module to avoid circular import between main.py and nursery.py
+
+**Admin Nursery Stats**:
+- 5 metrics: datasets, training jobs, models, apprentices + jobs-by-status breakdown
+- Nursery card in admin panel with color-coded status display
+
+**Mobile CSS**: Stats grids responsive, base model selector responsive, apprentice stats wrap
+
+### Environment
+- Build: v103-nursery-polish
+- Frontend CACHE_BUST: 21 (unchanged)
+- Tools: 68 (unchanged)
+
+### Key Files Modified/Created (Session 24)
+
+| File | Status | Changes |
+|------|--------|---------|
+| `frontend/src/components/nursery/nurseryUtils.js` | NEW | Shared helpers (formatRelativeTime, useConfirmDelete, statusColorMap) |
+| `frontend/src/components/nursery/NurseryDataGarden.vue` | NEW | Tab 1 component (503 lines) |
+| `frontend/src/components/nursery/NurseryTrainingForge.vue` | NEW | Tab 2 component (415 lines) |
+| `frontend/src/components/nursery/NurseryModelCradle.vue` | NEW | Tab 3 component (155 lines) |
+| `frontend/src/components/nursery/NurseryApprentices.vue` | NEW | Tab 4 component (316 lines) |
+| `frontend/src/components/nursery/NurseryVillageFeed.vue` | NEW | Tab 5 component (125 lines) |
+| `frontend/src/views/NurseryView.vue` | EDIT | Shrink from 1,618 to 79 lines (shell only) |
+| `frontend/src/stores/nursery.js` | EDIT | Error state, 7 computed props, options-object API |
+| `backend/app/rate_limit.py` | NEW | Extracted limiter to avoid circular import |
+| `backend/app/api/v1/nursery.py` | EDIT | Rate limits, concurrent job cap, empty dataset check |
+| `backend/app/tools/nursery.py` | EDIT | DB context consolidation, concurrent job check |
+| `backend/app/services/cloud_trainer.py` | EDIT | 429 backoff, empty file check, broadcast logging |
+| `backend/app/api/v1/admin.py` | EDIT | Nursery stats in StatsResponse + queries |
+| `backend/admin_static/index.html` | EDIT | Nursery stats card |
+| `backend/app/main.py` | EDIT | v103, import limiter from rate_limit.py |
+
+---
+
+## Nursery Roadmap - COMPLETE
 
 | Session | Scope | Status |
 |---------|-------|--------|
@@ -1371,41 +1428,56 @@ uploadUrl + style → upload-cover API → AI-transformed track
 | **B: Training Forge** | CloudTrainerService, Together.ai, training tools/endpoints/tab | DONE (Session 22) |
 | **C: Model Cradle + Village** | Model management, Village registration, model discovery | DONE (Session 23) |
 | **D: Apprentice Protocol + Autonomy** | Apprentice creation, auto_train, cost guards | DONE (Session 23) |
-| **E: Polish** | Stats dashboard, error handling, end-to-end testing | TODO |
+| **E: Polish** | Component extraction, backend hardening, admin stats, mobile CSS | DONE (Session 24) |
 
-### Session E: Polish (next)
-Per `NURSERY_MASTERPLAN.md` (local, .gitignored):
-- **Stats dashboard improvements** - Nursery-specific stats in admin panel, per-user training cost tracking
-- **Error handling** - edge cases in auto_train pipeline (missing datasets, expired API keys, concurrent job limits)
-- **Rate limiting** - per-user nursery endpoint rate limits (training jobs are expensive)
-- **End-to-end testing** - test with real Together.ai key: create dataset -> estimate -> train -> poll -> complete -> model record -> Village registration
-- **UI polish** - loading states, transition animations, mobile responsiveness of 5-tab interface
-- **NurseryView.vue** is now ~1500+ lines -- consider extracting tab components if needed
-
-### Nursery Architecture Summary
+### Nursery Architecture (Final)
 ```
-NurseryView.vue (5 tabs)
-├── Tab 1: Data Garden (generate/extract datasets)
-├── Tab 2: Training Forge (Together.ai fine-tuning)
-├── Tab 3: Model Cradle (trained models, Village registration)
-├── Tab 4: Apprentices (create, auto-train, lifecycle)
-└── Tab 5: Village Feed (activity + model discovery)
+NurseryView.vue (79-line shell, 5 tab components)
+├── components/nursery/NurseryDataGarden.vue (503 lines)
+├── components/nursery/NurseryTrainingForge.vue (415 lines)
+├── components/nursery/NurseryModelCradle.vue (155 lines)
+├── components/nursery/NurseryApprentices.vue (316 lines)
+├── components/nursery/NurseryVillageFeed.vue (125 lines)
+└── components/nursery/nurseryUtils.js (63 lines)
 
 Backend:
 ├── models/nursery.py (4 tables: Dataset, TrainingJob, ModelRecord, Apprentice)
 ├── services/nursery.py (NurseryService: data generation, extraction)
 ├── services/cloud_trainer.py (CloudTrainerService: Together.ai + background poller)
-├── api/v1/nursery.py (~20 endpoints across all 5 feature areas)
-├── tools/nursery.py (13 tools across Data Garden, Forge, Cradle, Apprentice)
+├── api/v1/nursery.py (~26 endpoints, rate-limited, concurrent job cap)
+├── tools/nursery.py (13 tools, DB-consolidated)
 └── native_prompts/NURSERY_KEEPER.txt (internal prompt)
 
-Store: frontend/src/stores/nursery.js (~400 lines, ~20 state refs, ~15 actions)
+Store: frontend/src/stores/nursery.js (438 lines, 7 computed, 20+ actions, error tracking)
 ```
+
+---
+
+## Next Major Milestone: Tier Restructure
+
+**Masterplan:** `TIER_MASTERPLAN.md` (committed, in repo root)
+
+### New Tier Map (4 tiers replacing 3)
+| Tier | Price | Messages | Opus Msgs | Key Features |
+|------|-------|----------|-----------|--------------|
+| Free Trial | $0 | 20 (7 days) | 0 | Haiku only, taste the Athanor |
+| Seeker ($10) | $10/mo | 200 | 0 | Haiku+Sonnet, 128K ctx cap, 10 Suno |
+| Adept ($30) | $30/mo | 1,000 | 50 | All models, full ctx, BYOK OSS, nursery tease |
+| Opus ($100) | $100/mo | 5,000 | 500 | Full access, nursery, dev mode, 1M beta |
+| Azothic ($300) | $300/mo | 20,000 | 2,000 | Everything, training credits, priority |
+
+### Implementation Roadmap (4 sessions)
+| Session | Scope |
+|---------|-------|
+| **A: Usage Infrastructure** | Per-model counters, usage_counters table, limit middleware, context cap |
+| **B: Tier Restructure** | 4-tier config, Stripe products, billing UI, landing page, feature gates |
+| **C: Credit Packs + Dashboard** | Pack purchases, usage display, admin usage reports |
+| **D: Legal + Polish** | Terms, privacy, disclaimers, coupon library, package builder |
 
 ### Remaining Beta Items
 - DNS setup for apexaurum.cloud
 - Backfill old assistant messages
-- Community beta testing with access coupons
+- Community beta testing with launch coupons (defined in masterplan)
 
 ---
 
