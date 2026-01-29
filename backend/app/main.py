@@ -9,19 +9,15 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from slowapi import Limiter
-from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 
 from app.config import get_settings
 from app.database import init_db, close_db
+from app.rate_limit import limiter
 from app.api.v1 import router as api_v1_router
 from app.tools import register_all_tools
 
 settings = get_settings()
-
-# Rate limiter (in-memory for beta, can switch to Redis later)
-limiter = Limiter(key_func=get_remote_address, default_limits=["100/minute"])
 
 
 def init_vault():

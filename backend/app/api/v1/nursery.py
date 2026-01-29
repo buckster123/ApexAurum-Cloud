@@ -18,7 +18,7 @@ from starlette.requests import Request
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 
-from app.main import limiter
+from app.rate_limit import limiter
 from app.database import get_db
 from app.api.v1.auth import get_current_user
 from app.models.user import User
