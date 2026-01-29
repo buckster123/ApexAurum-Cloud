@@ -10,6 +10,7 @@ Providers:
 - Groq - OpenAI-compatible (fastest)
 - Together AI - OpenAI-compatible (200+ models)
 - Qwen - OpenAI-compatible
+- Moonshot (Kimi) - OpenAI-compatible
 
 All OpenAI-compatible providers use the same SDK with different base URLs.
 """
@@ -58,7 +59,7 @@ PROVIDERS = {
         "name": "Together AI",
         "base_url": "https://api.together.xyz/v1",
         "key_env": "TOGETHER_API_KEY",
-        "default_model": "meta-llama/Llama-3-70b-chat-hf",
+        "default_model": "meta-llama/Llama-3.3-70B-Instruct-Turbo",
         "supports_tools": True,
     },
     "qwen": {
@@ -66,6 +67,13 @@ PROVIDERS = {
         "base_url": "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
         "key_env": "DASHSCOPE_API_KEY",
         "default_model": "qwen-plus",
+        "supports_tools": True,
+    },
+    "moonshot": {
+        "name": "Moonshot",
+        "base_url": "https://api.moonshot.ai/v1",
+        "key_env": "MOONSHOT_API_KEY",
+        "default_model": "kimi-k2.5",
         "supports_tools": True,
     },
 }
@@ -81,16 +89,22 @@ PROVIDER_MODELS = {
             "name": "Opus 4.5",
             "tier": "opus",
             "max_tokens": 16384,
+            "context_window": 200000,
+            "description": "Most powerful model - deep reasoning, complex analysis",
         },
         "claude-sonnet-4-5-20250929": {
             "name": "Sonnet 4.5",
             "tier": "sonnet",
             "max_tokens": 16384,
+            "context_window": 200000,
+            "description": "Excellent balance - fast and highly capable",
         },
         "claude-haiku-4-5-20251001": {
             "name": "Haiku 4.5",
             "tier": "haiku",
             "max_tokens": 8192,
+            "context_window": 200000,
+            "description": "Fastest 4.5 model - quick responses, efficient",
         },
     },
     "deepseek": {
@@ -98,12 +112,16 @@ PROVIDER_MODELS = {
             "name": "DeepSeek V3",
             "tier": "standard",
             "max_tokens": 8192,
+            "context_window": 128000,
+            "description": "671B MoE flagship - strong general-purpose model",
         },
         "deepseek-reasoner": {
             "name": "DeepSeek R1",
             "tier": "reasoning",
             "max_tokens": 8192,
-            "supports_tools": False,  # R1 doesn't support tools
+            "context_window": 128000,
+            "description": "Chain-of-thought reasoning model (no tool support)",
+            "supports_tools": False,
         },
     },
     "groq": {
@@ -111,65 +129,107 @@ PROVIDER_MODELS = {
             "name": "Llama 3.3 70B",
             "tier": "large",
             "max_tokens": 8192,
+            "context_window": 128000,
+            "description": "Fast versatile workhorse - great all-rounder on Groq",
         },
-        "llama3-70b-8192": {
-            "name": "Llama 3 70B",
-            "tier": "large",
-            "max_tokens": 8192,
-        },
-        "llama3-8b-8192": {
-            "name": "Llama 3 8B",
+        "llama-3.1-8b-instant": {
+            "name": "Llama 3.1 8B",
             "tier": "small",
             "max_tokens": 8192,
+            "context_window": 128000,
+            "description": "Ultra-fast small model - 560 tokens/sec on Groq",
         },
-        "mixtral-8x7b-32768": {
-            "name": "Mixtral 8x7B",
-            "tier": "moe",
-            "max_tokens": 32768,
-        },
-        "gemma2-9b-it": {
-            "name": "Gemma 2 9B",
-            "tier": "small",
+        "deepseek-r1-distill-llama-70b": {
+            "name": "DeepSeek R1 Distill 70B",
+            "tier": "reasoning",
             "max_tokens": 8192,
+            "context_window": 128000,
+            "description": "Reasoning distilled into Llama 70B - fast on Groq",
+        },
+        "qwen-qwq-32b": {
+            "name": "Qwen QwQ 32B",
+            "tier": "reasoning",
+            "max_tokens": 8192,
+            "context_window": 128000,
+            "description": "Reasoning model with excellent tool use",
         },
     },
     "together": {
-        "meta-llama/Llama-3-70b-chat-hf": {
-            "name": "Llama 3 70B",
+        "meta-llama/Llama-3.3-70B-Instruct-Turbo": {
+            "name": "Llama 3.3 70B Turbo",
             "tier": "large",
             "max_tokens": 8192,
+            "context_window": 128000,
+            "description": "Fast Llama flagship - turbo inference on Together",
         },
-        "meta-llama/Llama-3-8b-chat-hf": {
-            "name": "Llama 3 8B",
-            "tier": "small",
-            "max_tokens": 8192,
-        },
-        "mistralai/Mixtral-8x7B-Instruct-v0.1": {
-            "name": "Mixtral 8x7B",
-            "tier": "moe",
-            "max_tokens": 32768,
-        },
-        "Qwen/Qwen2-72B-Instruct": {
-            "name": "Qwen2 72B",
+        "meta-llama/Meta-Llama-3.1-405B-Instruct-Turbo": {
+            "name": "Llama 3.1 405B Turbo",
             "tier": "large",
             "max_tokens": 8192,
+            "context_window": 128000,
+            "description": "Largest open-source model - 405B parameters",
+        },
+        "deepseek-ai/DeepSeek-V3.1": {
+            "name": "DeepSeek V3.1",
+            "tier": "standard",
+            "max_tokens": 8192,
+            "context_window": 128000,
+            "description": "Top open-source base model - rivals frontier models",
+        },
+        "deepseek-ai/DeepSeek-R1": {
+            "name": "DeepSeek R1",
+            "tier": "reasoning",
+            "max_tokens": 8192,
+            "context_window": 128000,
+            "description": "671B MoE reasoning - chain-of-thought on Together",
         },
     },
     "qwen": {
+        "qwen3-max": {
+            "name": "Qwen3 Max",
+            "tier": "large",
+            "max_tokens": 8192,
+            "context_window": 262000,
+            "description": "Latest Qwen flagship - 262K context window",
+        },
         "qwen-plus": {
             "name": "Qwen Plus",
             "tier": "standard",
             "max_tokens": 8192,
-        },
-        "qwen-max": {
-            "name": "Qwen Max",
-            "tier": "large",
-            "max_tokens": 8192,
+            "context_window": 128000,
+            "description": "Balanced performance and cost",
         },
         "qwen-turbo": {
             "name": "Qwen Turbo",
             "tier": "fast",
             "max_tokens": 8192,
+            "context_window": 128000,
+            "description": "Fastest Qwen option - low latency",
+        },
+        "qwq-plus": {
+            "name": "QwQ Plus",
+            "tier": "reasoning",
+            "max_tokens": 8192,
+            "context_window": 128000,
+            "description": "Reasoning-focused model with chain-of-thought",
+        },
+    },
+    "moonshot": {
+        "kimi-k2.5": {
+            "name": "Kimi K2.5",
+            "tier": "reasoning",
+            "max_tokens": 16384,
+            "context_window": 256000,
+            "description": "1T MoE flagship - deep reasoning with chain-of-thought (256K ctx)",
+        },
+        "kimi-k2.5-instant": {
+            "name": "Kimi K2.5 Instant",
+            "tier": "standard",
+            "max_tokens": 8192,
+            "context_window": 256000,
+            "description": "1T MoE flagship - fast responses, no reasoning overhead (256K ctx)",
+            "api_model_id": "kimi-k2.5",
+            "extra_body": {"thinking": {"type": "disabled"}},
         },
     },
 }
@@ -595,8 +655,12 @@ class MultiProviderLLM:
         openai_messages = convert_messages_for_openai(messages, system)
         openai_tools = convert_tools_to_openai(tools) if tools else None
 
+        # Resolve model alias and extra params (e.g. kimi-k2.5-instant → kimi-k2.5 + thinking disabled)
+        model_config = PROVIDER_MODELS.get(self.provider, {}).get(model, {})
+        actual_model = model_config.get("api_model_id", model)
+
         kwargs = {
-            "model": model,
+            "model": actual_model,
             "messages": openai_messages,
             "max_tokens": max_tokens,
         }
@@ -604,6 +668,9 @@ class MultiProviderLLM:
         if openai_tools:
             kwargs["tools"] = openai_tools
             kwargs["tool_choice"] = "auto"
+
+        if model_config.get("extra_body"):
+            kwargs["extra_body"] = model_config["extra_body"]
 
         try:
             response = await self.openai_client.chat.completions.create(**kwargs)
@@ -654,8 +721,12 @@ class MultiProviderLLM:
         openai_messages = convert_messages_for_openai(messages, system)
         openai_tools = convert_tools_to_openai(tools) if tools else None
 
+        # Resolve model alias and extra params (e.g. kimi-k2.5-instant → kimi-k2.5 + thinking disabled)
+        model_config = PROVIDER_MODELS.get(self.provider, {}).get(model, {})
+        actual_model = model_config.get("api_model_id", model)
+
         kwargs = {
-            "model": model,
+            "model": actual_model,
             "messages": openai_messages,
             "max_tokens": max_tokens,
             "stream": True,
@@ -664,6 +735,9 @@ class MultiProviderLLM:
         if openai_tools:
             kwargs["tools"] = openai_tools
             kwargs["tool_choice"] = "auto"
+
+        if model_config.get("extra_body"):
+            kwargs["extra_body"] = model_config["extra_body"]
 
         # Track tool calls being built
         tool_calls_in_progress = {}
@@ -764,6 +838,8 @@ def get_provider_models(provider: str) -> list[dict]:
             "name": info["name"],
             "tier": info["tier"],
             "max_tokens": info.get("max_tokens", 8192),
+            "description": info.get("description", f"{info['name']} - {info['tier']} tier"),
+            "context_window": info.get("context_window", 128000),
         })
     return models
 

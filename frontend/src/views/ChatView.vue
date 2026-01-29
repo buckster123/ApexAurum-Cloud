@@ -82,6 +82,13 @@ const modelTierStyles = {
   opus: { color: '#FFD700', icon: '⚜️', label: 'Opus' },
   sonnet: { color: '#4FC3F7', icon: '✦', label: 'Sonnet' },
   haiku: { color: '#E8B4FF', icon: '◇', label: 'Haiku' },
+  // OSS provider tiers
+  reasoning: { color: '#FF9800', icon: '✴', label: 'Reasoning' },
+  standard: { color: '#4CAF50', icon: '●', label: 'Standard' },
+  large: { color: '#2196F3', icon: '⬢', label: 'Large' },
+  small: { color: '#9E9E9E', icon: '○', label: 'Small' },
+  moe: { color: '#AB47BC', icon: '✦', label: 'MoE' },
+  fast: { color: '#00BCD4', icon: '⚡', label: 'Fast' },
 }
 
 function getModelTierStyle(tier) {

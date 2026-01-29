@@ -546,15 +546,15 @@ async def get_available_models(
             default_max_tokens=8192,
         )
 
-    # Convert to ModelInfo format (with placeholder descriptions)
+    # Convert to ModelInfo format using registry metadata
     models = [
         ModelInfo(
             id=m["id"],
             name=m["name"],
-            description=f"{m['name']} - {m['tier']} tier",
+            description=m.get("description", f"{m['name']} - {m['tier']} tier"),
             tier=m["tier"],
             max_output_tokens=m.get("max_tokens", 8192),
-            context_window=128000,  # Most models have ~128k context
+            context_window=m.get("context_window", 128000),
         )
         for m in provider_models
     ]

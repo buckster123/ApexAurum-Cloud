@@ -51,7 +51,7 @@ async def lifespan(app: FastAPI):
     """Application lifespan manager."""
     # Startup
     print("=" * 50)
-    print("ApexAurum Cloud v92 - Bug Fixes")
+    print("ApexAurum Cloud v93 - Moonshot Kimi K2.5 + Provider Refresh")
     print("=" * 50)
 
     # Import all models before database init to ensure SQLAlchemy
@@ -120,7 +120,7 @@ async def health_check():
     return {
         "status": "healthy",
         "version": "0.1.0",
-        "build": "v92-bugfixes",
+        "build": "v93-moonshot-kimi",
         "agents": {
             "native": 5,
             "pac": 4,
