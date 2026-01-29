@@ -178,15 +178,96 @@ Tokenizer       Evaluate       RunPod         Village integration
 - Deep Village Protocol integration (training events as cultural memory)
 - Apprentice Protocol: agents raise smaller models on their own knowledge
 
-### Cloud Integration Plan
-- **Adept tier exclusive** ($30/mo)
-- Port 16 tools to Cloud tool system (Tier 15+)
-- Port 20 REST endpoints to Cloud API
-- Build Vue 3 UI (5 tabs: Data Garden, Training Forge, Model Cradle, Cloud GPUs, Village)
-- Connect to existing Village memory system
-- GPU provider API keys: platform keys or user BYOK (ties into Item 1)
-- NURSERY_KEEPER agent -- "The Cultivator" personality
-- Autonomy engine: background task system for unattended training pipelines
+### Cloud Architecture Decisions
+
+**Tier:** Adept exclusive ($30/mo)
+
+**Storage:** Railway volumes for datasets/models (user-scoped paths: `vault/users/{user_id}/nursery/`).
+No S3 needed initially -- same volume the vault already uses. Migrate to S3 later if scale demands.
+
+**Async Jobs:** `asyncio.create_task()` -- same pattern as `auto_complete_music_task()` in Suno.
+No Celery/Redis needed. Cloud training is already async (submit job, poll status). Local training
+on Railway's CPU is viable for tiny models only -- cloud GPU is the real path.
+
+**Database:** 4 new PostgreSQL tables:
+- `nursery_datasets` -- user-scoped, metadata + file path
+- `nursery_training_jobs` -- job tracking with provider status
+- `nursery_models` -- trained model registry
+- `nursery_apprentices` -- agent-raised models
+
+**GPU Provider Keys:** Already solved via multi-provider BYOK (Item 1, this session!).
+Together, Vast.ai, RunPod, Replicate keys stored encrypted per-user.
+
+**Village Integration:** Works as-is. Training events -> Village memory. No changes needed.
+
+### OG Tool Inventory (13 implemented, 3 placeholders)
+
+| # | Tool | Category | Status | Cloud Impact |
+|---|------|----------|--------|-------------|
+| 1 | nursery_generate_data | Data Garden | Ready | LOW - pure generation, needs user-scoped output |
+| 2 | nursery_extract_conversations | Data Garden | Ready | MEDIUM - reads from Cloud conversations DB |
+| 3 | nursery_list_datasets | Data Garden | Ready | LOW - DB query replaces file glob |
+| 4 | nursery_estimate_cost | Training Forge | Ready | LOW - pure math |
+| 5 | nursery_train_cloud | Training Forge | Ready | HIGH - job queue, user keys, DB tracking |
+| 6 | nursery_train_local | Training Forge | Ready | HIGH - background task, Railway CPU limits |
+| 7 | nursery_job_status | Training Forge | Ready | MEDIUM - DB + provider API polling |
+| 8 | nursery_list_jobs | Training Forge | Ready | LOW - DB query |
+| 9 | nursery_list_models | Model Cradle | Ready | LOW - DB query |
+| 10 | nursery_register_model | Model Cradle | Ready | MEDIUM - DB + Village post |
+| 11 | nursery_deploy_ollama | Model Cradle | PLACEHOLDER | Future - Ollama integration |
+| 12 | nursery_test_model | Model Cradle | PLACEHOLDER | Future - inference endpoint |
+| 13 | nursery_compare_models | Model Cradle | PLACEHOLDER | Future - A/B testing |
+| 14 | nursery_discover_models | Registry | Ready | LOW - Village search |
+| 15 | nursery_create_apprentice | Apprentice | Ready | MEDIUM - async if auto_train |
+| 16 | nursery_list_apprentices | Apprentice | Ready | LOW - DB query |
+
+### 20 FastAPI Endpoints (already designed in OG)
+```
+Data:    GET /datasets, POST /datasets/generate, POST /datasets/extract
+Train:   POST /training/estimate, POST /training/cloud, POST /training/local
+         GET /training/jobs, GET /training/jobs/{id}, WS /training/jobs/{id}/progress
+Models:  GET /models, POST /models/register, POST /models/discover, GET /models/discover
+         POST /models/deploy-ollama, POST /models/test, POST /models/compare
+Apprent: GET /apprentices, POST /apprentices
+Stats:   GET /village-activity, GET /stats
+```
+
+### Porting Sessions Roadmap
+
+**Session A: Foundation (DB + Data Garden)**
+- Create 4 database tables + migrations
+- Port tools 1-3 (generate_data, extract_conversations, list_datasets)
+- Port 3 Data Garden endpoints
+- User-scoped dataset storage in vault
+- Basic NurseryView.vue with Data Garden tab
+
+**Session B: Training Forge**
+- Port tools 4-8 (estimate, train_cloud, train_local, job_status, list_jobs)
+- Port 6 Training endpoints + WebSocket progress
+- Background job system via asyncio.create_task
+- BYOK integration for GPU provider keys
+- Training Forge tab in NurseryView
+
+**Session C: Model Cradle + Registry**
+- Port tools 9-10, 14 (list_models, register, discover)
+- Port model + registry endpoints
+- Model storage in user vault
+- Village integration for model discovery
+- Model Cradle tab in NurseryView
+
+**Session D: Apprentice Protocol + Autonomy**
+- Port tools 15-16 (create_apprentice, list_apprentices)
+- Port apprentice endpoints
+- Autonomy mode: agent-driven full pipeline
+- NURSERY_KEEPER agent personality
+- Apprentice tab in NurseryView
+
+**Session E: Polish + Placeholders**
+- Implement deploy_ollama, test_model, compare_models (if viable)
+- Cloud GPU tab with provider status
+- Village Activity tab
+- Stats dashboard
+- End-to-end testing
 
 ### Autonomy Pipeline Design
 ```
@@ -194,22 +275,28 @@ Agent decides to train  ->  nursery_generate_data()
                         ->  nursery_estimate_cost()
                         ->  nursery_train_cloud()
                         ->  nursery_job_status() [poll]
-                        ->  nursery_deploy_ollama()
                         ->  nursery_register_model()
                         ->  Village memory post
 ```
 Each step can be human-approved (tool mode) or auto-executed (autonomy mode).
 
-### Scope
-**Multi-session project.** The OG code is production-ready and well-documented with a 433-line integration plan. Phase 5 (FastAPI parity) has endpoint signatures designed. Autonomy mode is the new addition beyond OG.
+### Key Dependencies
+```
+# Already in requirements.txt:
+anthropic, openai, httpx
+
+# Needed for training (add when implementing):
+torch, transformers, peft, datasets, accelerate  # Local training
+vastai                                            # Vast.ai rental
+```
 
 ### Key Files (OG ApexAurum)
-- `/home/hailo/claude-root/Projects/ApexAurum/tools/nursery.py` (1,989 lines)
-- `/home/hailo/claude-root/Projects/ApexAurum/pages/nursery.py` (678 lines)
+- `/home/hailo/claude-root/Projects/ApexAurum/tools/nursery.py` (1,989 lines, 16 tools)
+- `/home/hailo/claude-root/Projects/ApexAurum/pages/nursery.py` (678 lines, Streamlit UI)
 - `/home/hailo/claude-root/Projects/ApexAurum/NURSERY_INTEGRATION_PLAN.md` (433 lines)
-- `/home/hailo/claude-root/Projects/ApexAurum/skills/nursery-staff.md`
-- `/home/hailo/claude-root/Projects/ApexAurum/reusable_lib/scaffold/fastapi_app/routes/nursery.py`
-- `/home/hailo/claude-root/Projects/ApexAurum/sandbox/nursery/EMBEDDER_TRAINING_MISSION.md`
+- `/home/hailo/claude-root/Projects/ApexAurum/skills/nursery-staff.md` (verified workflows)
+- `/home/hailo/claude-root/Projects/ApexAurum/reusable_lib/scaffold/fastapi_app/routes/nursery.py` (20 endpoints)
+- `/home/hailo/claude-root/Projects/ApexAurum/reusable_lib/training/` (4 modules: synthetic_generator, cloud_trainer, lora_trainer, data_extractor)
 
 ---
 
@@ -231,7 +318,7 @@ Each step can be human-approved (tool mode) or auto-executed (autonomy mode).
 - [x] Item 2+3: Attachment system - Backend attachments in ChatRequest
 - [x] Item 2+3: Attachment system - Frontend AttachmentPicker component
 - [x] Item 2+3: Attachment system - Vision content blocks in LLM pipeline
-- [ ] Item 4: Nursery - Exploration and scoping (planning only)
+- [x] Item 4: Nursery - Deep exploration, architecture decisions, 5-session roadmap
 
 ---
 

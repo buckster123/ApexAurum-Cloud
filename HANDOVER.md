@@ -1,8 +1,8 @@
 # ApexAurum-Cloud Handover Document
 
 **Date:** 2026-01-29
-**Build:** v96-beta-polish
-**Status:** BETA READY - Security hardened, bug reporting live, toast notifications!
+**Build:** v97-byok-attachments
+**Status:** BETA READY - Multi-provider BYOK, file attachments, vision support!
 
 ---
 
@@ -1113,6 +1113,57 @@ uploadUrl + style → upload-cover API → AI-transformed track
 
 ---
 
+## Session 20 Accomplishments
+
+### Multi-Provider BYOK (v97) - COMPLETE
+- **All 6 providers** configurable via Settings > API tab: Anthropic, DeepSeek, Groq, Together, Qwen, Moonshot
+- **Per-provider validation** - Anthropic SDK test for Anthropic, OpenAI-compat test for others
+- **Encrypted storage** - same Fernet encryption, keyed by provider ID in `user.settings.api_keys`
+- **Universal chat routing** - user BYOK key checked first for ANY provider, falls back to platform key
+- **Provider card grid UI** - color-coded, status badges (Your Key / Platform / Not Set), tier-gated lock icons
+- **Console links** - "Get key" links to each provider's API key page
+- **Key masking** - handles sk-ant-*, gsk_*, sk-*, and generic formats
+
+### File Attachments + Vision (v97) - COMPLETE
+- **Paperclip button** in chat input - opens vault file picker dropdown
+- **Vault integration** - browse and attach files from existing vault
+- **Image vision** - images converted to base64 content blocks for Claude/Kimi/DeepSeek
+- **Text context injection** - text/code files injected as context before user message
+- **OpenAI-compat support** - image_url blocks for vision-capable OSS providers
+- **Max 5 attachments** per message, 5MB image limit, 50KB text limit
+- **Preview strip** - attached files shown as removable chips above input
+
+### Nursery Masterplan - COMPLETE (local only, .gitignored)
+- **Deep exploration** of OG ApexAurum Nursery (16 tools, 20 endpoints, 4 training modules)
+- **Architecture decisions** documented: Railway volumes (no S3), asyncio (no Celery), 4 DB tables
+- **GPU provider strategy** - training on Together/Vast.ai/RunPod via BYOK keys (zero Railway GPU cost)
+- **5-session roadmap** - Foundation, Training Forge, Model Cradle, Apprentice Protocol, Polish
+- **Autonomy mode** designed with cost guards
+- **Local file:** `NURSERY_MASTERPLAN.md` (not committed, see .gitignore)
+
+### Environment
+- Build: v97-byok-attachments
+- Frontend CACHE_BUST: 17
+- Commit: 85bbf38
+
+### Key Files Modified (Session 20)
+
+| File | Changes |
+|------|---------|
+| `backend/app/api/v1/user.py` | Multi-provider BYOK endpoints, per-provider validation |
+| `backend/app/api/v1/chat.py` | Universal BYOK routing, file_ids in ChatRequest, build_attachment_content() |
+| `backend/app/services/encryption.py` | Multi-format key masking |
+| `backend/app/services/llm_provider.py` | Image content blocks in OpenAI message converter |
+| `backend/app/main.py` | v97-byok-attachments, new feature flags |
+| `frontend/src/views/SettingsView.vue` | Provider card grid API tab, old BYOK removed from Profile |
+| `frontend/src/views/ChatView.vue` | Paperclip button, vault file picker, attachment preview |
+| `frontend/src/stores/chat.js` | file_ids in sendMessage() |
+| `frontend/Dockerfile` | CACHE_BUST=17 |
+| `POLISHPLAN.md` | Items 1-4 explored and documented |
+| `.gitignore` | Added NURSERY_MASTERPLAN.md |
+
+---
+
 ## Beta Launch Status
 
 **All security audit items complete (Tier 1 + Tier 2).** Beta polish applied. Landing page live.
@@ -1120,22 +1171,30 @@ uploadUrl + style → upload-cover API → AI-transformed track
 ### Ready for Beta
 - Security: rate limiting, auth on all WebSockets, input validation, exception hiding
 - Data integrity: DB constraints on credits and coupons
-- UX: toast notifications, bug reporting, agent persistence across navigation
+- UX: toast notifications, bug reporting, agent persistence, file attachments
 - Admin: full dashboard with user management, coupons, stats, and bug reports
 - Landing page with pricing, features, and agent showcase
+- Multi-provider BYOK for all 6 LLM providers
+- Vision support for image attachments in chat
 - INITIAL_ADMIN_PASSWORD set in Railway
 
 ### Remaining Before Public Launch
 - DNS setup for apexaurum.cloud (CNAME to Railway frontend)
 - Backfill assistant messages from neural memory (pre-streaming-fix conversations)
 - Community beta testing with access coupons
-- Landing page copy refinement (optional, iterate based on feedback)
+
+### Next Major Feature: The Nursery
+- **Masterplan ready** at `NURSERY_MASTERPLAN.md` (local, .gitignored)
+- 5-session implementation roadmap
+- Zero new dependencies for cloud training (HTTP APIs only)
+- BYOK system already handles GPU provider keys
+- Adept-tier exclusive
 
 ### Future Ideas (Not Blocking Launch)
-- Additional LLM providers (expand OSS model coverage)
 - 3D Neural view enhancements
 - Village GUI visual polish
 - Email notifications for bug reports (connect bugs@apexaurum.cloud)
+- Nursery placeholder tools (deploy_ollama, test_model, compare_models)
 
 ---
 
@@ -1147,4 +1206,4 @@ uploadUrl + style → upload-cover API → AI-transformed track
 
 ---
 
-*"The Council convenes. The Athanor blazes. The gold multiplies. The Athanor sings. The Athanor streams."*
+*"The Council convenes. The Athanor blazes. The gold multiplies. The Nursery tends. New minds are born."*
