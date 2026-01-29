@@ -116,6 +116,20 @@ TOOL_ZONE_MAP = {
     "word_count": "village_square",
     "generate_uuid": "village_square",
     "json_format": "village_square",
+
+    # ═══════════════════════════════════════════════════════════════
+    # NURSERY - Model Training tools (Tier 15)
+    # ═══════════════════════════════════════════════════════════════
+    "nursery_generate_data": "nursery",
+    "nursery_extract_data": "nursery",
+    "nursery_list_datasets": "nursery",
+    "nursery_estimate_cost": "nursery",
+    "nursery_train": "nursery",
+    "nursery_job_status": "nursery",
+    "nursery_list_jobs": "nursery",
+    "nursery_list_models": "nursery",
+    "nursery_register_model": "nursery",
+    "nursery_discover_models": "nursery",
 }
 
 

@@ -21,6 +21,7 @@ from app.database import get_db
 from app.api.v1.auth import get_current_user
 from app.models.user import User
 from app.models.billing import Subscription
+from app.models.nursery import NurseryModelRecord, NurseryTrainingJob
 
 logger = logging.getLogger(__name__)
 
@@ -458,3 +459,239 @@ async def cancel_training_job(
         "status": "failed",
         "message": "Training job cancelled.",
     }
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# MODEL CRADLE + VILLAGE - Model management and Village integration
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+def _format_job_activity(job) -> str:
+    model_label = job.base_model.split("/")[-1] if job.base_model else "unknown"
+    status_msgs = {
+        "completed": f"Training completed: {model_label}",
+        "running": f"Training in progress: {model_label} ({job.progress or 0:.0f}%)",
+        "failed": f"Training failed: {model_label}",
+    }
+    return status_msgs.get(job.status, f"Training {job.status}: {model_label}")
+
+
+@router.get("/models")
+async def list_models(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """List user's trained models."""
+    await _check_adept_tier(user, db)
+    result = await db.execute(
+        select(NurseryModelRecord)
+        .options(selectinload(NurseryModelRecord.training_job))
+        .where(NurseryModelRecord.user_id == user.id)
+        .order_by(NurseryModelRecord.created_at.desc())
+        .limit(50)
+    )
+    models = result.scalars().all()
+    return {
+        "count": len(models),
+        "models": [
+            {
+                "id": str(m.id),
+                "name": m.name,
+                "base_model": m.base_model,
+                "model_type": m.model_type,
+                "storage_path": m.storage_path,
+                "capabilities": m.capabilities or [],
+                "performance": m.performance,
+                "agent_id": m.agent_id,
+                "village_posted": m.village_posted,
+                "job_id": str(m.job_id) if m.job_id else None,
+                "job_status": m.training_job.status if m.training_job else None,
+                "created_at": m.created_at.isoformat() if m.created_at else None,
+            }
+            for m in models
+        ],
+    }
+
+
+@router.get("/discover")
+async def discover_village_models(
+    query: Optional[str] = None,
+    limit: int = 20,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Search Village for shared models."""
+    await _check_adept_tier(user, db)
+    from app.services.neural_memory import NeuralMemoryService
+    neural = NeuralMemoryService(db)
+    memories = await neural.get_village_memories(
+        user_id=user.id,
+        topic=query,
+        limit=min(limit, 50),
+        collection="nursery",
+    )
+    return {"count": len(memories), "models": memories, "query": query}
+
+
+@router.get("/village-activity")
+async def get_village_activity(
+    limit: int = 30,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Recent nursery activity feed."""
+    await _check_adept_tier(user, db)
+    # Get recent jobs
+    jobs_result = await db.execute(
+        select(NurseryTrainingJob)
+        .where(NurseryTrainingJob.user_id == user.id)
+        .order_by(NurseryTrainingJob.created_at.desc())
+        .limit(limit)
+    )
+    jobs = jobs_result.scalars().all()
+    # Get recent models
+    models_result = await db.execute(
+        select(NurseryModelRecord)
+        .where(NurseryModelRecord.user_id == user.id)
+        .order_by(NurseryModelRecord.created_at.desc())
+        .limit(limit)
+    )
+    models = models_result.scalars().all()
+    # Merge into activity feed
+    activity = []
+    for j in jobs:
+        activity.append({
+            "type": "training_job",
+            "id": str(j.id),
+            "status": j.status,
+            "base_model": j.base_model,
+            "progress": j.progress,
+            "agent_id": j.agent_id,
+            "timestamp": (j.completed_at or j.started_at or j.created_at).isoformat() if (j.completed_at or j.started_at or j.created_at) else None,
+            "message": _format_job_activity(j),
+        })
+    for m in models:
+        activity.append({
+            "type": "model_created",
+            "id": str(m.id),
+            "name": m.name,
+            "base_model": m.base_model,
+            "model_type": m.model_type,
+            "village_posted": m.village_posted,
+            "agent_id": m.agent_id,
+            "timestamp": m.created_at.isoformat() if m.created_at else None,
+            "message": f"Model '{m.name}' created ({m.model_type})" + (" — shared in Village" if m.village_posted else ""),
+        })
+    activity.sort(key=lambda a: a.get("timestamp") or "", reverse=True)
+    return {"count": len(activity[:limit]), "activity": activity[:limit]}
+
+
+@router.get("/models/{model_id}")
+async def get_model_detail(
+    model_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get detailed info for a specific model."""
+    await _check_adept_tier(user, db)
+    result = await db.execute(
+        select(NurseryModelRecord)
+        .options(selectinload(NurseryModelRecord.training_job))
+        .where(NurseryModelRecord.id == UUID(model_id), NurseryModelRecord.user_id == user.id)
+    )
+    model = result.scalar_one_or_none()
+    if not model:
+        raise HTTPException(status_code=404, detail="Model not found")
+    response = {
+        "id": str(model.id), "name": model.name, "base_model": model.base_model,
+        "model_type": model.model_type, "storage_path": model.storage_path,
+        "capabilities": model.capabilities or [], "performance": model.performance,
+        "agent_id": model.agent_id, "village_posted": model.village_posted,
+        "created_at": model.created_at.isoformat() if model.created_at else None,
+    }
+    if model.training_job:
+        j = model.training_job
+        response["training_job"] = {
+            "id": str(j.id), "provider": j.provider, "status": j.status,
+            "base_model": j.base_model, "config": j.config,
+            "cost_estimate": j.cost_estimate, "cost_actual": j.cost_actual,
+            "started_at": j.started_at.isoformat() if j.started_at else None,
+            "completed_at": j.completed_at.isoformat() if j.completed_at else None,
+        }
+    return response
+
+
+@router.post("/models/{model_id}/register")
+async def register_model_in_village(
+    model_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Register a model in the Village for sharing."""
+    await _check_adept_tier(user, db)
+    from app.services.neural_memory import NeuralMemoryService
+    result = await db.execute(
+        select(NurseryModelRecord).where(
+            NurseryModelRecord.id == UUID(model_id),
+            NurseryModelRecord.user_id == user.id,
+        )
+    )
+    model = result.scalar_one_or_none()
+    if not model:
+        raise HTTPException(status_code=404, detail="Model not found")
+    if model.village_posted:
+        return {"success": True, "message": "Model already registered in the Village.", "already_posted": True}
+    model.village_posted = True
+    # Store in neural memory
+    neural = NeuralMemoryService(db)
+    capabilities_str = ", ".join(model.capabilities or []) or "general"
+    memory_content = (
+        f"Nursery model registered: {model.name}\n"
+        f"Base: {model.base_model}\n"
+        f"Type: {model.model_type}\n"
+        f"Capabilities: {capabilities_str}\n"
+        f"Performance: {model.performance or 'N/A'}"
+    )
+    await neural.store_message(
+        user_id=user.id, content=memory_content,
+        agent_id=model.agent_id or "NURSERY",
+        role="assistant", visibility="village", collection="nursery",
+    )
+    await db.commit()
+    # Broadcast Village event (non-fatal)
+    try:
+        from app.services.village_events import get_village_broadcaster, VillageEvent, EventType
+        broadcaster = get_village_broadcaster()
+        event = VillageEvent(
+            type=EventType.TOOL_COMPLETE,
+            agent_id=model.agent_id or "SYSTEM",
+            zone="nursery",
+            message=f"Model registered in Village: {model.name} ({model.base_model})",
+        )
+        await broadcaster.broadcast(event)
+    except Exception:
+        pass
+    return {"success": True, "model_id": str(model.id), "name": model.name, "message": f"Model '{model.name}' registered in the Village."}
+
+
+@router.delete("/models/{model_id}")
+async def delete_model(
+    model_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete a model record."""
+    await _check_adept_tier(user, db)
+    result = await db.execute(
+        select(NurseryModelRecord).where(
+            NurseryModelRecord.id == UUID(model_id),
+            NurseryModelRecord.user_id == user.id,
+        )
+    )
+    model = result.scalar_one_or_none()
+    if not model:
+        raise HTTPException(status_code=404, detail="Model not found")
+    model_name = model.name
+    await db.delete(model)
+    await db.commit()
+    return {"success": True, "message": f"Model '{model_name}' deleted."}

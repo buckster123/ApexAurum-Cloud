@@ -670,6 +670,211 @@ Use to:
             return ToolResult(success=False, error=f"Failed to list jobs: {str(e)}")
 
 
+class NurseryListModelsTool(BaseTool):
+    """List trained models in the Nursery's Model Cradle."""
+
+    @property
+    def schema(self) -> ToolSchema:
+        return ToolSchema(
+            name="nursery_list_models",
+            description="""List your trained models in the Nursery's Model Cradle.
+
+Shows model name, base model, type, capabilities, Village registration status,
+and performance metrics.
+
+Use to:
+- See trained models
+- Check which models are registered in the Village
+- Find model IDs for registration or deletion""",
+            category=ToolCategory.NURSERY,
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "limit": {"type": "integer", "description": "Max results (default: 20)", "default": 20},
+                },
+                "required": [],
+            },
+            requires_auth=True,
+        )
+
+    async def execute(self, params: dict, context: ToolContext) -> ToolResult:
+        if not context.user_id:
+            return ToolResult(success=False, error="Authentication required")
+        try:
+            from app.database import get_db_context
+            from app.models.nursery import NurseryModelRecord
+            from sqlalchemy import select
+
+            limit = min(params.get("limit", 20), 50)
+            async with get_db_context() as db:
+                result = await db.execute(
+                    select(NurseryModelRecord)
+                    .where(NurseryModelRecord.user_id == UUID(str(context.user_id)))
+                    .order_by(NurseryModelRecord.created_at.desc())
+                    .limit(limit)
+                )
+                models = result.scalars().all()
+
+            return ToolResult(success=True, result={
+                "count": len(models),
+                "models": [
+                    {
+                        "id": str(m.id),
+                        "name": m.name,
+                        "base_model": m.base_model,
+                        "model_type": m.model_type,
+                        "capabilities": m.capabilities or [],
+                        "village_posted": m.village_posted,
+                        "performance": m.performance,
+                        "created_at": m.created_at.isoformat() if m.created_at else None,
+                    }
+                    for m in models
+                ],
+            })
+        except Exception as e:
+            logger.exception("Nursery list models error")
+            return ToolResult(success=False, error=f"Failed to list models: {str(e)}")
+
+
+class NurseryRegisterModelTool(BaseTool):
+    """Register a trained model in the Village for sharing."""
+
+    @property
+    def schema(self) -> ToolSchema:
+        return ToolSchema(
+            name="nursery_register_model",
+            description="""Register a trained model in the Village for sharing.
+
+Posts model information to Village memory so all agents across sessions can
+discover and reference it. Sets the model's village_posted flag.
+
+Use to:
+- Share a trained model with the Village
+- Make model capabilities discoverable
+- Contribute to Village knowledge base""",
+            category=ToolCategory.NURSERY,
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "model_id": {"type": "string", "description": "ID of the model to register"},
+                },
+                "required": ["model_id"],
+            },
+            requires_auth=True,
+        )
+
+    async def execute(self, params: dict, context: ToolContext) -> ToolResult:
+        if not context.user_id:
+            return ToolResult(success=False, error="Authentication required")
+        try:
+            from app.database import get_db_context
+            from app.models.nursery import NurseryModelRecord
+            from app.services.neural_memory import NeuralMemoryService
+            from sqlalchemy import select
+
+            model_id = params.get("model_id")
+            if not model_id:
+                return ToolResult(success=False, error="model_id is required")
+
+            async with get_db_context() as db:
+                result = await db.execute(
+                    select(NurseryModelRecord).where(
+                        NurseryModelRecord.id == UUID(model_id),
+                        NurseryModelRecord.user_id == UUID(str(context.user_id)),
+                    )
+                )
+                model = result.scalar_one_or_none()
+                if not model:
+                    return ToolResult(success=False, error="Model not found")
+                if model.village_posted:
+                    return ToolResult(success=True, result={"message": "Model already registered in the Village.", "already_posted": True})
+
+                model.village_posted = True
+                neural = NeuralMemoryService(db)
+                capabilities_str = ", ".join(model.capabilities or []) or "general"
+                memory_content = (
+                    f"Nursery model registered: {model.name}\n"
+                    f"Base: {model.base_model}\n"
+                    f"Type: {model.model_type}\n"
+                    f"Capabilities: {capabilities_str}"
+                )
+                await neural.store_message(
+                    user_id=UUID(str(context.user_id)),
+                    content=memory_content,
+                    agent_id=model.agent_id or "NURSERY",
+                    role="assistant",
+                    visibility="village",
+                    collection="nursery",
+                )
+                await db.commit()
+
+            return ToolResult(success=True, result={
+                "model_id": model_id,
+                "name": model.name,
+                "message": f"Model '{model.name}' registered in the Village.",
+            })
+        except Exception as e:
+            logger.exception("Nursery register model error")
+            return ToolResult(success=False, error=f"Failed to register model: {str(e)}")
+
+
+class NurseryDiscoverModelsTool(BaseTool):
+    """Search the Village for shared trained models."""
+
+    @property
+    def schema(self) -> ToolSchema:
+        return ToolSchema(
+            name="nursery_discover_models",
+            description="""Search the Village for shared trained models.
+
+Searches Village memory for models registered by you or shared across sessions.
+Uses semantic search when query provided, recency-based when not.
+
+Use to:
+- Find available trained models
+- Discover model capabilities
+- Browse the Village model catalog""",
+            category=ToolCategory.NURSERY,
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Search query (optional -- returns recent if omitted)"},
+                    "limit": {"type": "integer", "description": "Max results (default: 10)", "default": 10},
+                },
+                "required": [],
+            },
+            requires_auth=True,
+        )
+
+    async def execute(self, params: dict, context: ToolContext) -> ToolResult:
+        if not context.user_id:
+            return ToolResult(success=False, error="Authentication required")
+        try:
+            from app.database import get_db_context
+            from app.services.neural_memory import NeuralMemoryService
+
+            query = params.get("query")
+            limit = min(params.get("limit", 10), 50)
+
+            async with get_db_context() as db:
+                neural = NeuralMemoryService(db)
+                memories = await neural.get_village_memories(
+                    user_id=UUID(str(context.user_id)),
+                    topic=query,
+                    limit=limit,
+                    collection="nursery",
+                )
+
+            return ToolResult(success=True, result={
+                "count": len(memories),
+                "query": query,
+                "models": memories,
+            })
+        except Exception as e:
+            logger.exception("Nursery discover models error")
+            return ToolResult(success=False, error=f"Failed to discover models: {str(e)}")
+
+
 # Register tools
 registry.register(NurseryGenerateDataTool())
 registry.register(NurseryExtractDataTool())
@@ -678,3 +883,6 @@ registry.register(NurseryEstimateCostTool())
 registry.register(NurseryTrainTool())
 registry.register(NurseryJobStatusTool())
 registry.register(NurseryListJobsTool())
+registry.register(NurseryListModelsTool())
+registry.register(NurseryRegisterModelTool())
+registry.register(NurseryDiscoverModelsTool())

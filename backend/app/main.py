@@ -57,7 +57,7 @@ async def lifespan(app: FastAPI):
     """Application lifespan manager."""
     # Startup
     print("=" * 50)
-    print("ApexAurum Cloud v100 - The Training Forge")
+    print("ApexAurum Cloud v101 - Model Cradle")
     print("=" * 50)
 
     # Import all models before database init to ensure SQLAlchemy
@@ -196,12 +196,12 @@ async def health_check():
     return {
         "status": "healthy",
         "version": "0.1.0",
-        "build": "v100-training-forge",
+        "build": "v101-model-cradle",
         "agents": {
             "native": 5,
             "pac": 4,
         },
-        "tools": 62,  # 15 Tiers! Village Band + Nursery Training Forge!
+        "tools": 65,  # 15 Tiers! Village Band + Nursery Model Cradle!
         "features": [
             "streaming",
             "pac-mode",
@@ -244,6 +244,7 @@ async def health_check():
             "file-attachments-vision",
             "nursery-data-garden",
             "nursery-training-forge",
+            "nursery-model-cradle",
         ],
     }
 

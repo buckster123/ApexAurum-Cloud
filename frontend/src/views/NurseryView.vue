@@ -59,6 +59,7 @@ const loadingPreview = ref(false)
 // Confirm delete
 // ---------------------------------------------------------------------------
 const confirmDelete = ref(null)
+const confirmModelDelete = ref(null)
 
 // ---------------------------------------------------------------------------
 // Computed
@@ -83,9 +84,15 @@ onMounted(async () => {
 // Watch for tab changes to manage polling
 watch(activeTab, (newTab) => {
   if (newTab === 'forge') {
-    nursery.fetchTrainingJobs()
-    nursery.fetchDatasets() // refresh datasets for dropdown
     startJobPolling()
+    nursery.fetchTrainingJobs()
+    if (!nursery.trainableModels.length) nursery.fetchTrainableModels()
+  } else if (newTab === 'cradle') {
+    stopJobPolling()
+    nursery.fetchModels()
+  } else if (newTab === 'feed') {
+    stopJobPolling()
+    nursery.fetchVillageActivity()
   } else {
     stopJobPolling()
   }
@@ -371,6 +378,70 @@ function getStatusColor(status) {
 function getModelLabel(modelId) {
   const found = forgeModels.find(m => m.id === modelId)
   return found ? found.label : modelId?.split('/').pop() || modelId
+}
+
+// ---------------------------------------------------------------------------
+// Model Cradle helpers
+// ---------------------------------------------------------------------------
+function getModelTypeColor(type) {
+  const colors = {
+    lora_adapter: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
+    cloud_hosted: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30',
+    uploaded: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+  }
+  return colors[type] || 'bg-gray-500/20 text-gray-400 border-gray-500/30'
+}
+
+function getModelTypeLabel(type) {
+  const labels = { lora_adapter: 'LoRA', cloud_hosted: 'Cloud', uploaded: 'Uploaded' }
+  return labels[type] || type
+}
+
+async function handleModelDelete(modelId) {
+  if (confirmModelDelete.value === modelId) {
+    await nursery.deleteModel(modelId)
+    confirmModelDelete.value = null
+  } else {
+    confirmModelDelete.value = modelId
+    setTimeout(() => { confirmModelDelete.value = null }, 3000)
+  }
+}
+
+async function handleRegister(modelId) {
+  try {
+    await nursery.registerModel(modelId)
+  } catch (e) {
+    console.error('Registration failed:', e)
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Village Feed helpers
+// ---------------------------------------------------------------------------
+async function handleDiscover() {
+  await nursery.discoverModels(nursery.discoveryQuery)
+}
+
+function getActivityIcon(type) {
+  return type === 'training_job' ? '&#9881;' : '&#9733;'
+}
+
+function getActivityColor(item) {
+  if (item.type === 'model_created') return item.village_posted ? 'text-green-400' : 'text-cyan-400'
+  const colors = { completed: 'text-green-400', running: 'text-amber-400', failed: 'text-red-400', pending: 'text-gray-400' }
+  return colors[item.status] || 'text-gray-400'
+}
+
+function formatRelativeTime(isoStr) {
+  if (!isoStr) return ''
+  const diff = Date.now() - new Date(isoStr).getTime()
+  const mins = Math.floor(diff / 60000)
+  if (mins < 1) return 'just now'
+  if (mins < 60) return `${mins}m ago`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `${hours}h ago`
+  const days = Math.floor(hours / 24)
+  return `${days}d ago`
 }
 </script>
 
@@ -1038,15 +1109,113 @@ function getModelLabel(modelId) {
       </div>
 
       <!-- ================================================================= -->
-      <!-- Tab 3: Model Cradle (placeholder)                                  -->
+      <!-- Tab 3: Model Cradle                                                -->
       <!-- ================================================================= -->
-      <div v-if="activeTab === 'cradle'" class="text-center py-20">
-        <div class="text-4xl text-gray-600 mb-4">{ }</div>
-        <h2 class="text-xl font-bold mb-2 text-gray-300">Model Cradle</h2>
-        <p class="text-gray-500 max-w-md mx-auto">
-          Coming soon -- Manage trained models and register in the Village
-        </p>
-      </div>
+        <!-- Tab 3: Model Cradle -->
+        <div v-if="activeTab === 'cradle'" class="space-y-6">
+          <!-- Stats bar -->
+          <div class="flex items-center gap-4 text-sm">
+            <div class="bg-apex-card border border-apex-border rounded-lg px-4 py-2">
+              <span class="text-gray-400">Models:</span>
+              <span class="text-white font-bold ml-1">{{ nursery.models.length }}</span>
+            </div>
+            <div class="bg-apex-card border border-apex-border rounded-lg px-4 py-2">
+              <span class="text-gray-400">In Village:</span>
+              <span class="text-green-400 font-bold ml-1">{{ nursery.models.filter(m => m.village_posted).length }}</span>
+            </div>
+          </div>
+
+          <!-- Loading -->
+          <div v-if="nursery.loadingModels" class="text-center py-16">
+            <div class="animate-spin h-8 w-8 border-2 border-gold border-t-transparent rounded-full mx-auto mb-3"></div>
+            <p class="text-gray-400">Loading models...</p>
+          </div>
+
+          <!-- Empty state -->
+          <div v-else-if="!nursery.models.length" class="text-center py-16">
+            <div class="text-5xl text-gray-600 mb-4">&#10697;</div>
+            <h3 class="text-lg font-bold text-gray-300 mb-2">No Trained Models Yet</h3>
+            <p class="text-gray-500 max-w-md mx-auto mb-4">
+              Models appear here when training jobs complete. Start a training job in the Forge tab.
+            </p>
+            <button @click="activeTab = 'forge'" class="text-gold hover:text-gold-bright text-sm">
+              Go to Training Forge &rarr;
+            </button>
+          </div>
+
+          <!-- Model cards grid -->
+          <div v-else class="grid md:grid-cols-2 gap-4">
+            <div
+              v-for="model in nursery.models"
+              :key="model.id"
+              class="bg-apex-card border border-apex-border rounded-xl p-5 hover:border-gold/30 transition-colors"
+            >
+              <!-- Header -->
+              <div class="flex items-start justify-between mb-3">
+                <div>
+                  <h3 class="font-bold text-white">{{ model.name }}</h3>
+                  <p class="text-sm text-gray-400">{{ model.base_model?.split('/').pop() || 'Unknown base' }}</p>
+                </div>
+                <span
+                  :class="getModelTypeColor(model.model_type)"
+                  class="text-xs px-2 py-1 rounded-full border"
+                >
+                  {{ getModelTypeLabel(model.model_type) }}
+                </span>
+              </div>
+
+              <!-- Capabilities -->
+              <div v-if="model.capabilities?.length" class="flex flex-wrap gap-1 mb-3">
+                <span
+                  v-for="cap in model.capabilities.slice(0, 5)"
+                  :key="cap"
+                  class="text-xs bg-gold/10 text-gold px-2 py-0.5 rounded"
+                >
+                  {{ cap }}
+                </span>
+                <span v-if="model.capabilities.length > 5" class="text-xs text-gray-500">
+                  +{{ model.capabilities.length - 5 }} more
+                </span>
+              </div>
+
+              <!-- Performance -->
+              <div v-if="model.performance" class="text-xs text-gray-500 mb-3">
+                <span v-if="model.performance.final_loss">Loss: {{ model.performance.final_loss }}</span>
+                <span v-if="model.performance.events_count"> &middot; {{ model.performance.events_count }} events</span>
+              </div>
+
+              <!-- Footer -->
+              <div class="flex items-center justify-between pt-3 border-t border-apex-border">
+                <span class="text-xs text-gray-500">{{ formatRelativeTime(model.created_at) }}</span>
+                <div class="flex items-center gap-2">
+                  <!-- Village status -->
+                  <button
+                    v-if="model.village_posted"
+                    disabled
+                    class="text-xs bg-green-500/10 text-green-400 px-3 py-1 rounded-lg border border-green-500/30"
+                  >
+                    &#10003; In Village
+                  </button>
+                  <button
+                    v-else
+                    @click="handleRegister(model.id)"
+                    class="text-xs bg-gold/10 text-gold px-3 py-1 rounded-lg border border-gold/30 hover:bg-gold/20 transition-colors"
+                  >
+                    Register in Village
+                  </button>
+                  <!-- Delete -->
+                  <button
+                    @click="handleModelDelete(model.id)"
+                    :class="confirmModelDelete === model.id ? 'bg-red-500/20 text-red-400 border-red-500/30' : 'bg-apex-dark text-gray-500 border-apex-border hover:text-red-400 hover:border-red-500/30'"
+                    class="text-xs px-3 py-1 rounded-lg border transition-colors"
+                  >
+                    {{ confirmModelDelete === model.id ? 'Confirm?' : 'Delete' }}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
 
       <!-- ================================================================= -->
       <!-- Tab 4: Apprentices (placeholder)                                   -->
@@ -1060,15 +1229,95 @@ function getModelLabel(modelId) {
       </div>
 
       <!-- ================================================================= -->
-      <!-- Tab 5: Village Feed (placeholder)                                  -->
+      <!-- Tab 5: Village Feed                                                -->
       <!-- ================================================================= -->
-      <div v-if="activeTab === 'feed'" class="text-center py-20">
-        <div class="text-4xl text-gray-600 mb-4">{ }</div>
-        <h2 class="text-xl font-bold mb-2 text-gray-300">Village Feed</h2>
-        <p class="text-gray-500 max-w-md mx-auto">
-          Coming soon -- Training events and model discovery
-        </p>
-      </div>
+        <!-- Tab 5: Village Feed -->
+        <div v-if="activeTab === 'feed'" class="space-y-8">
+
+          <!-- Activity Feed -->
+          <div>
+            <h3 class="text-lg font-bold text-white mb-4">Recent Activity</h3>
+
+            <div v-if="nursery.loadingActivity" class="text-center py-8">
+              <div class="animate-spin h-6 w-6 border-2 border-gold border-t-transparent rounded-full mx-auto"></div>
+            </div>
+
+            <div v-else-if="!nursery.villageActivity.length" class="text-center py-8">
+              <p class="text-gray-500">No nursery activity yet. Generate datasets or start training to see events here.</p>
+            </div>
+
+            <div v-else class="space-y-2">
+              <div
+                v-for="item in nursery.villageActivity"
+                :key="item.type + '-' + item.id"
+                class="bg-apex-card border border-apex-border rounded-lg px-4 py-3 flex items-center gap-3"
+              >
+                <!-- Icon -->
+                <div
+                  :class="getActivityColor(item)"
+                  class="text-lg flex-shrink-0"
+                  v-html="getActivityIcon(item.type)"
+                ></div>
+                <!-- Message -->
+                <div class="flex-1 min-w-0">
+                  <p class="text-sm text-gray-200 truncate">{{ item.message }}</p>
+                  <div class="flex items-center gap-2 mt-0.5">
+                    <span v-if="item.agent_id" class="text-xs text-gold/70">{{ item.agent_id }}</span>
+                    <span v-if="item.status && item.type === 'training_job'" :class="getStatusColor(item.status)" class="text-xs px-1.5 py-0.5 rounded">
+                      {{ item.status }}
+                    </span>
+                  </div>
+                </div>
+                <!-- Timestamp -->
+                <span class="text-xs text-gray-500 flex-shrink-0">{{ formatRelativeTime(item.timestamp) }}</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Model Discovery -->
+          <div>
+            <h3 class="text-lg font-bold text-white mb-4">Discover Models</h3>
+            <div class="flex gap-2 mb-4">
+              <input
+                v-model="nursery.discoveryQuery"
+                type="text"
+                placeholder="Search Village for models..."
+                class="input flex-1"
+                @keyup.enter="handleDiscover"
+              />
+              <button
+                @click="handleDiscover"
+                :disabled="nursery.loadingDiscovery"
+                class="px-4 py-2 bg-gold/10 text-gold border border-gold/30 rounded-lg hover:bg-gold/20 transition-colors text-sm"
+              >
+                {{ nursery.loadingDiscovery ? 'Searching...' : 'Search' }}
+              </button>
+            </div>
+
+            <div v-if="nursery.loadingDiscovery" class="text-center py-6">
+              <div class="animate-spin h-6 w-6 border-2 border-gold border-t-transparent rounded-full mx-auto"></div>
+            </div>
+
+            <div v-else-if="nursery.discoveredModels.length" class="space-y-2">
+              <div
+                v-for="(item, idx) in nursery.discoveredModels"
+                :key="idx"
+                class="bg-apex-card border border-apex-border rounded-lg px-4 py-3"
+              >
+                <p class="text-sm text-gray-200">{{ item.content || item.text || JSON.stringify(item) }}</p>
+                <div class="flex items-center gap-2 mt-1">
+                  <span v-if="item.agent_id" class="text-xs text-gold/70">{{ item.agent_id }}</span>
+                  <span v-if="item.created_at" class="text-xs text-gray-500">{{ formatRelativeTime(item.created_at) }}</span>
+                </div>
+              </div>
+            </div>
+
+            <div v-else class="text-center py-6">
+              <p class="text-gray-500 text-sm">No shared models found. Register models in the Model Cradle to share them.</p>
+            </div>
+          </div>
+
+        </div>
       </template>
 
     </div>

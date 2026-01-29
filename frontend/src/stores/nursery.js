@@ -27,6 +27,17 @@ export const useNurseryStore = defineStore('nursery', () => {
   const loadingJobs = ref(false)
   const hasTogetherKey = ref(false)
 
+  // Model Cradle state
+  const models = ref([])
+  const loadingModels = ref(false)
+
+  // Village Feed state
+  const villageActivity = ref([])
+  const loadingActivity = ref(false)
+  const discoveredModels = ref([])
+  const loadingDiscovery = ref(false)
+  const discoveryQuery = ref('')
+
   // Actions
   async function fetchDatasets() {
     loading.value = true
@@ -210,6 +221,85 @@ export const useNurseryStore = defineStore('nursery', () => {
     }
   }
 
+  // ── Model Cradle ──────────────────────────────────────────────
+
+  async function fetchModels() {
+    loadingModels.value = true
+    try {
+      const response = await api.get('/api/v1/nursery/models')
+      models.value = response.data.models || []
+      tierRequired.value = false
+    } catch (error) {
+      if (error.response?.status === 403) tierRequired.value = true
+      console.error('Failed to fetch models:', error)
+    } finally {
+      loadingModels.value = false
+    }
+  }
+
+  async function fetchModelDetail(modelId) {
+    try {
+      const response = await api.get(`/api/v1/nursery/models/${modelId}`)
+      return response.data
+    } catch (error) {
+      console.error('Failed to fetch model detail:', error)
+      return null
+    }
+  }
+
+  async function registerModel(modelId) {
+    try {
+      const response = await api.post(`/api/v1/nursery/models/${modelId}/register`)
+      const idx = models.value.findIndex(m => m.id === modelId)
+      if (idx !== -1) models.value[idx].village_posted = true
+      await fetchStats()
+      return response.data
+    } catch (error) {
+      console.error('Register model failed:', error)
+      throw error
+    }
+  }
+
+  async function deleteModel(modelId) {
+    try {
+      await api.delete(`/api/v1/nursery/models/${modelId}`)
+      models.value = models.value.filter(m => m.id !== modelId)
+      await fetchStats()
+      return true
+    } catch (error) {
+      console.error('Delete model failed:', error)
+      return false
+    }
+  }
+
+  // ── Village Feed ──────────────────────────────────────────────
+
+  async function discoverModels(query) {
+    loadingDiscovery.value = true
+    try {
+      const params = {}
+      if (query) params.query = query
+      const response = await api.get('/api/v1/nursery/discover', { params })
+      discoveredModels.value = response.data.models || []
+    } catch (error) {
+      console.error('Discover models failed:', error)
+    } finally {
+      loadingDiscovery.value = false
+    }
+  }
+
+  async function fetchVillageActivity() {
+    loadingActivity.value = true
+    try {
+      const response = await api.get('/api/v1/nursery/village-activity')
+      villageActivity.value = response.data.activity || []
+    } catch (error) {
+      console.error('Failed to fetch village activity:', error)
+    } finally {
+      loadingActivity.value = false
+    }
+  }
+
   return {
     // Data Garden
     datasets, stats, loading, generating, extracting, tierRequired,
@@ -218,5 +308,11 @@ export const useNurseryStore = defineStore('nursery', () => {
     trainingJobs, trainableModels, costEstimate, estimating, startingTraining,
     loadingJobs, hasTogetherKey,
     fetchTrainingJobs, fetchTrainableModels, estimateCost, startTraining, cancelJob, checkTogetherKey,
+    // Model Cradle
+    models, loadingModels,
+    fetchModels, fetchModelDetail, registerModel, deleteModel,
+    // Village Feed
+    villageActivity, loadingActivity, discoveredModels, loadingDiscovery, discoveryQuery,
+    discoverModels, fetchVillageActivity,
   }
 })

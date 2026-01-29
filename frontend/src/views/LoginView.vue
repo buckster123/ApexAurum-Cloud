@@ -87,7 +87,7 @@ async function handleSubmit() {
           <span class="text-5xl font-serif font-bold text-gold">Au</span>
         </div>
         <h1 class="text-2xl font-bold">Welcome to ApexAurum</h1>
-        <p class="text-gray-400 mt-2">62 Tools. Four Alchemists. One Village.</p>
+        <p class="text-gray-400 mt-2">65 Tools. Four Alchemists. One Village.</p>
       </div>
 
       <!-- Login Form -->

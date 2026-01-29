@@ -356,9 +356,8 @@ async def auto_complete_training_job(job_db_id: str, user_id: str):
                             from app.services.village_events import get_village_broadcaster, VillageEvent, EventType
                             broadcaster = get_village_broadcaster()
                             event = VillageEvent(
-                                type=EventType.TOOL_RESULT,
+                                type=EventType.TOOL_COMPLETE,
                                 agent_id=job.agent_id or "SYSTEM",
-                                user_id=user_id,
                                 zone="nursery",
                                 message=f"Training complete: {output_name or 'new model'} ({job.base_model})",
                             )
