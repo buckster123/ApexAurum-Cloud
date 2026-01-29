@@ -2,10 +2,12 @@
 import { ref } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useRouter } from 'vue-router'
+import BugReportModal from '@/components/BugReportModal.vue'
 
 const auth = useAuthStore()
 const router = useRouter()
 const mobileMenuOpen = ref(false)
+const showBugReport = ref(false)
 
 async function handleLogout() {
   await auth.logout()
@@ -102,6 +104,16 @@ function closeMobileMenu() {
 
       <!-- Desktop User Menu -->
       <div class="hidden md:flex items-center gap-4">
+        <button
+          @click="showBugReport = true"
+          class="text-gray-400 hover:text-amber-400 transition-colors"
+          title="Report a bug"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M6.56 1.14a.75.75 0 01.177 1.045A3.987 3.987 0 006 4h8a3.987 3.987 0 00-.737-2.315.75.75 0 111.222-.87c.357.5.636 1.058.822 1.663a.75.75 0 01.078.164A4.002 4.002 0 0118 6.5v.5h1.25a.75.75 0 010 1.5H18v1h1.25a.75.75 0 010 1.5H18v1h1.25a.75.75 0 010 1.5H18v.5a4 4 0 01-1.615 3.213.75.75 0 01-.078.164 5.527 5.527 0 01-.822 1.663.75.75 0 11-1.222-.87A3.987 3.987 0 0014 16H6a3.987 3.987 0 00.737 2.315.75.75 0 11-1.222.87 5.527 5.527 0 01-.822-1.663.75.75 0 01-.078-.164A4.002 4.002 0 013 14v-.5H1.75a.75.75 0 010-1.5H3v-1H1.75a.75.75 0 010-1.5H3v-1H1.75a.75.75 0 010-1.5H3V6.5a4 4 0 011.615-3.213.75.75 0 01.078-.164c.186-.605.465-1.163.822-1.663a.75.75 0 011.045-.177zM8 8a1 1 0 100 2 1 1 0 000-2zm4 0a1 1 0 100 2 1 1 0 000-2zm-5.25 4a.75.75 0 000 1.5h6.5a.75.75 0 000-1.5h-6.5z" clip-rule="evenodd" />
+          </svg>
+        </button>
+
         <router-link
           to="/settings"
           class="text-gray-400 hover:text-white transition-colors"
@@ -228,12 +240,18 @@ function closeMobileMenu() {
 
         <hr class="border-apex-border my-2" />
 
+        <button
+          @click="showBugReport = true; closeMobileMenu()"
+          class="px-4 py-3 rounded-lg text-left text-gray-300 hover:bg-white/5 hover:text-amber-400 transition-colors"
+        >
+          Report Issue
+        </button>
         <router-link
           to="/settings"
           @click="closeMobileMenu"
           class="px-4 py-3 rounded-lg text-gray-300 hover:bg-white/5 hover:text-gold transition-colors"
         >
-          ⚙️ Settings
+          Settings
         </router-link>
         <button
           @click="handleLogout"
@@ -244,4 +262,7 @@ function closeMobileMenu() {
       </div>
     </div>
   </nav>
+
+  <!-- Bug Report Modal -->
+  <BugReportModal :show="showBugReport" @close="showBugReport = false" />
 </template>

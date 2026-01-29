@@ -10,6 +10,7 @@ import { useSwipe } from '@/composables/useSwipe'
 import { usePullToRefresh } from '@/composables/usePullToRefresh'
 import { marked } from 'marked'
 import api from '@/services/api'
+import { useToast } from '@/composables/useToast'
 
 const route = useRoute()
 const router = useRouter()
@@ -18,6 +19,7 @@ const auth = useAuthStore()
 const { devMode, pacMode } = useDevMode()
 const { sounds } = useSound()
 const { haptics } = useHaptic()
+const { showToast } = useToast()
 const swipe = useSwipe()
 const pullRefresh = usePullToRefresh()
 
@@ -381,7 +383,7 @@ async function handleFork() {
     haptics.success()
   } catch (e) {
     console.error('Fork failed:', e)
-    alert('Failed to create branch')
+    showToast('Failed to create branch. Please try again.')
   } finally {
     forking.value = false
   }

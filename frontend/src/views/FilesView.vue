@@ -14,10 +14,12 @@ import { useFilesStore } from '@/stores/files'
 import { useSound } from '@/composables/useSound'
 import { useDevMode } from '@/composables/useDevMode'
 import CortexDiver from '@/components/cortex/CortexDiver.vue'
+import { useToast } from '@/composables/useToast'
 
 const route = useRoute()
 const router = useRouter()
 const store = useFilesStore()
+const { showToast } = useToast()
 const { sounds, playTone } = useSound()
 const { devMode } = useDevMode()
 
@@ -223,7 +225,7 @@ async function createFolder() {
     showNewFolderModal.value = false
     newFolderName.value = ''
   } catch (e) {
-    alert(e)
+    showToast('Failed to create folder. Please try again.')
   }
 }
 
@@ -312,7 +314,7 @@ async function submitRename() {
     }
     showRenameModal.value = false
   } catch (e) {
-    alert(e)
+    showToast('Failed to rename. Please try again.')
   }
 }
 
@@ -335,7 +337,7 @@ async function confirmDelete() {
     vaultSounds.delete()
     showDeleteConfirm.value = false
   } catch (e) {
-    alert(e)
+    showToast('Failed to delete. Please try again.')
   }
 }
 

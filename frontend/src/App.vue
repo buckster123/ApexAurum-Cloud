@@ -7,6 +7,7 @@ import { useMusicStore } from '@/stores/music'
 import Navbar from '@/components/Navbar.vue'
 import AlchemicalParticles from '@/components/AlchemicalParticles.vue'
 import MusicPlayer from '@/components/music/MusicPlayer.vue'
+import ToastContainer from '@/components/ToastContainer.vue'
 
 const auth = useAuthStore()
 const music = useMusicStore()
@@ -52,6 +53,9 @@ watch(pacMode, (active) => {
 
     <!-- Persistent Music Player -->
     <MusicPlayer v-if="auth.isAuthenticated" />
+
+    <!-- Global Toast Notifications -->
+    <ToastContainer />
   </div>
 </template>
 

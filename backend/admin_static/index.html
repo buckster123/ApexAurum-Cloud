@@ -82,6 +82,7 @@
           <button onclick="showTab('coupons')" data-tab="coupons" class="tab-btn px-4 py-3 text-sm font-medium border-b-2 border-transparent hover:border-gold/50 transition-colors">Coupons</button>
           <button onclick="showTab('users')" data-tab="users" class="tab-btn px-4 py-3 text-sm font-medium border-b-2 border-transparent hover:border-gold/50 transition-colors">Users</button>
           <button onclick="showTab('stats')" data-tab="stats" class="tab-btn px-4 py-3 text-sm font-medium border-b-2 border-transparent hover:border-gold/50 transition-colors">Stats</button>
+          <button onclick="showTab('reports')" data-tab="reports" class="tab-btn px-4 py-3 text-sm font-medium border-b-2 border-transparent hover:border-gold/50 transition-colors">Reports</button>
         </div>
       </div>
 
@@ -282,6 +283,39 @@
             <div id="provider-grid" class="grid grid-cols-2 md:grid-cols-3 gap-3"></div>
           </div>
         </div>
+
+        <!-- Reports Tab -->
+        <div id="tab-reports" class="tab-content hidden">
+          <div class="flex items-center justify-between mb-6">
+            <h2 class="text-xl font-bold">Bug Reports</h2>
+            <div class="flex gap-2">
+              <select id="report-status-filter" class="input w-48" onchange="loadReports(this.value)">
+                <option value="">All Statuses</option>
+                <option value="open">Open</option>
+                <option value="acknowledged">Acknowledged</option>
+                <option value="resolved">Resolved</option>
+                <option value="closed">Closed</option>
+              </select>
+            </div>
+          </div>
+          <div class="card">
+            <div id="reports-loading" class="text-center py-8 text-gray-400">Loading reports...</div>
+            <div id="reports-empty" class="text-center py-8 text-gray-500 hidden">No reports found</div>
+            <table id="reports-table" class="w-full hidden">
+              <thead>
+                <tr class="text-left text-sm text-gray-400 border-b border-apex-border">
+                  <th class="pb-3">Status</th>
+                  <th class="pb-3">Category</th>
+                  <th class="pb-3">User</th>
+                  <th class="pb-3">Description</th>
+                  <th class="pb-3">Page</th>
+                  <th class="pb-3">Created</th>
+                </tr>
+              </thead>
+              <tbody id="reports-body" class="divide-y divide-apex-border"></tbody>
+            </table>
+          </div>
+        </div>
       </main>
     </div>
   </div>
@@ -396,6 +430,7 @@
       if (tab === 'coupons') loadCoupons();
       if (tab === 'users') loadUsers();
       if (tab === 'stats') loadStats();
+      if (tab === 'reports') loadReports();
     }
 
     // Coupons
@@ -752,6 +787,143 @@
         document.getElementById('stat-conversations').textContent = '-';
         document.getElementById('stat-coupons').textContent = '-';
         document.getElementById('stat-files').textContent = '-';
+      }
+    }
+
+    // Reports
+    let reports = [];
+
+    async function loadReports(statusFilter) {
+      const loading = document.getElementById('reports-loading');
+      const empty = document.getElementById('reports-empty');
+      const table = document.getElementById('reports-table');
+
+      loading.classList.remove('hidden');
+      empty.classList.add('hidden');
+      table.classList.add('hidden');
+
+      try {
+        let url = `${API_BASE}/api/v1/admin/reports`;
+        if (statusFilter) url += `?status=${statusFilter}`;
+
+        const res = await fetch(url, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (!res.ok) throw new Error('Failed to load reports');
+
+        const data = await res.json();
+        reports = data.reports || data;
+
+        loading.classList.add('hidden');
+        renderReports(reports);
+      } catch (err) {
+        loading.textContent = 'Failed to load reports';
+      }
+    }
+
+    function renderReports(list) {
+      const empty = document.getElementById('reports-empty');
+      const table = document.getElementById('reports-table');
+      const tbody = document.getElementById('reports-body');
+
+      if (list.length === 0) {
+        empty.classList.remove('hidden');
+        table.classList.add('hidden');
+        return;
+      }
+
+      empty.classList.add('hidden');
+      table.classList.remove('hidden');
+
+      const statusBadge = {
+        open: 'bg-red-500/20 text-red-400',
+        acknowledged: 'bg-amber-500/20 text-amber-400',
+        resolved: 'bg-green-500/20 text-green-400',
+        closed: 'bg-gray-500/20 text-gray-400'
+      };
+
+      tbody.innerHTML = list.map(r => {
+        const desc = r.description || '';
+        const truncated = desc.length > 60 ? desc.substring(0, 60) + '...' : desc;
+        const badge = statusBadge[r.status] || statusBadge.open;
+
+        return `
+          <tr class="hover:bg-apex-dark/50 cursor-pointer" onclick="toggleReportDetail('${r.id}')">
+            <td class="py-3">
+              <span class="px-2 py-1 text-xs rounded ${badge}">${r.status}</span>
+            </td>
+            <td class="py-3 text-sm">${r.category || '-'}</td>
+            <td class="py-3 text-sm">${r.user_email || '-'}</td>
+            <td class="py-3 text-sm text-gray-300">${truncated}</td>
+            <td class="py-3 text-sm text-gray-400">${r.page || '-'}</td>
+            <td class="py-3 text-sm text-gray-400">${new Date(r.created_at).toLocaleDateString()}</td>
+          </tr>
+          <tr id="report-detail-${r.id}" class="hidden">
+            <td colspan="6" class="py-4 px-4 bg-apex-dark/30">
+              <div class="space-y-3">
+                <div>
+                  <span class="text-xs text-gray-400 uppercase">Full Description</span>
+                  <p class="text-sm text-gray-200 mt-1">${desc}</p>
+                </div>
+                ${r.browser_info ? `<div>
+                  <span class="text-xs text-gray-400 uppercase">Browser Info</span>
+                  <p class="text-sm text-gray-300 mt-1 font-mono">${r.browser_info}</p>
+                </div>` : ''}
+                <div class="flex gap-4 text-xs text-gray-500">
+                  <span>Created: ${new Date(r.created_at).toLocaleString()}</span>
+                  ${r.updated_at ? `<span>Updated: ${new Date(r.updated_at).toLocaleString()}</span>` : ''}
+                </div>
+                <div class="flex gap-3 items-end pt-2 border-t border-apex-border">
+                  <div>
+                    <label class="block text-xs text-gray-400 mb-1">Status</label>
+                    <select id="report-status-${r.id}" class="input w-40 text-sm">
+                      <option value="open" ${r.status === 'open' ? 'selected' : ''}>Open</option>
+                      <option value="acknowledged" ${r.status === 'acknowledged' ? 'selected' : ''}>Acknowledged</option>
+                      <option value="resolved" ${r.status === 'resolved' ? 'selected' : ''}>Resolved</option>
+                      <option value="closed" ${r.status === 'closed' ? 'selected' : ''}>Closed</option>
+                    </select>
+                  </div>
+                  <div class="flex-1">
+                    <label class="block text-xs text-gray-400 mb-1">Admin Notes</label>
+                    <textarea id="report-notes-${r.id}" class="input text-sm" rows="2" placeholder="Add notes...">${r.admin_notes || ''}</textarea>
+                  </div>
+                  <button onclick="event.stopPropagation(); updateReport('${r.id}')" class="btn-primary text-sm">Save</button>
+                </div>
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function toggleReportDetail(id) {
+      const detail = document.getElementById(`report-detail-${id}`);
+      if (detail) {
+        detail.classList.toggle('hidden');
+      }
+    }
+
+    async function updateReport(id) {
+      const status = document.getElementById(`report-status-${id}`).value;
+      const admin_notes = document.getElementById(`report-notes-${id}`).value;
+
+      try {
+        const res = await fetch(`${API_BASE}/api/v1/admin/reports/${id}`, {
+          method: 'PATCH',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ status, admin_notes })
+        });
+
+        if (!res.ok) throw new Error('Failed to update report');
+
+        const filter = document.getElementById('report-status-filter').value;
+        loadReports(filter);
+      } catch (err) {
+        alert(err.message);
       }
     }
   </script>

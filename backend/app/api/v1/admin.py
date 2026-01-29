@@ -10,7 +10,7 @@ from uuid import UUID
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,6 +19,7 @@ from sqlalchemy import text
 from app.database import get_db
 from app.models.user import User
 from app.models.billing import Subscription, CreditBalance, Coupon
+from app.models.feedback import BugReport
 from app.models.conversation import Conversation, Message
 from app.auth.deps import get_current_user
 from app.services.llm_provider import get_available_providers, PROVIDER_MODELS
@@ -371,3 +372,108 @@ async def get_stats(
         total_neural_vectors=total_neural_vectors,
         providers=providers,
     )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# BUG REPORTS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class AdminReportResponse(BaseModel):
+    id: str
+    user_email: str
+    category: str
+    page: Optional[str] = None
+    description: str
+    browser_info: Optional[str] = None
+    status: str
+    admin_notes: Optional[str] = None
+    created_at: str
+    updated_at: Optional[str] = None
+
+
+class AdminReportListResponse(BaseModel):
+    reports: list[AdminReportResponse]
+    total: int
+
+
+class UpdateReportRequest(BaseModel):
+    status: Optional[str] = Field(None, pattern="^(open|acknowledged|resolved|closed)$")
+    admin_notes: Optional[str] = Field(None, max_length=2000)
+
+
+@router.get("/reports", response_model=AdminReportListResponse)
+async def list_reports(
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+    status_filter: Optional[str] = Query(None, alias="status", max_length=20),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+):
+    """List bug reports with optional status filter."""
+    query = select(BugReport).order_by(BugReport.created_at.desc())
+
+    if status_filter:
+        query = query.where(BugReport.status == status_filter)
+
+    # Get total count
+    count_query = select(func.count(BugReport.id))
+    if status_filter:
+        count_query = count_query.where(BugReport.status == status_filter)
+    total = await db.scalar(count_query) or 0
+
+    query = query.offset(offset).limit(limit)
+    result = await db.execute(query)
+    reports = result.scalars().all()
+
+    # Fetch user emails
+    user_ids = [r.user_id for r in reports]
+    users_result = await db.execute(select(User).where(User.id.in_(user_ids)))
+    users_map = {u.id: u.email for u in users_result.scalars().all()}
+
+    return AdminReportListResponse(
+        reports=[
+            AdminReportResponse(
+                id=str(r.id),
+                user_email=users_map.get(r.user_id, "unknown"),
+                category=r.category,
+                page=r.page,
+                description=r.description,
+                browser_info=r.browser_info,
+                status=r.status,
+                admin_notes=r.admin_notes,
+                created_at=r.created_at.isoformat(),
+                updated_at=r.updated_at.isoformat() if r.updated_at else None,
+            )
+            for r in reports
+        ],
+        total=total,
+    )
+
+
+@router.patch("/reports/{report_id}")
+async def update_report(
+    report_id: UUID,
+    request: UpdateReportRequest,
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update a bug report's status or admin notes."""
+    from datetime import timezone
+
+    result = await db.execute(select(BugReport).where(BugReport.id == report_id))
+    report = result.scalar_one_or_none()
+
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+
+    if request.status is not None:
+        report.status = request.status
+    if request.admin_notes is not None:
+        report.admin_notes = request.admin_notes
+
+    report.updated_at = datetime.now(timezone.utc)
+    await db.commit()
+
+    logger.info(f"Report {report_id} updated by {admin.email}: status={report.status}")
+
+    return {"success": True, "status": report.status}

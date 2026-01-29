@@ -18,6 +18,7 @@ from app.models.agent_memory import AgentMemory
 from app.models.billing import Subscription, CreditBalance, CreditTransaction, WebhookEvent, Coupon, CouponRedemption
 from app.models.council import DeliberationSession, SessionAgent, DeliberationRound, SessionMessage
 from app.models.jam import JamSession, JamParticipant, JamTrack, JamMessage
+from app.models.feedback import BugReport
 
 # User references all of the above, so import LAST
 from app.models.user import User
@@ -47,5 +48,6 @@ __all__ = [
     "JamParticipant",
     "JamTrack",
     "JamMessage",
+    "BugReport",
     # "UserVector",  # Temp disabled
 ]

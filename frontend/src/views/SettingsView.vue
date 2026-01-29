@@ -7,8 +7,10 @@ import { useDevMode } from '@/composables/useDevMode'
 import { useSound } from '@/composables/useSound'
 import { useHaptic } from '@/composables/useHaptic'
 import api from '@/services/api'
+import { useToast } from '@/composables/useToast'
 
 const auth = useAuthStore()
+const { showToast } = useToast()
 const chatStore = useChatStore()
 const billing = useBillingStore()
 
@@ -288,6 +290,7 @@ async function saveProfile() {
     setTimeout(() => saved.value = false, 3000)
   } catch (e) {
     console.error('Failed to save profile:', e)
+    showToast('Failed to save profile. Please try again.')
   } finally {
     loading.value = false
   }
@@ -302,6 +305,7 @@ async function savePreferences() {
     setTimeout(() => saved.value = false, 3000)
   } catch (e) {
     console.error('Failed to save preferences:', e)
+    showToast('Failed to save preferences. Please try again.')
   } finally {
     loading.value = false
   }
@@ -370,6 +374,7 @@ async function saveAgent() {
     editingAgent.value = null
   } catch (e) {
     console.error('Failed to save agent:', e)
+    showToast('Failed to save agent. Please try again.')
   }
 }
 
@@ -381,6 +386,7 @@ async function deleteCustomAgent(agentId) {
     await fetchCustomAgents()
   } catch (e) {
     console.error('Failed to delete agent:', e)
+    showToast('Failed to delete agent. Please try again.')
   }
 }
 
