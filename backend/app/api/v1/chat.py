@@ -609,6 +609,8 @@ async def send_message(
                     "action": "upgrade_or_credits"
                 }
             )
+    else:
+        logger.warning("Billing not configured (no STRIPE_SECRET_KEY). Free tier model only.")
 
     # Determine which provider to use
     provider = request.provider or "anthropic"
@@ -633,8 +635,21 @@ async def send_message(
         )
 
     # ═══════════════════════════════════════════════════════════════════════════
-    # TIER-BASED ACCESS CHECKS (only if Stripe is configured)
+    # TIER-BASED ACCESS CHECKS
     # ═══════════════════════════════════════════════════════════════════════════
+    if not billing_service:
+        # No billing configured: restrict to free tier default model
+        free_default = "claude-haiku-4-5-20251001"
+        if model != free_default and provider == "anthropic":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={
+                    "error": "billing_not_configured",
+                    "message": f"Billing not configured. Only {free_default} is available.",
+                    "action": "contact_admin"
+                }
+            )
+
     if billing_service:
         # Check if user can use the requested model
         if not await billing_service.can_use_model(user.id, model):

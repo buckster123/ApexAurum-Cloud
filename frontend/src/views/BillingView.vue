@@ -10,6 +10,7 @@ const auth = useAuthStore()
 
 const activeTab = ref('plans')
 const loadingAction = ref(null)
+const checkoutError = ref(null)
 const couponCode = ref('')
 const couponMessage = ref(null)
 
@@ -35,6 +36,8 @@ async function selectPlan(tierId) {
     await billing.createSubscriptionCheckout(tierId)
   } catch (e) {
     console.error('Checkout error:', e)
+    checkoutError.value = e.response?.data?.detail || 'Checkout failed. Please try again.'
+    setTimeout(() => checkoutError.value = null, 5000)
   } finally {
     loadingAction.value = null
   }
@@ -46,6 +49,8 @@ async function buyCredits(packId) {
     await billing.createCreditsCheckout(packId)
   } catch (e) {
     console.error('Checkout error:', e)
+    checkoutError.value = e.response?.data?.detail || 'Credit purchase failed. Please try again.'
+    setTimeout(() => checkoutError.value = null, 5000)
   } finally {
     loadingAction.value = null
   }
@@ -57,6 +62,8 @@ async function manageSubscription() {
     await billing.openPortal()
   } catch (e) {
     console.error('Portal error:', e)
+    checkoutError.value = e.response?.data?.detail || 'Could not open billing portal. Please try again.'
+    setTimeout(() => checkoutError.value = null, 5000)
   } finally {
     loadingAction.value = null
   }
@@ -202,6 +209,11 @@ function formatDate(dateStr) {
           History
         </button>
       </div>
+    </div>
+
+    <!-- Checkout Error Banner -->
+    <div v-if="checkoutError" class="mb-4 p-3 rounded-lg bg-red-500/20 text-red-400 border border-red-500/30 text-sm">
+      {{ checkoutError }}
     </div>
 
     <!-- Plans Tab -->

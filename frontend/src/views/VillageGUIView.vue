@@ -73,7 +73,13 @@ function connectWebSocket() {
     wsUrl = `${wsProtocol}//${window.location.host}/ws/village`
   }
 
-  console.log(`Village: Connecting to ${wsUrl}`)
+  // Append auth token for WebSocket authentication
+  const token = localStorage.getItem('access_token')
+  if (token && token !== 'undefined' && token !== 'null') {
+    wsUrl += `?token=${token}`
+  }
+
+  console.log(`Village: Connecting to ${wsUrl.split('?')[0]}`)
   ws.value = new WebSocket(wsUrl)
 
   ws.value.onopen = () => {

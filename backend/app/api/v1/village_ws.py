@@ -9,12 +9,35 @@ Enables visual representation of agent activity.
 
 import json
 import logging
+from uuid import UUID
+
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from sqlalchemy import select
 
 from app.services.village_events import get_village_broadcaster
+from app.auth import verify_token
+from app.database import async_session
+from app.models.user import User
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Village WebSocket"])
+
+
+async def authenticate_ws(websocket: WebSocket) -> User | None:
+    """Authenticate WebSocket connection via query param token."""
+    token = websocket.query_params.get("token")
+    if not token:
+        return None
+    payload = verify_token(token, token_type="access")
+    if not payload:
+        return None
+    try:
+        user_id = UUID(payload["sub"])
+    except (KeyError, ValueError, TypeError):
+        return None
+    async with async_session() as db:
+        result = await db.execute(select(User).where(User.id == user_id))
+        return result.scalar_one_or_none()
 
 
 @router.websocket("/village")
@@ -38,6 +61,11 @@ async def village_websocket(websocket: WebSocket):
     - zone_click: User clicked a zone
     - agent_click: User clicked an agent
     """
+    user = await authenticate_ws(websocket)
+    if not user:
+        await websocket.close(code=1008, reason="Unauthorized")
+        return
+
     await websocket.accept()
     broadcaster = get_village_broadcaster()
     await broadcaster.connect(websocket)

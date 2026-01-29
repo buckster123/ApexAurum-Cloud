@@ -6,9 +6,12 @@ The cloud-native version of ApexAurum.
 
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 from app.config import get_settings
 from app.database import init_db, close_db
@@ -16,6 +19,9 @@ from app.api.v1 import router as api_v1_router
 from app.tools import register_all_tools
 
 settings = get_settings()
+
+# Rate limiter (in-memory for beta, can switch to Redis later)
+limiter = Limiter(key_func=get_remote_address, default_limits=["100/minute"])
 
 
 def init_vault():
@@ -73,7 +79,12 @@ async def lifespan(app: FastAPI):
     # Auto-promote initial admin from env var (or auto-create if missing)
     import os
     initial_admin_email = os.getenv("INITIAL_ADMIN_EMAIL", "admin@apexaurum.no")
-    admin_password = os.getenv("INITIAL_ADMIN_PASSWORD", "ApexAdmin2026!")
+    admin_password = os.getenv("INITIAL_ADMIN_PASSWORD")
+    if not admin_password:
+        import secrets
+        admin_password = secrets.token_urlsafe(16)
+        print(f"WARNING: No INITIAL_ADMIN_PASSWORD set. Generated: {admin_password}")
+        print("Set INITIAL_ADMIN_PASSWORD env var for a fixed password.")
     print(f"Admin setup: target={initial_admin_email}")
     if initial_admin_email:
         try:
@@ -147,6 +158,19 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Rate limiting
+app.state.limiter = limiter
+
+
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
+    """Rate limit exceeded handler with CORS support."""
+    return JSONResponse(
+        status_code=429,
+        content={"error": "Rate limit exceeded", "detail": str(exc.detail)},
+        headers=get_cors_headers(request),
+    )
 
 
 # Admin panel (served from backend - no CORS needed)
@@ -271,18 +295,19 @@ async def http_exception_handler(request, exc):
 @app.exception_handler(Exception)
 async def global_exception_handler(request, exc):
     """Global exception handler with CORS support."""
-    import traceback
     import logging
     logger = logging.getLogger(__name__)
     logger.exception(f"Unhandled exception: {exc}")
 
+    if settings.debug:
+        detail = str(exc)
+        exc_type = exc.__class__.__name__
+    else:
+        detail = "An internal error occurred"
+        exc_type = "InternalError"
+
     return JSONResponse(
         status_code=500,
-        content={
-            "error": "Internal server error",
-            # Always show detail for better debugging
-            "detail": str(exc),
-            "type": exc.__class__.__name__,
-        },
+        content={"error": "Internal server error", "detail": detail, "type": exc_type},
         headers=get_cors_headers(request),
     )

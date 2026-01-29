@@ -383,7 +383,13 @@ export function useVillage() {
       wsUrl = `${wsProtocol}//${window.location.host}/ws/village`
     }
 
-    console.log(`Connecting to ${wsUrl}`)
+    // Append auth token for WebSocket authentication
+    const token = localStorage.getItem('access_token')
+    if (token && token !== 'undefined' && token !== 'null') {
+      wsUrl += `?token=${token}`
+    }
+
+    console.log(`Connecting to ${wsUrl.split('?')[0]}`)
     ws = new WebSocket(wsUrl)
 
     ws.onopen = () => {
