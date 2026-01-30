@@ -2,7 +2,7 @@
 
 **Date:** 2026-01-30
 **Build:** v113-error-tracking
-**Status:** BETA LAUNCH READY - Error tracking live, all systems go!
+**Status:** BETA LAUNCHED - Repo cleaned, docs published, testers invited!
 
 ---
 
@@ -28,6 +28,28 @@ ApexAurum Cloud is fully functional, polished, and **ready for beta testing**:
 - **Centralized Error Tracking** - GDPR-compliant, admin dashboard, export, auto-purge
 
 **Pricing:** Seeker $3 | Alchemist $10 | Adept $30
+
+---
+
+## Session 35 Accomplishments
+
+### Repo Cleanup & Beta Launch Presentation
+
+Cleaned the GitHub repo for public presentation and created comprehensive documentation.
+
+**Archive operation:**
+- Moved 22 internal files to `archive/` (gitignored, local only)
+- 10 root planning docs (MASTERPLAN, TOOLS_MASTERPLAN, POLISHPLAN, etc.)
+- 3 directories (azoth_comms/, PAC-agents/, docs/)
+- Updated `.gitignore` with `archive/` catch-all
+
+**New documents:**
+- `README.md` - Complete rewrite as polished beta launch page (features, architecture, pricing, quick start, API overview, agent roster)
+- `ENCYCLOPEDIA.md` - 1,615-line "Apex Aurum Encyclopedia of Tek and Lore" covering 8 parts: World of Apex Aurum, The Five Minds, Systems Deep-Dive, Business of Alchemy, Infrastructure & Security, ApexPocket, Easter Eggs & Secrets, API Reference + Glossary
+- `CLAUDE.md` - Updated with repo structure section, archive note, admin_static warning, tool count fix (50+)
+- `archive/BETA_LAUNCH_POST.md` - X post for beta launch + image generation prompt
+
+**Beta officially launched.** Post drafted, testers being invited.
 
 ---
 
