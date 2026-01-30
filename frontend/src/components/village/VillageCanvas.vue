@@ -1,14 +1,15 @@
 <script setup>
 /**
- * VillageCanvas - The Village GUI Visualization
+ * VillageCanvas - RPG Pixel Art Village Visualization
  *
- * Canvas-based 2D visualization of agent activity.
- * Agents walk between zones as they execute tools.
- * Now accepts events from parent for shared WebSocket.
+ * Canvas-based 2D visualization with pixel art sprites.
+ * Agents walk between themed buildings on a grass terrain.
+ * "The Athanor's village awakens in pixels"
  */
 
 import { ref, watch, onMounted, onUnmounted } from 'vue'
 import { ZONES, AGENT_COLORS, CANVAS_WIDTH, CANVAS_HEIGHT } from '@/composables/useVillage'
+import { usePixelSprites } from '@/composables/usePixelSprites'
 
 const props = defineProps({
   events: {
@@ -29,13 +30,63 @@ let animationFrameId = null
 let agents = new Map()
 let activeZone = null
 
-// Agent class
+const { initSpriteCache, getSprite, getBuildingSprite, getTerrainTile, SPRITE_SCALE } = usePixelSprites()
+
+// Precomputed terrain canvas (tiled once, reused every frame)
+let terrainCanvas = null
+
+function buildTerrainCache() {
+  terrainCanvas = document.createElement('canvas')
+  terrainCanvas.width = CANVAS_WIDTH
+  terrainCanvas.height = CANVAS_HEIGHT
+  const tctx = terrainCanvas.getContext('2d')
+  tctx.imageSmoothingEnabled = false
+
+  const tile0 = getTerrainTile('grass_0')
+  const tile1 = getTerrainTile('grass_1')
+  if (!tile0) return
+
+  const tileSize = 16 * SPRITE_SCALE
+  for (let y = 0; y < CANVAS_HEIGHT; y += tileSize) {
+    for (let x = 0; x < CANVAS_WIDTH; x += tileSize) {
+      // Alternate tiles for variety
+      const tile = ((Math.floor(x / tileSize) + Math.floor(y / tileSize)) % 3 === 0) ? tile1 : tile0
+      tctx.drawImage(tile || tile0, x, y)
+    }
+  }
+
+  // Draw dirt paths from village square to each zone
+  const center = ZONES.village_square
+  tctx.strokeStyle = '#8b7355'
+  tctx.lineWidth = 18
+  tctx.lineCap = 'round'
+  for (const [name, zone] of Object.entries(ZONES)) {
+    if (name === 'village_square') continue
+    tctx.beginPath()
+    tctx.moveTo(center.x, center.y)
+    tctx.lineTo(zone.x, zone.y)
+    tctx.stroke()
+  }
+  // Path border (darker edges)
+  tctx.strokeStyle = '#6b5540'
+  tctx.lineWidth = 22
+  tctx.globalCompositeOperation = 'destination-over'
+  for (const [name, zone] of Object.entries(ZONES)) {
+    if (name === 'village_square') continue
+    tctx.beginPath()
+    tctx.moveTo(center.x, center.y)
+    tctx.lineTo(zone.x, zone.y)
+    tctx.stroke()
+  }
+  tctx.globalCompositeOperation = 'source-over'
+}
+
+// Sprite-based Agent class
 class Agent {
   constructor(id, name, color = '#00aaff') {
     this.id = id
     this.name = name
     this.color = color
-    this.radius = 20
     this.x = ZONES.village_square.x
     this.y = ZONES.village_square.y
     this.targetX = this.x
@@ -43,8 +94,13 @@ class Agent {
     this.state = 'idle'
     this.currentZone = 'village_square'
     this.currentTool = null
-    this.moveSpeed = 5
+    this.moveSpeed = 3 // Slower for RPG feel
     this.pulsePhase = 0
+
+    // Sprite animation state
+    this.facing = 'down'
+    this.animFrame = 0
+    this.animTimer = 0
   }
 
   moveTo(zoneName) {
@@ -77,52 +133,108 @@ class Agent {
     if (distance > this.moveSpeed) {
       this.x += (dx / distance) * this.moveSpeed
       this.y += (dy / distance) * this.moveSpeed
+
+      // Determine facing from movement direction
+      if (Math.abs(dx) > Math.abs(dy)) {
+        this.facing = dx > 0 ? 'right' : 'left'
+      } else {
+        this.facing = dy > 0 ? 'down' : 'up'
+      }
+
+      // Walk animation (cycle every 200ms at ~60fps)
+      this.animTimer += 16
+      if (this.animTimer >= 200) {
+        this.animTimer = 0
+        this.animFrame = (this.animFrame + 1) % 2
+      }
     } else {
       this.x = this.targetX
       this.y = this.targetY
       if (this.state === 'moving') {
         this.state = this.currentTool ? 'working' : 'idle'
       }
+
+      // Idle/working animation (slower cycle)
+      this.animTimer += 16
+      const cycleSpeed = this.state === 'working' ? 250 : 600
+      const frameCount = this.state === 'working' ? 3 : 2
+      if (this.animTimer >= cycleSpeed) {
+        this.animTimer = 0
+        this.animFrame = (this.animFrame + 1) % frameCount
+      }
     }
+
     this.pulsePhase += 0.1
   }
 
   draw(ctx) {
     ctx.save()
-    let radius = this.radius
-    if (this.state === 'working') {
-      radius += Math.sin(this.pulsePhase) * 3
+
+    // Determine animation set
+    let animation = 'idle'
+    if (this.state === 'moving') {
+      animation = `walk_${this.facing}`
+    } else if (this.state === 'working') {
+      animation = 'working'
     }
 
-    // Glow effect
-    if (this.state === 'working' || this.state === 'moving') {
+    const sprite = getSprite(this.name, animation, this.animFrame)
+
+    if (sprite) {
+      const drawW = sprite.width
+      const drawH = sprite.height
+      const drawX = this.x - drawW / 2
+      const drawY = this.y - drawH / 2
+
+      // Working glow (behind sprite)
+      if (this.state === 'working') {
+        const glowRadius = 30 + Math.sin(this.pulsePhase) * 5
+        ctx.globalAlpha = 0.2
+        ctx.beginPath()
+        ctx.arc(this.x, this.y, glowRadius, 0, Math.PI * 2)
+        ctx.fillStyle = this.color
+        ctx.fill()
+        ctx.globalAlpha = 1
+      }
+
+      // Moving glow (subtle)
+      if (this.state === 'moving') {
+        ctx.globalAlpha = 0.1
+        ctx.beginPath()
+        ctx.arc(this.x, this.y, 25, 0, Math.PI * 2)
+        ctx.fillStyle = this.color
+        ctx.fill()
+        ctx.globalAlpha = 1
+      }
+
+      ctx.drawImage(sprite, drawX, drawY)
+    } else {
+      // Fallback: colored circle (if sprites not loaded)
       ctx.beginPath()
-      ctx.arc(this.x, this.y, radius + 10, 0, Math.PI * 2)
-      ctx.fillStyle = this.color + '33'
+      ctx.arc(this.x, this.y, 20, 0, Math.PI * 2)
+      ctx.fillStyle = this.color
       ctx.fill()
+      ctx.strokeStyle = '#ffffff'
+      ctx.lineWidth = 2
+      ctx.stroke()
     }
-
-    // Main circle
-    ctx.beginPath()
-    ctx.arc(this.x, this.y, radius, 0, Math.PI * 2)
-    ctx.fillStyle = this.color
-    ctx.fill()
-    ctx.strokeStyle = '#ffffff'
-    ctx.lineWidth = 2
-    ctx.stroke()
 
     // Name label
     ctx.fillStyle = '#ffffff'
-    ctx.font = '12px monospace'
+    ctx.font = '11px monospace'
     ctx.textAlign = 'center'
-    ctx.fillText(this.name, this.x, this.y + radius + 15)
+    ctx.shadowColor = '#000000'
+    ctx.shadowBlur = 3
+    ctx.fillText(this.name, this.x, this.y + 42)
 
     // Tool label
     if (this.currentTool) {
       ctx.fillStyle = '#ffcc00'
       ctx.font = '10px monospace'
-      ctx.fillText(this.currentTool, this.x, this.y - radius - 5)
+      ctx.fillText(this.currentTool, this.x, this.y - 42)
     }
+
+    ctx.shadowBlur = 0
     ctx.restore()
   }
 }
@@ -153,62 +265,70 @@ watch(() => props.events, (newEvents) => {
   }
 }, { deep: true })
 
-function drawZone(name, zone, isActive) {
-  const halfW = zone.width / 2
-  const halfH = zone.height / 2
+function drawBuilding(name, zone, isActive) {
+  const sprite = getBuildingSprite(name)
 
-  ctx.save()
-  if (isActive) {
-    ctx.shadowColor = zone.color
-    ctx.shadowBlur = 20
+  if (sprite) {
+    const drawX = zone.x - sprite.width / 2
+    const drawY = zone.y - sprite.height / 2
+
+    // Active glow behind building
+    if (isActive) {
+      ctx.save()
+      ctx.globalAlpha = 0.4
+      ctx.shadowColor = zone.color
+      ctx.shadowBlur = 25
+      ctx.drawImage(sprite, drawX, drawY)
+      ctx.restore()
+    }
+
+    ctx.drawImage(sprite, drawX, drawY)
+  } else {
+    // Fallback: original rectangle
+    const halfW = zone.width / 2
+    const halfH = zone.height / 2
+    ctx.save()
+    if (isActive) {
+      ctx.shadowColor = zone.color
+      ctx.shadowBlur = 20
+    }
+    ctx.fillStyle = zone.color + '66'
+    ctx.strokeStyle = zone.color
+    ctx.lineWidth = 2
+    ctx.beginPath()
+    ctx.roundRect(zone.x - halfW, zone.y - halfH, zone.width, zone.height, 10)
+    ctx.fill()
+    ctx.stroke()
+    ctx.restore()
   }
 
-  ctx.fillStyle = zone.color + '66'
-  ctx.strokeStyle = zone.color
-  ctx.lineWidth = 2
-  ctx.beginPath()
-  ctx.roundRect(zone.x - halfW, zone.y - halfH, zone.width, zone.height, 10)
-  ctx.fill()
-  ctx.stroke()
-
+  // Label below building
   ctx.fillStyle = '#ffffff'
   ctx.font = '11px monospace'
   ctx.textAlign = 'center'
-  ctx.fillText(zone.label, zone.x, zone.y + halfH + 15)
-  ctx.restore()
-}
-
-function drawConnections() {
-  ctx.save()
-  ctx.strokeStyle = '#ffffff22'
-  ctx.lineWidth = 1
-  const center = ZONES.village_square
-  for (const [name, zone] of Object.entries(ZONES)) {
-    if (name === 'village_square') continue
-    ctx.beginPath()
-    ctx.moveTo(center.x, center.y)
-    ctx.lineTo(zone.x, zone.y)
-    ctx.stroke()
-  }
-  ctx.restore()
+  ctx.shadowColor = '#000000'
+  ctx.shadowBlur = 3
+  ctx.fillText(zone.label, zone.x, zone.y + 55)
+  ctx.shadowBlur = 0
 }
 
 function render() {
   if (!ctx) return
 
-  // Clear
-  ctx.fillStyle = '#1a1a2e'
-  ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT)
-
-  // Connections
-  drawConnections()
-
-  // Zones
-  for (const [name, zone] of Object.entries(ZONES)) {
-    drawZone(name, zone, name === activeZone)
+  // Terrain background (precomputed)
+  if (terrainCanvas) {
+    ctx.drawImage(terrainCanvas, 0, 0)
+  } else {
+    ctx.fillStyle = '#2d5a1e'
+    ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT)
   }
 
-  // Agents
+  // Buildings
+  for (const [name, zone] of Object.entries(ZONES)) {
+    drawBuilding(name, zone, name === activeZone)
+  }
+
+  // Agents (drawn on top)
   for (const agent of agents.values()) {
     agent.update()
     agent.draw(ctx)
@@ -224,12 +344,14 @@ function handleClick(event) {
   const x = (event.clientX - rect.left) * scaleX
   const y = (event.clientY - rect.top) * scaleY
 
-  // Check agent clicks first (agents are on top of zones)
+  // Check agent clicks (sprite bounding box)
+  const spriteW = 16 * SPRITE_SCALE
+  const spriteH = 24 * SPRITE_SCALE
   for (const agent of agents.values()) {
-    const dx = x - agent.x
-    const dy = y - agent.y
-    const distance = Math.sqrt(dx * dx + dy * dy)
-    if (distance <= agent.radius + 5) { // +5 for easier clicking
+    const halfW = spriteW / 2
+    const halfH = spriteH / 2
+    if (x >= agent.x - halfW && x <= agent.x + halfW &&
+        y >= agent.y - halfH && y <= agent.y + halfH) {
       emit('agentClick', agent.id)
       return
     }
@@ -250,6 +372,13 @@ function handleClick(event) {
 onMounted(() => {
   if (canvasRef.value) {
     ctx = canvasRef.value.getContext('2d')
+    // Crisp pixel art (no antialiasing)
+    ctx.imageSmoothingEnabled = false
+
+    // Build sprite caches
+    initSpriteCache()
+    buildTerrainCache()
+
     ensureAgent('CLAUDE')
     render()
   }
@@ -290,6 +419,8 @@ onUnmounted(() => {
   display: block;
   border-radius: 10px;
   cursor: pointer;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
 }
 
 .status-badge {

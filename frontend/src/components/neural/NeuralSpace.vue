@@ -11,6 +11,7 @@ import * as THREE from 'three'
 import { useThreeScene, createMemoryNode, createConnectionLine } from '@/composables/useThreeScene'
 import { useNeoCortexStore, AGENT_COLORS, LAYER_CONFIG } from '@/stores/neocortex'
 import { useSound } from '@/composables/useSound'
+import { NeuralAmbientSystem } from '@/composables/useNeuralAmbient'
 
 const props = defineProps({
   autoRotate: {
@@ -36,6 +37,7 @@ const {
   getObjectAtMouse,
   focusOn,
   setAutoRotate,
+  addAnimationCallback,
 } = useThreeScene(containerRef, {
   backgroundColor: 0x0a0a0f,
   cameraPosition: [0, 50, 100],
@@ -51,6 +53,10 @@ const connectionGroup = ref(null)
 const nodeMap = new Map() // id -> mesh
 const hoveredNode = ref(null)
 const selectedNode = ref(null)
+
+// Ambient neural pulse system
+let ambientSystem = null
+let removeAmbientCallback = null
 
 // Build visualization from graph data
 function buildVisualization() {
@@ -183,6 +189,10 @@ function onDoubleClick(event) {
 watch(() => [store.filteredNodes, store.filteredEdges], () => {
   if (isInitialized.value) {
     buildVisualization()
+    // Dim ambient when real memories exist
+    if (ambientSystem) {
+      ambientSystem.setHasRealMemories(store.filteredNodes.length > 0)
+    }
   }
 }, { deep: true })
 
@@ -190,6 +200,18 @@ watch(() => [store.filteredNodes, store.filteredEdges], () => {
 watch(() => props.autoRotate, (val) => {
   setAutoRotate(val)
 })
+
+// Initialize ambient system once scene is ready
+function initAmbient() {
+  if (scene.value && !ambientSystem) {
+    ambientSystem = new NeuralAmbientSystem(scene.value)
+    removeAmbientCallback = addAnimationCallback((dt) => {
+      ambientSystem.update(dt)
+    })
+    // Set initial memory state
+    ambientSystem.setHasRealMemories(store.filteredNodes.length > 0)
+  }
+}
 
 // Lifecycle
 onMounted(() => {
@@ -202,11 +224,13 @@ onMounted(() => {
   // Build visualization when scene is ready
   if (isInitialized.value) {
     buildVisualization()
+    initAmbient()
   } else {
     // Wait for initialization
     const checkInterval = setInterval(() => {
       if (isInitialized.value) {
         buildVisualization()
+        initAmbient()
         clearInterval(checkInterval)
       }
     }, 100)
@@ -218,6 +242,11 @@ onUnmounted(() => {
     containerRef.value.removeEventListener('mousemove', onMouseMove)
     containerRef.value.removeEventListener('click', onClick)
     containerRef.value.removeEventListener('dblclick', onDoubleClick)
+  }
+  if (removeAmbientCallback) removeAmbientCallback()
+  if (ambientSystem) {
+    ambientSystem.dispose()
+    ambientSystem = null
   }
 })
 
@@ -241,16 +270,14 @@ defineExpose({
       </div>
     </div>
 
-    <!-- Empty state -->
+    <!-- Empty state hint (ambient handles visual interest) -->
     <div
       v-if="!store.isLoading && store.filteredNodes.length === 0"
-      class="absolute inset-0 flex items-center justify-center z-10 pointer-events-none"
+      class="absolute top-4 left-1/2 -translate-x-1/2 z-10 pointer-events-none"
     >
-      <div class="text-center">
-        <div class="text-6xl mb-4 opacity-30">🧠</div>
-        <p class="text-gray-500">No memories to display</p>
-        <p class="text-gray-600 text-sm mt-2">Memories will appear here as they're created</p>
-      </div>
+      <p class="text-gray-600 text-sm bg-black/30 px-4 py-2 rounded-full backdrop-blur">
+        Neural space awaiting memories...
+      </p>
     </div>
 
     <!-- Hover tooltip -->

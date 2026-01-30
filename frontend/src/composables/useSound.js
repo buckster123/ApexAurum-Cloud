@@ -194,6 +194,58 @@ const sounds = {
     const freq = 660 + (index * 50) // Rising pitch
     playTone(freq, 0.08, 'sine', 0.15)
   },
+
+  // ═══════════════ RPG Village Sounds ═══════════════
+
+  /**
+   * Footstep - soft tap when agent walks
+   */
+  footstep: () => {
+    if (!soundEnabled.value) return
+    try {
+      const ctx = initAudio()
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      const filter = ctx.createBiquadFilter()
+
+      osc.connect(filter)
+      filter.connect(gain)
+      gain.connect(ctx.destination)
+
+      osc.type = 'square'
+      osc.frequency.value = 80 + Math.random() * 40
+      filter.type = 'lowpass'
+      filter.frequency.value = 200
+
+      gain.gain.setValueAtTime(0, ctx.currentTime)
+      gain.gain.linearRampToValueAtTime(0.06, ctx.currentTime + 0.005)
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.06)
+
+      osc.start(ctx.currentTime)
+      osc.stop(ctx.currentTime + 0.07)
+    } catch (e) {}
+  },
+
+  /**
+   * Tool start jingle - ascending chiptune
+   */
+  toolStartJingle: () => {
+    playArpeggio([330, 392, 523], 0.08, 'square', 0.1)
+  },
+
+  /**
+   * Tool complete jingle - bright chiptune fanfare
+   */
+  toolCompleteJingle: () => {
+    playArpeggio([523, 659, 784, 1047], 0.1, 'square', 0.12)
+  },
+
+  /**
+   * Tool error jingle - descending buzz
+   */
+  toolErrorJingle: () => {
+    playArpeggio([330, 262, 196], 0.12, 'sawtooth', 0.08)
+  },
 }
 
 // ═══════════════════════════════════════════════════════════════

@@ -57,6 +57,18 @@ export function useThreeScene(containerRef, options = {}) {
   const isInitialized = ref(false)
   const animationFrameId = ref(null)
 
+  // External animation callbacks (for ambient systems, effects, etc.)
+  const animationCallbacks = []
+  let lastTime = 0
+
+  function addAnimationCallback(fn) {
+    animationCallbacks.push(fn)
+    return () => {
+      const idx = animationCallbacks.indexOf(fn)
+      if (idx !== -1) animationCallbacks.splice(idx, 1)
+    }
+  }
+
   // Raycaster for mouse picking
   const raycaster = new THREE.Raycaster()
   const mouse = new THREE.Vector2()
@@ -127,10 +139,19 @@ export function useThreeScene(containerRef, options = {}) {
   }
 
   // Animation loop
-  function animate() {
+  function animate(time = 0) {
     if (!isInitialized.value) return
 
     animationFrameId.value = requestAnimationFrame(animate)
+
+    // Calculate delta time in seconds (clamped to prevent explosion after tab switch)
+    const deltaTime = lastTime ? Math.min((time - lastTime) / 1000, 0.1) : 0.016
+    lastTime = time
+
+    // Run external animation callbacks
+    for (const cb of animationCallbacks) {
+      cb(deltaTime)
+    }
 
     if (controls.value) {
       controls.value.update()
@@ -212,6 +233,9 @@ export function useThreeScene(containerRef, options = {}) {
 
   // Clean up
   function dispose() {
+    animationCallbacks.length = 0
+    lastTime = 0
+
     if (animationFrameId.value) {
       cancelAnimationFrame(animationFrameId.value)
     }
@@ -268,6 +292,7 @@ export function useThreeScene(containerRef, options = {}) {
     getObjectAtMouse,
     focusOn,
     setAutoRotate,
+    addAnimationCallback,
   }
 }
 

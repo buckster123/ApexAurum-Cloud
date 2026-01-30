@@ -19,7 +19,7 @@ import { ZONES, AGENT_COLORS } from '@/composables/useVillage'
 import { ZONES_3D, AGENT_COLORS as AGENT_COLORS_3D } from '@/composables/useVillageIsometric'
 
 const router = useRouter()
-const { playTone } = useSound()
+const { playTone, sounds } = useSound()
 
 // Navigate to chat with selected agent
 function handleAgentClick(agentId) {
@@ -127,7 +127,7 @@ function handleEvent(event) {
       status: 'running'
     })
     status.lastTool = event.tool
-    playTone(440, 0.03, 'sine', 0.08)
+    sounds.toolStartJingle()
   }
   else if (event.type === 'tool_complete' || event.type === 'tool_error') {
     // Find and update task
@@ -155,7 +155,11 @@ function handleEvent(event) {
         }
       }, 1500)
 
-      playTone(event.success ? 880 : 220, 0.05, 'sine', 0.1)
+      if (event.success) {
+        sounds.toolCompleteJingle()
+      } else {
+        sounds.toolErrorJingle()
+      }
     }
   }
 }
