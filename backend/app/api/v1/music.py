@@ -237,7 +237,7 @@ async def generate_music(
             if result.get("success"):
                 event = {
                     "type": "completed",
-                    "task": task_to_response(task).model_dump(),
+                    "task": task_to_response(task).model_dump(mode="json"),
                 }
             else:
                 event = {

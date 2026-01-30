@@ -139,11 +139,12 @@ class UsageService:
             limit_snapshot=limit_snapshot,
         )
 
-        stmt = stmt.on_conflict_on_constraint(
-            'uq_usage_counter_user_type_period'
-        ).values(
-            count=UsageCounter.count + amount,
-            updated_at=datetime.now(timezone.utc),
+        stmt = stmt.on_conflict_do_update(
+            constraint='uq_usage_counter_user_type_period',
+            set_=dict(
+                count=UsageCounter.count + amount,
+                updated_at=datetime.now(timezone.utc),
+            ),
         )
 
         stmt = stmt.returning(UsageCounter.count)

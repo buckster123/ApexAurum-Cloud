@@ -865,18 +865,20 @@ async def execute_jam_agent_turn(
     context: str,
     db,
     user=None,
+    base_prompt: str = None,
 ) -> dict:
     """Execute a single agent's turn in the jam session."""
-    # Get agent's base prompt with memory
-    if user and db:
-        base_prompt = await get_agent_prompt_with_memory(
-            agent_id=agent.agent_id,
-            user=user,
-            use_pac=False,
-            db=db,
-        )
-    else:
-        base_prompt = load_native_prompt(agent.agent_id, use_pac=False)
+    # Use pre-loaded prompt if available, otherwise load (non-parallel safe)
+    if not base_prompt:
+        if user and db:
+            base_prompt = await get_agent_prompt_with_memory(
+                agent_id=agent.agent_id,
+                user=user,
+                use_pac=False,
+                db=db,
+            )
+        else:
+            base_prompt = load_native_prompt(agent.agent_id, use_pac=False)
 
     if not base_prompt:
         base_prompt = f"You are {agent.agent_id}, an AI musician with a distinct style."
@@ -892,6 +894,7 @@ async def execute_jam_agent_turn(
 {role_desc}
 
 === JAM SESSION ===
+Session ID: {session.id}
 Title: "{session.title}"
 Style: {session.style or 'open'}
 Tempo: {session.tempo} BPM
@@ -901,12 +904,14 @@ Round: {session.current_round} / {session.max_rounds}
 === INSTRUCTIONS ===
 1. Review what others have contributed so far
 2. Use jam_contribute() to add your notes -- this is REQUIRED, you MUST call the tool
-3. Choose notes that fit the key ({session.musical_key}) and style ({session.style or 'open'})
-4. Describe your musical intention in the description parameter
-5. Keep contributions focused: 4-12 notes per contribution is ideal
-6. Be concise in your discussion (1-2 short sentences max)
+3. ALWAYS use session_id="{session.id}" when calling jam_contribute or jam_listen
+4. Choose notes that fit the key ({session.musical_key}) and style ({session.style or 'open'})
+5. Describe your musical intention in the description parameter
+6. Keep contributions focused: 4-12 notes per contribution is ideal
+7. Be concise in your discussion (1-2 short sentences max)
 
 IMPORTANT: You MUST call jam_contribute() with actual notes. Do not just discuss music -- play it.
+IMPORTANT: The session_id is "{session.id}" -- use this exact value.
 
 === PREVIOUS CONTRIBUTIONS ===
 {context}
@@ -1121,13 +1126,29 @@ async def auto_jam(
             # Build context from existing tracks
             context = build_jam_context(session)
 
-            # Execute all agents in parallel
+            # Pre-load agent prompts sequentially (DB session can't handle concurrent ops)
             active_agents = [a for a in session.participants if a.is_active]
+            agent_prompts = {}
+            for agent in active_agents:
+                try:
+                    prompt = await get_agent_prompt_with_memory(
+                        agent_id=agent.agent_id,
+                        user=user,
+                        use_pac=False,
+                        db=db,
+                    )
+                    agent_prompts[agent.agent_id] = prompt
+                except Exception as e:
+                    logger.warning(f"Failed to load prompt for {agent.agent_id}: {e}")
+                    agent_prompts[agent.agent_id] = load_native_prompt(agent.agent_id, use_pac=False)
+
+            # Execute all agents in parallel (prompts pre-loaded, no DB contention)
             tasks = []
             for agent in active_agents:
                 tasks.append(
                     execute_jam_agent_turn(
-                        claude, session, agent, context, db, user=user
+                        claude, session, agent, context, db, user=user,
+                        base_prompt=agent_prompts.get(agent.agent_id),
                     )
                 )
 
