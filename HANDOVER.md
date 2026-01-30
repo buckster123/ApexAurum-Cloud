@@ -1,8 +1,8 @@
 # ApexAurum-Cloud Handover Document
 
 **Date:** 2026-01-30
-**Build:** v110-neural-iso-fix
-**Status:** BETA READY - Neural 3D Fixed + Isometric Pixel Art!
+**Build:** v111-draggable-village
+**Status:** BETA READY - Draggable Village Layouts + WebSocket Auth Fix!
 
 ---
 
@@ -26,6 +26,44 @@ ApexAurum Cloud is fully functional and polished:
 - **Suno Music Generation** - AI music creation with SSE streaming!
 
 **Pricing:** Seeker $3 | Alchemist $10 | Adept $30
+
+---
+
+## Session 32 Accomplishments
+
+### Draggable Village Layouts - COMPLETE
+- **Long-press-to-drag** (500ms hold) repositions buildings in both 2D and 3D views
+- Short click still navigates to chat (no regression)
+- New shared composable: `useDraggableZones.js` - localStorage persistence with versioned schema
+- **2D Canvas**: Mutable zone copy, canvas-coordinate hit testing, clamped to canvas bounds, terrain paths redraw on every drag frame, gold dashed outline on dragged building
+- **3D Isometric**: Ground-plane raycasting for world-space positioning, clamped to +-28 units, ground texture rebuilt on drop, ZONES_3D positions updated for agent navigation
+- **Per-view persistence**: `village-layout-2d` and `village-layout-3d` saved independently in localStorage
+- **Reset Layout button** in header bar (only visible when custom layout exists)
+- Touch support: `touchstart`/`touchmove`/`touchend` with `preventDefault()` to avoid scroll interference
+- `defineExpose()` on both child components for parent reset access
+
+### Village WebSocket Auth Fix - COMPLETE
+- **Root cause found**: localStorage key mismatch - WebSocket read `access_token` (snake_case) but auth store saves `accessToken` (camelCase). Token was never found, so connections always failed.
+- Fixed key to `accessToken` in both `VillageGUIView.vue` and `useVillage.js`
+- **Reconnect hardening**: Skip connection entirely without auth token (no pointless attempts), stop retrying on code 1008 (auth rejection), exponential backoff 3s→30s cap for transient disconnects
+- **Status badge**: Yellow dot + "offline" for unauthenticated state (instead of red error spam)
+- Console is now clean - no more WebSocket error spam
+
+### Files Changed
+| File | Change |
+|------|--------|
+| `frontend/src/composables/useDraggableZones.js` | NEW - Shared load/save/reset layout logic |
+| `frontend/src/components/village/VillageCanvas.vue` | EDIT - Mutable zones, long-press drag, terrain rebuild |
+| `frontend/src/composables/useVillageIsometric.js` | EDIT - Long-press drag, ground-plane raycast, ground rebuild |
+| `frontend/src/components/village/VillageIsometric.vue` | EDIT - Expose hasCustomLayout + resetLayout |
+| `frontend/src/views/VillageGUIView.vue` | EDIT - Reset button, WebSocket auth fix |
+| `frontend/src/composables/useVillage.js` | EDIT - WebSocket auth fix + backoff |
+| `frontend/Dockerfile` | EDIT - CACHE_BUST=29 |
+
+### Deploy
+- Commits: `554c9d0`, `9d50c20`, `47a3706`
+- CACHE_BUST: 29
+- Frontend-only changes
 
 ---
 
