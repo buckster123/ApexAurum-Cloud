@@ -127,6 +127,14 @@ class BillingService:
             and messages_remaining <= messages_limit * 0.2
         )
 
+        # Per-model usage breakdown
+        try:
+            from app.services.usage import UsageService
+            usage_service = UsageService(self.db)
+            usage_counters = await usage_service.get_usage_summary(user_id)
+        except Exception:
+            usage_counters = {}
+
         return {
             "tier": subscription.tier,
             "subscription_status": subscription.status,
@@ -146,6 +154,7 @@ class BillingService:
             },
             "at_limit": at_limit,
             "near_limit": near_limit,
+            "usage_counters": usage_counters,
         }
 
     # ═══════════════════════════════════════════════════════════════════════════
@@ -383,6 +392,15 @@ class BillingService:
             credit_balance = await self.get_or_create_credit_balance(user_id)
             usage_info["billing_type"] = "credits"
             usage_info["credits_remaining"] = credit_balance.balance_cents
+
+        # Per-model usage tracking via UsageCounter (parallel to subscription counter)
+        try:
+            from app.services.usage import UsageService, classify_model_family
+            usage_service = UsageService(self.db)
+            counter_type = classify_model_family(provider, model)
+            await usage_service.increment_usage(user_id, counter_type)
+        except Exception as e:
+            logger.warning(f"Usage counter increment failed (non-fatal): {e}")
 
         await self.db.flush()
         return usage_info

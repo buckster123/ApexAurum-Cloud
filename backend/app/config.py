@@ -119,6 +119,7 @@ TIER_LIMITS = {
         "multi_provider": False,
         "byok_allowed": False,
         "api_access": False,
+        "context_token_limit": 128_000,  # 128K cap for Seeker tier
     },
     "pro": {
         "name": "Alchemist",
@@ -131,6 +132,7 @@ TIER_LIMITS = {
         "multi_provider": False,
         "byok_allowed": True,
         "api_access": False,
+        "context_token_limit": None,  # No cap
     },
     "opus": {
         "name": "Adept",
@@ -160,6 +162,7 @@ TIER_LIMITS = {
         "multi_provider": True,
         "byok_allowed": True,
         "api_access": True,
+        "context_token_limit": None,  # No cap
     },
 }
 

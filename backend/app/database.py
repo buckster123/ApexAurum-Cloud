@@ -555,6 +555,25 @@ async def init_db():
                 RAISE NOTICE 'Credit balance CHECK constraint migration skipped';
             END $$;
             """,
+            # Usage counters table (per-model, per-feature tracking)
+            """
+            CREATE TABLE IF NOT EXISTS usage_counters (
+                id UUID PRIMARY KEY,
+                user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                counter_type VARCHAR(50) NOT NULL,
+                period VARCHAR(7) NOT NULL,
+                count INTEGER NOT NULL DEFAULT 0,
+                limit_snapshot INTEGER,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                CONSTRAINT uq_usage_counter_user_type_period UNIQUE (user_id, counter_type, period)
+            );
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS idx_usage_counters_user_id ON usage_counters(user_id);
+            CREATE INDEX IF NOT EXISTS idx_usage_counters_user_period ON usage_counters(user_id, period);
+            CREATE INDEX IF NOT EXISTS idx_usage_counters_user_type ON usage_counters(user_id, counter_type);
+            """,
         ]
 
         from sqlalchemy import text

@@ -20,6 +20,7 @@ from app.models.council import DeliberationSession, SessionAgent, DeliberationRo
 from app.models.jam import JamSession, JamParticipant, JamTrack, JamMessage
 from app.models.feedback import BugReport
 from app.models.nursery import NurseryDataset, NurseryTrainingJob, NurseryModelRecord, NurseryApprentice
+from app.models.usage import UsageCounter
 
 # User references all of the above, so import LAST
 from app.models.user import User
@@ -54,5 +55,6 @@ __all__ = [
     "NurseryTrainingJob",
     "NurseryModelRecord",
     "NurseryApprentice",
+    "UsageCounter",
     # "UserVector",  # Temp disabled
 ]

@@ -781,6 +781,24 @@ async def send_message(
                 }
             )
 
+        # Context token limit enforcement (128K cap for Seeker tier)
+        subscription = await billing_service.get_or_create_subscription(user.id)
+        tier_config = TIER_LIMITS.get(subscription.tier, TIER_LIMITS["free"])
+        context_limit = tier_config.get("context_token_limit")
+        if context_limit:
+            estimated_tokens = len(request.message) // 4  # ~4 chars per token
+            if estimated_tokens > context_limit:
+                raise HTTPException(
+                    status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                    detail={
+                        "error": "context_limit",
+                        "message": f"Your message exceeds the {context_limit:,} token context limit for your tier. Try a shorter message or upgrade your plan.",
+                        "estimated_tokens": estimated_tokens,
+                        "limit": context_limit,
+                        "action": "upgrade"
+                    }
+                )
+
     # Universal BYOK routing: check user key first, then platform key
     provider_config = PROVIDERS.get(provider)
     if not provider_config:
