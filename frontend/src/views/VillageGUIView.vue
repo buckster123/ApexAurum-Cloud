@@ -78,8 +78,21 @@ watch(viewMode, (mode) => {
   playTone(mode === '3d' ? 660 : 440, 0.05, 'sine', 0.1)
 })
 
-// WebSocket connection
+// WebSocket connection with backoff
+let wsRetryDelay = 3000
+let wsAuthFailed = false
+
 function connectWebSocket() {
+  // Don't connect without auth token - backend requires it (closes with 1008)
+  const token = localStorage.getItem('access_token')
+  if (!token || token === 'undefined' || token === 'null') {
+    status.connection = 'no-auth'
+    return
+  }
+
+  // Don't retry if auth was explicitly rejected
+  if (wsAuthFailed) return
+
   let apiUrl = import.meta.env.VITE_API_URL || ''
   const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
 
@@ -95,11 +108,7 @@ function connectWebSocket() {
     wsUrl = `${wsProtocol}//${window.location.host}/ws/village`
   }
 
-  // Append auth token for WebSocket authentication
-  const token = localStorage.getItem('access_token')
-  if (token && token !== 'undefined' && token !== 'null') {
-    wsUrl += `?token=${token}`
-  }
+  wsUrl += `?token=${token}`
 
   console.log(`Village: Connecting to ${wsUrl.split('?')[0]}`)
   ws.value = new WebSocket(wsUrl)
@@ -107,17 +116,28 @@ function connectWebSocket() {
   ws.value.onopen = () => {
     console.log('Village: WebSocket connected')
     status.connection = 'connected'
+    wsRetryDelay = 3000 // Reset backoff on success
     playTone(880, 0.05, 'sine', 0.1)
   }
 
-  ws.value.onclose = () => {
-    console.log('Village: WebSocket disconnected')
+  ws.value.onclose = (event) => {
     status.connection = 'disconnected'
-    setTimeout(connectWebSocket, 3000)
+
+    // 1008 = Policy Violation (backend sends this for auth failure)
+    if (event.code === 1008) {
+      console.log('Village: WebSocket auth rejected, not retrying')
+      wsAuthFailed = true
+      status.connection = 'no-auth'
+      return
+    }
+
+    console.log(`Village: WebSocket disconnected (code ${event.code}), retrying in ${wsRetryDelay / 1000}s`)
+    setTimeout(connectWebSocket, wsRetryDelay)
+    wsRetryDelay = Math.min(wsRetryDelay * 1.5, 30000) // Backoff, cap at 30s
   }
 
-  ws.value.onerror = (error) => {
-    console.error('Village: WebSocket error:', error)
+  ws.value.onerror = () => {
+    // onclose fires after onerror, so just update status here
     status.connection = 'error'
   }
 

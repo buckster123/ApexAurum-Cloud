@@ -537,8 +537,8 @@ onUnmounted(() => {
 
     <!-- Connection Status -->
     <div class="status-badge">
-      <span class="dot" :class="status.connection"></span>
-      <span>{{ status.connection }}</span>
+      <span class="dot" :class="status.connection === 'no-auth' ? 'no-auth' : status.connection"></span>
+      <span>{{ status.connection === 'no-auth' ? 'offline' : status.connection }}</span>
     </div>
   </div>
 </template>
@@ -580,5 +580,9 @@ onUnmounted(() => {
 
 .dot.connected {
   background: #00ff88;
+}
+
+.dot.no-auth {
+  background: #facc15;
 }
 </style>

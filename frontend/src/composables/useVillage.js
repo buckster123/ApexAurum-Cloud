@@ -365,7 +365,19 @@ export function useVillage() {
     return agents.get(agentId)
   }
 
+  let wsRetryDelay = 3000
+  let wsAuthFailed = false
+
   function connectWebSocket() {
+    // Don't connect without auth token - backend requires it (closes with 1008)
+    const token = localStorage.getItem('access_token')
+    if (!token || token === 'undefined' || token === 'null') {
+      status.connection = 'no-auth'
+      return
+    }
+
+    if (wsAuthFailed) return
+
     let apiUrl = import.meta.env.VITE_API_URL || ''
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
 
@@ -376,18 +388,12 @@ export function useVillage() {
 
     let wsUrl
     if (apiUrl) {
-      // Use API URL for WebSocket (replace http/https with ws/wss)
       wsUrl = apiUrl.replace(/^https?:/, wsProtocol) + '/ws/village'
     } else {
-      // Same host
       wsUrl = `${wsProtocol}//${window.location.host}/ws/village`
     }
 
-    // Append auth token for WebSocket authentication
-    const token = localStorage.getItem('access_token')
-    if (token && token !== 'undefined' && token !== 'null') {
-      wsUrl += `?token=${token}`
-    }
+    wsUrl += `?token=${token}`
 
     console.log(`Connecting to ${wsUrl.split('?')[0]}`)
     ws = new WebSocket(wsUrl)
@@ -395,17 +401,25 @@ export function useVillage() {
     ws.onopen = () => {
       console.log('Village WebSocket connected')
       status.connection = 'connected'
+      wsRetryDelay = 3000
     }
 
-    ws.onclose = () => {
-      console.log('Village WebSocket disconnected')
+    ws.onclose = (event) => {
       status.connection = 'disconnected'
-      // Reconnect after delay
-      setTimeout(() => connectWebSocket(), 3000)
+
+      if (event.code === 1008) {
+        console.log('Village WebSocket auth rejected, not retrying')
+        wsAuthFailed = true
+        status.connection = 'no-auth'
+        return
+      }
+
+      console.log(`Village WebSocket disconnected (code ${event.code}), retrying in ${wsRetryDelay / 1000}s`)
+      setTimeout(() => connectWebSocket(), wsRetryDelay)
+      wsRetryDelay = Math.min(wsRetryDelay * 1.5, 30000)
     }
 
-    ws.onerror = (error) => {
-      console.error('Village WebSocket error:', error)
+    ws.onerror = () => {
       status.connection = 'error'
     }
 

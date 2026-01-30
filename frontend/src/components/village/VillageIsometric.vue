@@ -154,9 +154,13 @@ onMounted(() => {
     <div class="absolute top-3 left-3 flex items-center gap-2 bg-black/50 backdrop-blur rounded px-3 py-1.5">
       <span
         class="w-2 h-2 rounded-full"
-        :class="status.connection === 'connected' ? 'bg-green-400' : 'bg-red-400'"
+        :class="{
+          'bg-green-400': status.connection === 'connected',
+          'bg-yellow-400': status.connection === 'no-auth',
+          'bg-red-400': status.connection !== 'connected' && status.connection !== 'no-auth'
+        }"
       ></span>
-      <span class="text-xs text-gray-300">{{ status.connection }}</span>
+      <span class="text-xs text-gray-300">{{ status.connection === 'no-auth' ? 'offline' : status.connection }}</span>
       <span class="text-xs text-gray-500">|</span>
       <span class="text-xs text-gray-400">{{ status.eventCount }} events</span>
     </div>
