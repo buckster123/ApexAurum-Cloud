@@ -1,8 +1,8 @@
 # ApexAurum-Cloud Handover Document
 
 **Date:** 2026-01-30
-**Build:** v109-rpg-neural
-**Status:** BETA READY - RPG Village + Neural Ambient Pulse!
+**Build:** v110-neural-iso-fix
+**Status:** BETA READY - Neural 3D Fixed + Isometric Pixel Art!
 
 ---
 
@@ -26,6 +26,35 @@ ApexAurum Cloud is fully functional and polished:
 - **Suno Music Generation** - AI music creation with SSE streaming!
 
 **Pricing:** Seeker $3 | Alchemist $10 | Adept $30
+
+---
+
+## Session 31 Accomplishments
+
+### Neural Space 3D Bug Fix - COMPLETE
+- **Root cause**: `ref()` instead of `shallowRef()` for Three.js Groups in NeuralSpace.vue
+- Vue's Proxy wrapping broke Three.js objects with non-configurable properties
+- Fix: Changed `nodeGroup` and `connectionGroup` to `shallowRef()`
+- Memory nodes and ambient system now render correctly in 3D mode
+- Removed dead "2D" button from StatsBar (no 2D visualization existed)
+- Simplified NeuralView to `v-if`/`v-else` for 3D/List toggle
+- Fixed init interval cleanup on component unmount
+
+### Village Isometric Pixel Art - COMPLETE
+- **Pixel art billboard sprites** in Three.js isometric view using existing `usePixelSprites.js`
+- Agent3D: Animated character billboards with walk/idle/working sprite frames
+- Buildings: Pixel art building billboards from `getBuildingSprite()` with fallback to BoxGeometry
+- Terrain: Tiled grass canvas texture with dirt paths from village square to each zone
+- `THREE.NearestFilter` + `generateMipmaps = false` for crisp pixel rendering
+- Updated raycasting: recursive into Groups, parent-chain traversal for userData
+- `setActiveZone()`: SpriteMaterial opacity/tint highlighting
+- `get mesh()` getter on Agent3D for backward compat with particles/bubbles
+- All existing interactions preserved (click, hover, particles, speech bubbles)
+
+### Deploy
+- Commit: `4064d1d` - 6 files, 286 insertions, 135 deletions
+- CACHE_BUST: 27
+- Frontend-only changes
 
 ---
 
