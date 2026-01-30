@@ -1642,7 +1642,7 @@ async def execute_agent_turn_streaming(
                         village_memories, max_chars=1500,
                     )
             except Exception as e:
-            logger.warning(f"Failed to get Village memories: {e}")
+                logger.warning(f"Failed to get Village memories: {e}")
 
     other_agents = [a.agent_id for a in session.agents if a.is_active and a.agent_id != agent.agent_id]
     other_agents_str = ", ".join(other_agents) if other_agents else "none"
