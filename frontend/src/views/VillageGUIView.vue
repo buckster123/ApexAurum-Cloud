@@ -31,6 +31,28 @@ function handleAgentClick(agentId) {
 const viewMode = ref(localStorage.getItem('village-view-mode') || '2d')
 const showTaskPanel = ref(true)
 
+// Child component refs for layout reset
+const canvasRef = ref(null)
+const isometricRef = ref(null)
+
+// Layout reset support
+const layoutResetKey = ref(0)
+const canResetLayout = computed(() => {
+  // Re-evaluate when layoutResetKey changes (after reset)
+  layoutResetKey.value
+  const key = viewMode.value === '3d' ? 'village-layout-3d' : 'village-layout-2d'
+  return !!localStorage.getItem(key)
+})
+
+function handleResetLayout() {
+  if (viewMode.value === '2d' && canvasRef.value) {
+    canvasRef.value.resetLayout()
+  } else if (viewMode.value === '3d' && isometricRef.value) {
+    isometricRef.value.resetLayout()
+  }
+  layoutResetKey.value++
+}
+
 // WebSocket connection
 const ws = ref(null)
 const status = reactive({
@@ -219,6 +241,15 @@ onUnmounted(() => {
           </button>
         </div>
 
+        <!-- Reset Layout -->
+        <button
+          v-if="canResetLayout"
+          @click="handleResetLayout"
+          class="text-xs text-gray-400 hover:text-gold transition-colors"
+        >
+          Reset Layout
+        </button>
+
         <!-- Task Panel Toggle -->
         <button
           @click="showTaskPanel = !showTaskPanel"
@@ -243,6 +274,7 @@ onUnmounted(() => {
         <!-- 2D Canvas View -->
         <div v-if="viewMode === '2d'" class="w-full h-full flex items-center justify-center">
           <VillageCanvas
+            ref="canvasRef"
             :events="eventLog"
             :status="status"
             @agentClick="handleAgentClick"
@@ -252,6 +284,7 @@ onUnmounted(() => {
         <!-- 3D Isometric View -->
         <div v-if="viewMode === '3d'" class="w-full h-full">
           <VillageIsometric
+            ref="isometricRef"
             :events="eventLog"
             :status="status"
             @agent-click="handleAgentClick"

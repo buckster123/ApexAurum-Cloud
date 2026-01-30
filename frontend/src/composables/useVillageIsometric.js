@@ -17,6 +17,7 @@
 import { ref, shallowRef, onMounted, onUnmounted } from 'vue'
 import * as THREE from 'three'
 import { usePixelSprites } from '@/composables/usePixelSprites'
+import { useDraggableZones } from '@/composables/useDraggableZones'
 
 // Polyfill for roundRect (not available in all browsers)
 if (typeof CanvasRenderingContext2D !== 'undefined' && !CanvasRenderingContext2D.prototype.roundRect) {
@@ -582,6 +583,20 @@ export function useVillageIsometric(containerRef, options = {}) {
   const { initSpriteCache, getSprite, getBuildingSprite, getTerrainTile, SPRITE_SCALE } = usePixelSprites()
   const pixelSprites = { getSprite, getBuildingSprite, getTerrainTile, SPRITE_SCALE }
 
+  // Drag layout persistence
+  const { loadLayout, saveLayout, resetLayout, hasCustomLayout } =
+    useDraggableZones('village-layout-3d', ZONES_3D)
+
+  // Store original default positions for reset
+  const defaultPositions = {}
+  for (const [name, config] of Object.entries(ZONES_3D)) {
+    defaultPositions[name] = { x: config.position.x, z: config.position.z }
+  }
+
+  // Drag state for long-press-to-drag
+  let dragState3D = null
+  let groundMesh = null // Reference for ground rebuild
+
   function init() {
     if (!containerRef.value) return false
 
@@ -656,6 +671,19 @@ export function useVillageIsometric(containerRef, options = {}) {
     // Zone buildings
     createZones()
 
+    // Apply saved layout (move buildings to saved positions)
+    const savedLayout = loadLayout()
+    if (savedLayout?.zones) {
+      for (const [name, pos] of Object.entries(savedLayout.zones)) {
+        if (zones[name]?.mesh) {
+          zones[name].mesh.position.set(pos.x, 0, pos.z)
+          ZONES_3D[name].position.x = pos.x
+          ZONES_3D[name].position.z = pos.z
+        }
+      }
+      rebuildGround()
+    }
+
     // Clock for animations
     clock = new THREE.Clock()
 
@@ -666,9 +694,14 @@ export function useVillageIsometric(containerRef, options = {}) {
     raycaster = new THREE.Raycaster()
     mouse = new THREE.Vector2()
 
-    // Add event listeners
-    renderer.domElement.addEventListener('click', handleClick)
-    renderer.domElement.addEventListener('mousemove', handleMouseMove)
+    // Add event listeners (mousedown/up for long-press drag)
+    renderer.domElement.addEventListener('mousedown', handleMouseDown)
+    renderer.domElement.addEventListener('mousemove', handleMouseMoveWithDrag)
+    renderer.domElement.addEventListener('mouseup', handleMouseUp)
+    renderer.domElement.addEventListener('mouseleave', handleMouseUp)
+    renderer.domElement.addEventListener('touchstart', handleTouchStart)
+    renderer.domElement.addEventListener('touchmove', handleTouchMove, { passive: false })
+    renderer.domElement.addEventListener('touchend', handleTouchEnd)
     renderer.domElement.style.cursor = 'default'
 
     isInitialized.value = true
@@ -769,7 +802,21 @@ export function useVillageIsometric(containerRef, options = {}) {
     const ground = new THREE.Mesh(groundGeometry, groundMaterial)
     ground.rotation.x = -Math.PI / 2
     ground.receiveShadow = true
+    ground.userData = { type: 'ground' }
     scene.add(ground)
+    groundMesh = ground
+  }
+
+  function rebuildGround() {
+    // Remove old ground mesh
+    if (groundMesh) {
+      scene.remove(groundMesh)
+      if (groundMesh.material.map) groundMesh.material.map.dispose()
+      groundMesh.material.dispose()
+      groundMesh.geometry.dispose()
+      groundMesh = null
+    }
+    createGround()
   }
 
   function createZones() {
@@ -958,7 +1005,7 @@ export function useVillageIsometric(containerRef, options = {}) {
     return raycaster.intersectObjects(objects, true)
   }
 
-  function handleClick(event) {
+  function handleNormalClick(event) {
     getMousePosition(event)
     const intersections = getIntersections()
 
@@ -982,7 +1029,7 @@ export function useVillageIsometric(containerRef, options = {}) {
     }
   }
 
-  function handleMouseMove(event) {
+  function handleHover(event) {
     getMousePosition(event)
     const intersections = getIntersections()
 
@@ -1000,6 +1047,110 @@ export function useVillageIsometric(containerRef, options = {}) {
     hoveredObject.value = null
     renderer.domElement.style.cursor = 'default'
   }
+
+  // ── Long-press drag handlers (3D) ──
+
+  function findZoneHit(intersections) {
+    for (const inter of intersections) {
+      let obj = inter.object
+      while (obj && !obj.userData?.type) obj = obj.parent
+      if (obj?.userData?.type === 'zone') return obj.userData
+    }
+    return null
+  }
+
+  function handleMouseDown(event) {
+    const clientX = event.touches ? event.touches[0].clientX : event.clientX
+    const clientY = event.touches ? event.touches[0].clientY : event.clientY
+
+    getMousePosition(event.touches ? event.touches[0] : event)
+    const intersections = getIntersections()
+    const hit = findZoneHit(intersections)
+    if (!hit) return
+
+    dragState3D = {
+      zoneName: hit.name,
+      startMouse: { x: clientX, y: clientY },
+      isDragging: false,
+      timer: setTimeout(() => {
+        if (dragState3D) {
+          dragState3D.isDragging = true
+          renderer.domElement.style.cursor = 'grabbing'
+        }
+      }, 500)
+    }
+  }
+
+  function handleMouseMoveWithDrag(event) {
+    const clientX = event.touches ? event.touches[0].clientX : event.clientX
+    const clientY = event.touches ? event.touches[0].clientY : event.clientY
+
+    if (dragState3D?.isDragging) {
+      if (event.touches) event.preventDefault()
+
+      // Raycast to ground plane (y=0) for new position
+      getMousePosition(event.touches ? event.touches[0] : event)
+      raycaster.setFromCamera(mouse, camera)
+      const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)
+      const intersectPoint = new THREE.Vector3()
+      raycaster.ray.intersectPlane(groundPlane, intersectPoint)
+
+      if (intersectPoint) {
+        // Clamp to ground bounds (+-28 to stay visible)
+        const clampedX = Math.max(-28, Math.min(28, intersectPoint.x))
+        const clampedZ = Math.max(-28, Math.min(28, intersectPoint.z))
+
+        const zone = zones[dragState3D.zoneName]
+        if (zone?.mesh) {
+          zone.mesh.position.set(clampedX, 0, clampedZ)
+          ZONES_3D[dragState3D.zoneName].position.x = clampedX
+          ZONES_3D[dragState3D.zoneName].position.z = clampedZ
+        }
+      }
+      return
+    }
+
+    // Cancel long press if moved too far
+    if (dragState3D && !dragState3D.isDragging) {
+      const dist = Math.hypot(
+        clientX - dragState3D.startMouse.x,
+        clientY - dragState3D.startMouse.y
+      )
+      if (dist > 5) {
+        clearTimeout(dragState3D.timer)
+        dragState3D = null
+      }
+    }
+
+    // Normal hover behavior
+    handleHover(event)
+  }
+
+  function handleMouseUp(event) {
+    if (!dragState3D) return
+    clearTimeout(dragState3D.timer)
+
+    if (dragState3D.isDragging) {
+      // Save layout
+      const layout = {}
+      for (const [name, config] of Object.entries(ZONES_3D)) {
+        layout[name] = { x: config.position.x, z: config.position.z }
+      }
+      saveLayout(layout)
+      rebuildGround()
+      renderer.domElement.style.cursor = 'default'
+      dragState3D = null
+      return
+    }
+
+    dragState3D = null
+    handleNormalClick(event)
+  }
+
+  // Touch wrappers
+  function handleTouchStart(event) { handleMouseDown(event) }
+  function handleTouchMove(event) { handleMouseMoveWithDrag(event) }
+  function handleTouchEnd(event) { handleMouseUp(event) }
 
   function animate() {
     if (!isInitialized.value) return
@@ -1056,8 +1207,13 @@ export function useVillageIsometric(containerRef, options = {}) {
 
     // Remove event listeners
     if (renderer?.domElement) {
-      renderer.domElement.removeEventListener('click', handleClick)
-      renderer.domElement.removeEventListener('mousemove', handleMouseMove)
+      renderer.domElement.removeEventListener('mousedown', handleMouseDown)
+      renderer.domElement.removeEventListener('mousemove', handleMouseMoveWithDrag)
+      renderer.domElement.removeEventListener('mouseup', handleMouseUp)
+      renderer.domElement.removeEventListener('mouseleave', handleMouseUp)
+      renderer.domElement.removeEventListener('touchstart', handleTouchStart)
+      renderer.domElement.removeEventListener('touchmove', handleTouchMove)
+      renderer.domElement.removeEventListener('touchend', handleTouchEnd)
     }
 
     // Dispose agents
@@ -1116,6 +1272,19 @@ export function useVillageIsometric(containerRef, options = {}) {
     showInputBubble,
     dismissBubble,
     dispose,
+    hasCustomLayout,
+    resetLayout: () => {
+      resetLayout()
+      // Restore default positions
+      for (const [name, pos] of Object.entries(defaultPositions)) {
+        ZONES_3D[name].position.x = pos.x
+        ZONES_3D[name].position.z = pos.z
+        if (zones[name]?.mesh) {
+          zones[name].mesh.position.set(pos.x, 0, pos.z)
+        }
+      }
+      rebuildGround()
+    },
     ZONES_3D,
     AGENT_COLORS
   }

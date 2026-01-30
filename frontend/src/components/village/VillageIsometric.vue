@@ -60,8 +60,12 @@ const {
   handleToolComplete,
   handleToolError,
   showBubble,
-  dismissBubble
+  dismissBubble,
+  hasCustomLayout,
+  resetLayout
 } = useVillageIsometric(containerRef, villageOptions)
+
+defineExpose({ hasCustomLayout, resetLayout })
 
 // Get selected agent details
 const selectedAgentData = computed(() => {

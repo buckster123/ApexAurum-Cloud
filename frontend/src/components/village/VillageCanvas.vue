@@ -8,8 +8,9 @@
  */
 
 import { ref, watch, onMounted, onUnmounted } from 'vue'
-import { ZONES, AGENT_COLORS, CANVAS_WIDTH, CANVAS_HEIGHT } from '@/composables/useVillage'
+import { ZONES as DEFAULT_ZONES, AGENT_COLORS, CANVAS_WIDTH, CANVAS_HEIGHT } from '@/composables/useVillage'
 import { usePixelSprites } from '@/composables/usePixelSprites'
+import { useDraggableZones } from '@/composables/useDraggableZones'
 
 const props = defineProps({
   events: {
@@ -31,6 +32,18 @@ let agents = new Map()
 let activeZone = null
 
 const { initSpriteCache, getSprite, getBuildingSprite, getTerrainTile, SPRITE_SCALE } = usePixelSprites()
+
+// Mutable zone positions for drag support
+const zones = JSON.parse(JSON.stringify(DEFAULT_ZONES))
+const { loadLayout, saveLayout, applyLayout, resetLayout, hasCustomLayout } =
+  useDraggableZones('village-layout-2d', DEFAULT_ZONES)
+
+// Apply saved layout on init
+const savedLayout = loadLayout()
+if (savedLayout) applyLayout(zones, savedLayout)
+
+// Drag state for long-press-to-drag
+let dragState = null
 
 // Precomputed terrain canvas (tiled once, reused every frame)
 let terrainCanvas = null
@@ -56,11 +69,11 @@ function buildTerrainCache() {
   }
 
   // Draw dirt paths from village square to each zone
-  const center = ZONES.village_square
+  const center = zones.village_square
   tctx.strokeStyle = '#8b7355'
   tctx.lineWidth = 18
   tctx.lineCap = 'round'
-  for (const [name, zone] of Object.entries(ZONES)) {
+  for (const [name, zone] of Object.entries(zones)) {
     if (name === 'village_square') continue
     tctx.beginPath()
     tctx.moveTo(center.x, center.y)
@@ -71,7 +84,7 @@ function buildTerrainCache() {
   tctx.strokeStyle = '#6b5540'
   tctx.lineWidth = 22
   tctx.globalCompositeOperation = 'destination-over'
-  for (const [name, zone] of Object.entries(ZONES)) {
+  for (const [name, zone] of Object.entries(zones)) {
     if (name === 'village_square') continue
     tctx.beginPath()
     tctx.moveTo(center.x, center.y)
@@ -87,8 +100,8 @@ class Agent {
     this.id = id
     this.name = name
     this.color = color
-    this.x = ZONES.village_square.x
-    this.y = ZONES.village_square.y
+    this.x = zones.village_square.x
+    this.y = zones.village_square.y
     this.targetX = this.x
     this.targetY = this.y
     this.state = 'idle'
@@ -104,7 +117,7 @@ class Agent {
   }
 
   moveTo(zoneName) {
-    const zone = ZONES[zoneName]
+    const zone = zones[zoneName]
     if (!zone) return
     this.targetX = zone.x
     this.targetY = zone.y
@@ -119,8 +132,8 @@ class Agent {
 
   finishTool() {
     this.currentTool = null
-    this.targetX = ZONES.village_square.x
-    this.targetY = ZONES.village_square.y
+    this.targetX = zones.village_square.x
+    this.targetY = zones.village_square.y
     this.currentZone = 'village_square'
     this.state = 'moving'
   }
@@ -324,8 +337,24 @@ function render() {
   }
 
   // Buildings
-  for (const [name, zone] of Object.entries(ZONES)) {
+  for (const [name, zone] of Object.entries(zones)) {
     drawBuilding(name, zone, name === activeZone)
+  }
+
+  // Drag highlight: draw outline around dragged building
+  if (dragState?.isDragging) {
+    const dz = zones[dragState.zoneName]
+    const halfW = dz.width / 2
+    const halfH = dz.height / 2
+    ctx.save()
+    ctx.strokeStyle = '#FFD700'
+    ctx.lineWidth = 3
+    ctx.setLineDash([6, 4])
+    ctx.beginPath()
+    ctx.roundRect(dz.x - halfW - 4, dz.y - halfH - 4, dz.width + 8, dz.height + 8, 12)
+    ctx.stroke()
+    ctx.setLineDash([])
+    ctx.restore()
   }
 
   // Agents (drawn on top)
@@ -337,14 +366,36 @@ function render() {
   animationFrameId = requestAnimationFrame(render)
 }
 
-function handleClick(event) {
+// ── Canvas coordinate helpers ──
+
+function canvasCoords(event) {
   const rect = canvasRef.value.getBoundingClientRect()
   const scaleX = CANVAS_WIDTH / rect.width
   const scaleY = CANVAS_HEIGHT / rect.height
-  const x = (event.clientX - rect.left) * scaleX
-  const y = (event.clientY - rect.top) * scaleY
+  const clientX = event.touches ? event.touches[0].clientX : event.clientX
+  const clientY = event.touches ? event.touches[0].clientY : event.clientY
+  return {
+    x: (clientX - rect.left) * scaleX,
+    y: (clientY - rect.top) * scaleY
+  }
+}
 
-  // Check agent clicks (sprite bounding box)
+function findZoneAt(x, y) {
+  for (const [name, zone] of Object.entries(zones)) {
+    const halfW = zone.width / 2
+    const halfH = zone.height / 2
+    if (x >= zone.x - halfW && x <= zone.x + halfW &&
+        y >= zone.y - halfH && y <= zone.y + halfH) {
+      return name
+    }
+  }
+  return null
+}
+
+function handleNormalClick(event) {
+  const { x, y } = canvasCoords(event)
+
+  // Check agent clicks first (sprite bounding box)
   const spriteW = 16 * SPRITE_SCALE
   const spriteH = 24 * SPRITE_SCALE
   for (const agent of agents.values()) {
@@ -358,16 +409,93 @@ function handleClick(event) {
   }
 
   // Then check zone clicks
-  for (const [name, zone] of Object.entries(ZONES)) {
-    const halfW = zone.width / 2
-    const halfH = zone.height / 2
-    if (x >= zone.x - halfW && x <= zone.x + halfW &&
-        y >= zone.y - halfH && y <= zone.y + halfH) {
-      emit('zoneClick', { name, zone })
-      return
-    }
+  const hitZone = findZoneAt(x, y)
+  if (hitZone) {
+    emit('zoneClick', { name: hitZone, zone: zones[hitZone] })
   }
 }
+
+// ── Long-press drag handlers ──
+
+function handleMouseDown(event) {
+  if (event.touches && event.touches.length > 1) return
+  const { x, y } = canvasCoords(event)
+  const hitZone = findZoneAt(x, y)
+  if (!hitZone) return
+
+  dragState = {
+    zoneName: hitZone,
+    startX: x,
+    startY: y,
+    offsetX: x - zones[hitZone].x,
+    offsetY: y - zones[hitZone].y,
+    isDragging: false,
+    timer: setTimeout(() => {
+      if (dragState) {
+        dragState.isDragging = true
+        if (canvasRef.value) canvasRef.value.style.cursor = 'grabbing'
+      }
+    }, 500)
+  }
+}
+
+function handleMouseMove(event) {
+  if (!dragState) return
+  if (event.touches) event.preventDefault()
+  const { x, y } = canvasCoords(event)
+
+  if (!dragState.isDragging) {
+    const dist = Math.hypot(x - dragState.startX, y - dragState.startY)
+    if (dist > 5) {
+      clearTimeout(dragState.timer)
+      dragState = null
+    }
+    return
+  }
+
+  // Clamp to canvas bounds (keep building fully visible)
+  const zone = zones[dragState.zoneName]
+  const halfW = zone.width / 2
+  const halfH = zone.height / 2
+  zone.x = Math.max(halfW, Math.min(CANVAS_WIDTH - halfW, x - dragState.offsetX))
+  zone.y = Math.max(halfH, Math.min(CANVAS_HEIGHT - halfH, y - dragState.offsetY))
+  buildTerrainCache()
+}
+
+function handleMouseUp(event) {
+  if (!dragState) return
+  clearTimeout(dragState.timer)
+
+  if (dragState.isDragging) {
+    // Save layout
+    const layout = {}
+    for (const [name, zone] of Object.entries(zones)) {
+      layout[name] = { x: zone.x, y: zone.y }
+    }
+    saveLayout(layout)
+    if (canvasRef.value) canvasRef.value.style.cursor = 'pointer'
+    dragState = null
+    return
+  }
+
+  dragState = null
+  handleNormalClick(event)
+}
+
+// Touch wrappers
+function handleTouchStart(event) { handleMouseDown(event) }
+function handleTouchMove(event) { handleMouseMove(event) }
+function handleTouchEnd(event) { handleMouseUp(event) }
+
+// ── Expose for parent (reset layout) ──
+defineExpose({
+  hasCustomLayout,
+  resetLayout: () => {
+    resetLayout()
+    Object.assign(zones, JSON.parse(JSON.stringify(DEFAULT_ZONES)))
+    buildTerrainCache()
+  }
+})
 
 onMounted(() => {
   if (canvasRef.value) {
@@ -397,7 +525,13 @@ onUnmounted(() => {
       ref="canvasRef"
       :width="CANVAS_WIDTH"
       :height="CANVAS_HEIGHT"
-      @click="handleClick"
+      @mousedown="handleMouseDown"
+      @mousemove="handleMouseMove"
+      @mouseup="handleMouseUp"
+      @mouseleave="handleMouseUp"
+      @touchstart="handleTouchStart"
+      @touchmove.prevent="handleTouchMove"
+      @touchend="handleTouchEnd"
       class="village-canvas"
     />
 
