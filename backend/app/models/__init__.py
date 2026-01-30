@@ -8,6 +8,7 @@ models that reference them.
 
 # Import models that are referenced by others FIRST
 # from app.models.vector import UserVector  # Temp disabled
+from app.models.error_log import ErrorLog
 from app.models.file import File, Folder
 from app.models.conversation import Conversation, Message
 from app.models.agent import Agent
@@ -29,6 +30,7 @@ from app.models.device import Device
 from app.models.user import User
 
 __all__ = [
+    "ErrorLog",
     "User",
     "Conversation",
     "Message",

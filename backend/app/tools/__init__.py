@@ -150,6 +150,23 @@ class ToolRegistry:
 
             await broadcaster.broadcast_tool_error(name, error_msg, agent_id)
 
+            # Track tool timeout
+            try:
+                from app.database import get_db_context
+                from app.services.error_tracking import log_error as _log_error
+                async with get_db_context() as db:
+                    await _log_error(
+                        db=db,
+                        category="tool_failure",
+                        error_type="TimeoutError",
+                        message=error_msg,
+                        severity="warning",
+                        response_time_ms=elapsed,
+                        context={"tool_name": name, "agent_id": agent_id},
+                    )
+            except Exception:
+                pass
+
             return ToolResult(
                 success=False,
                 error=error_msg,
@@ -160,6 +177,23 @@ class ToolRegistry:
 
             # Broadcast tool error to Village GUI
             await broadcaster.broadcast_tool_error(name, str(e), agent_id)
+
+            # Track tool failure
+            try:
+                from app.database import get_db_context
+                from app.services.error_tracking import log_error as _log_error
+                async with get_db_context() as db:
+                    await _log_error(
+                        db=db,
+                        category="tool_failure",
+                        error_type=e.__class__.__name__,
+                        message=str(e),
+                        severity="error",
+                        response_time_ms=(time.time() - start_time) * 1000,
+                        context={"tool_name": name, "agent_id": agent_id},
+                    )
+            except Exception:
+                pass
 
             return ToolResult(
                 success=False,

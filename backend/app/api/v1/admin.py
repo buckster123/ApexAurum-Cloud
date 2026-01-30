@@ -718,6 +718,254 @@ async def set_user_grant(
     }
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# ERROR TRACKING
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class ErrorLogResponse(BaseModel):
+    id: str
+    category: str
+    severity: str
+    error_type: str
+    message: str
+    stacktrace: Optional[str] = None
+    endpoint: Optional[str] = None
+    http_method: Optional[str] = None
+    status_code: Optional[int] = None
+    response_time_ms: Optional[float] = None
+    user_hash: Optional[str] = None
+    context: Optional[dict] = None
+    created_at: str
+
+
+class ErrorListResponse(BaseModel):
+    errors: list[ErrorLogResponse]
+    total: int
+
+
+class ErrorSettingsRequest(BaseModel):
+    enabled: Optional[bool] = None
+    min_severity: Optional[str] = Field(None, pattern="^(warning|error|critical)$")
+    retention_days: Optional[int] = Field(None, ge=1, le=365)
+
+
+@router.get("/errors", response_model=ErrorListResponse)
+async def list_errors(
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+    category: Optional[str] = Query(None, max_length=30),
+    severity: Optional[str] = Query(None, max_length=10),
+    endpoint: Optional[str] = Query(None, max_length=300),
+    hours: int = Query(24, ge=1, le=720),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+):
+    """List error logs with filters."""
+    from datetime import timedelta
+    from app.models.error_log import ErrorLog
+
+    since = datetime.now(timezone.utc) - timedelta(hours=hours)
+    query = select(ErrorLog).where(ErrorLog.created_at >= since)
+
+    if category:
+        query = query.where(ErrorLog.category == category)
+    if severity:
+        query = query.where(ErrorLog.severity == severity)
+    if endpoint:
+        query = query.where(ErrorLog.endpoint.ilike(f"%{endpoint}%"))
+
+    # Count
+    count_query = select(func.count(ErrorLog.id)).where(ErrorLog.created_at >= since)
+    if category:
+        count_query = count_query.where(ErrorLog.category == category)
+    if severity:
+        count_query = count_query.where(ErrorLog.severity == severity)
+    if endpoint:
+        count_query = count_query.where(ErrorLog.endpoint.ilike(f"%{endpoint}%"))
+    total = await db.scalar(count_query) or 0
+
+    query = query.order_by(ErrorLog.created_at.desc()).offset(offset).limit(limit)
+    result = await db.execute(query)
+    errors = result.scalars().all()
+
+    return ErrorListResponse(
+        errors=[
+            ErrorLogResponse(
+                id=str(e.id),
+                category=e.category,
+                severity=e.severity,
+                error_type=e.error_type,
+                message=e.message,
+                stacktrace=e.stacktrace,
+                endpoint=e.endpoint,
+                http_method=e.http_method,
+                status_code=e.status_code,
+                response_time_ms=e.response_time_ms,
+                user_hash=e.user_hash,
+                context=e.context,
+                created_at=e.created_at.isoformat(),
+            )
+            for e in errors
+        ],
+        total=total,
+    )
+
+
+@router.get("/errors/stats")
+async def get_error_stats_endpoint(
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+    hours: int = Query(24, ge=1, le=720),
+):
+    """Get aggregated error statistics."""
+    from app.services.error_tracking import get_error_stats
+    return await get_error_stats(db, hours)
+
+
+@router.get("/errors/settings")
+async def get_error_settings(
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get current error tracking settings."""
+    from app.services.error_tracking import get_tracking_settings
+    return await get_tracking_settings(db)
+
+
+@router.put("/errors/settings")
+async def update_error_settings(
+    request: ErrorSettingsRequest,
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update error tracking settings."""
+    from app.models.system import SystemSettings
+    from app.services.error_tracking import get_tracking_settings, invalidate_settings_cache
+
+    # Get current
+    current = await get_tracking_settings(db)
+
+    # Merge updates
+    if request.enabled is not None:
+        current["enabled"] = request.enabled
+    if request.min_severity is not None:
+        current["min_severity"] = request.min_severity
+    if request.retention_days is not None:
+        current["retention_days"] = request.retention_days
+
+    # Upsert
+    result = await db.execute(
+        select(SystemSettings).where(SystemSettings.key == "error_tracking")
+    )
+    row = result.scalar_one_or_none()
+
+    if row:
+        row.value = current
+        row.updated_at = datetime.now(timezone.utc)
+        row.updated_by = admin.id
+        from sqlalchemy.orm.attributes import flag_modified
+        flag_modified(row, "value")
+    else:
+        row = SystemSettings(
+            key="error_tracking",
+            value=current,
+            updated_at=datetime.now(timezone.utc),
+            updated_by=admin.id,
+        )
+        db.add(row)
+
+    await db.commit()
+    invalidate_settings_cache()
+
+    logger.info(f"Error tracking settings updated by {admin.email}: {current}")
+    return current
+
+
+@router.delete("/errors/purge")
+async def purge_errors(
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+    confirm: bool = Query(False),
+):
+    """Manually purge error logs. Requires confirm=true."""
+    if not confirm:
+        from app.models.error_log import ErrorLog
+        total = await db.scalar(select(func.count(ErrorLog.id))) or 0
+        return {"warning": "Add ?confirm=true to purge", "total_records": total}
+
+    from app.services.error_tracking import purge_old_errors
+    deleted = await purge_old_errors(db, retention_days=0)
+    logger.info(f"Error logs purged by {admin.email}: {deleted} entries deleted")
+    return {"status": "purged", "deleted": deleted}
+
+
+@router.get("/errors/export")
+async def export_errors(
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+    format: str = Query("json", pattern="^(json|csv)$"),
+    hours: int = Query(24, ge=1, le=720),
+    category: Optional[str] = Query(None, max_length=30),
+    severity: Optional[str] = Query(None, max_length=10),
+):
+    """Export error logs as JSON or CSV (up to 5000 records)."""
+    from datetime import timedelta
+    from app.models.error_log import ErrorLog
+
+    since = datetime.now(timezone.utc) - timedelta(hours=hours)
+    query = select(ErrorLog).where(ErrorLog.created_at >= since)
+
+    if category:
+        query = query.where(ErrorLog.category == category)
+    if severity:
+        query = query.where(ErrorLog.severity == severity)
+
+    query = query.order_by(ErrorLog.created_at.desc()).limit(5000)
+    result = await db.execute(query)
+    errors = result.scalars().all()
+
+    records = [
+        {
+            "id": str(e.id),
+            "category": e.category,
+            "severity": e.severity,
+            "error_type": e.error_type,
+            "message": e.message,
+            "endpoint": e.endpoint,
+            "http_method": e.http_method,
+            "status_code": e.status_code,
+            "response_time_ms": e.response_time_ms,
+            "user_hash": e.user_hash,
+            "context": e.context,
+            "created_at": e.created_at.isoformat(),
+        }
+        for e in errors
+    ]
+
+    if format == "csv":
+        import csv
+        import io
+        from fastapi.responses import StreamingResponse
+
+        output = io.StringIO()
+        if records:
+            writer = csv.DictWriter(output, fieldnames=records[0].keys())
+            writer.writeheader()
+            for r in records:
+                # Flatten context to string for CSV
+                r["context"] = str(r["context"]) if r["context"] else ""
+                writer.writerow(r)
+
+        output.seek(0)
+        return StreamingResponse(
+            iter([output.getvalue()]),
+            media_type="text/csv",
+            headers={"Content-Disposition": "attachment; filename=error_logs.csv"},
+        )
+
+    return {"errors": records, "count": len(records)}
+
+
 @router.delete("/grants/user/{user_id}/{provider}")
 async def revoke_user_grant(
     user_id: UUID,

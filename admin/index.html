@@ -82,6 +82,7 @@
           <button onclick="showTab('coupons')" data-tab="coupons" class="tab-btn px-4 py-3 text-sm font-medium border-b-2 border-transparent hover:border-gold/50 transition-colors">Coupons</button>
           <button onclick="showTab('users')" data-tab="users" class="tab-btn px-4 py-3 text-sm font-medium border-b-2 border-transparent hover:border-gold/50 transition-colors">Users</button>
           <button onclick="showTab('stats')" data-tab="stats" class="tab-btn px-4 py-3 text-sm font-medium border-b-2 border-transparent hover:border-gold/50 transition-colors">Stats</button>
+          <button onclick="showTab('errors')" data-tab="errors" class="tab-btn px-4 py-3 text-sm font-medium border-b-2 border-transparent hover:border-gold/50 transition-colors">Errors</button>
         </div>
       </div>
 
@@ -282,6 +283,123 @@
             <div id="provider-grid" class="grid grid-cols-2 md:grid-cols-3 gap-3"></div>
           </div>
         </div>
+
+        <!-- Errors Tab -->
+        <div id="tab-errors" class="tab-content hidden">
+          <!-- Settings Card -->
+          <div class="card mb-6">
+            <div class="flex items-center justify-between mb-4">
+              <h3 class="text-lg font-semibold">Error Tracking Settings</h3>
+              <div class="flex items-center gap-3">
+                <label class="flex items-center gap-2 cursor-pointer">
+                  <span class="text-sm text-gray-400">Enabled</span>
+                  <input type="checkbox" id="error-tracking-enabled" onchange="updateErrorSettings()" class="w-4 h-4 accent-gold">
+                </label>
+              </div>
+            </div>
+            <div class="grid md:grid-cols-3 gap-4">
+              <div>
+                <label class="block text-sm text-gray-400 mb-1">Min Severity</label>
+                <select id="error-min-severity" onchange="updateErrorSettings()" class="input">
+                  <option value="warning">Warning+</option>
+                  <option value="error">Error+</option>
+                  <option value="critical">Critical only</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-sm text-gray-400 mb-1">Retention</label>
+                <select id="error-retention" onchange="updateErrorSettings()" class="input">
+                  <option value="7">7 days</option>
+                  <option value="14">14 days</option>
+                  <option value="30">30 days</option>
+                  <option value="60">60 days</option>
+                  <option value="90">90 days</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-sm text-gray-400 mb-1">Time Range</label>
+                <select id="error-hours" onchange="loadErrors()" class="input">
+                  <option value="1">Last hour</option>
+                  <option value="6">Last 6 hours</option>
+                  <option value="24" selected>Last 24 hours</option>
+                  <option value="72">Last 3 days</option>
+                  <option value="168">Last 7 days</option>
+                  <option value="720">Last 30 days</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- Stats Cards -->
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            <div class="card text-center">
+              <div class="text-2xl font-bold text-white" id="err-stat-total">-</div>
+              <div class="text-xs text-gray-400 mt-1">Total</div>
+            </div>
+            <div class="card text-center">
+              <div class="text-2xl font-bold text-red-500" id="err-stat-critical">-</div>
+              <div class="text-xs text-gray-400 mt-1">Critical</div>
+            </div>
+            <div class="card text-center">
+              <div class="text-2xl font-bold text-orange-400" id="err-stat-error">-</div>
+              <div class="text-xs text-gray-400 mt-1">Error</div>
+            </div>
+            <div class="card text-center">
+              <div class="text-2xl font-bold text-yellow-400" id="err-stat-warning">-</div>
+              <div class="text-xs text-gray-400 mt-1">Warning</div>
+            </div>
+          </div>
+
+          <!-- Filters & Actions -->
+          <div class="flex flex-wrap items-center gap-3 mb-4">
+            <select id="error-filter-category" onchange="loadErrors()" class="input w-auto">
+              <option value="">All categories</option>
+              <option value="backend_exception">Backend Exception</option>
+              <option value="http_error">HTTP Error</option>
+              <option value="tool_failure">Tool Failure</option>
+              <option value="frontend_error">Frontend Error</option>
+              <option value="llm_error">LLM Error</option>
+              <option value="webhook_error">Webhook Error</option>
+            </select>
+            <select id="error-filter-severity" onchange="loadErrors()" class="input w-auto">
+              <option value="">All severities</option>
+              <option value="critical">Critical</option>
+              <option value="error">Error</option>
+              <option value="warning">Warning</option>
+            </select>
+            <div class="flex-1"></div>
+            <button onclick="exportErrors('json')" class="btn-secondary text-sm">Export JSON</button>
+            <button onclick="exportErrors('csv')" class="btn-secondary text-sm">Export CSV</button>
+            <button onclick="purgeErrors()" class="btn-danger text-sm">Purge All</button>
+          </div>
+
+          <!-- Errors Table -->
+          <div class="card">
+            <div id="errors-loading" class="text-center py-8 text-gray-400">Loading errors...</div>
+            <div id="errors-empty" class="text-center py-8 text-gray-500 hidden">No errors found</div>
+            <table id="errors-table" class="w-full hidden">
+              <thead>
+                <tr class="text-left text-sm text-gray-400 border-b border-apex-border">
+                  <th class="pb-3">Time</th>
+                  <th class="pb-3">Category</th>
+                  <th class="pb-3">Severity</th>
+                  <th class="pb-3">Type</th>
+                  <th class="pb-3">Message</th>
+                  <th class="pb-3">Endpoint</th>
+                </tr>
+              </thead>
+              <tbody id="errors-body" class="divide-y divide-apex-border"></tbody>
+            </table>
+            <!-- Pagination -->
+            <div id="errors-pagination" class="flex items-center justify-between mt-4 pt-4 border-t border-apex-border hidden">
+              <span id="errors-page-info" class="text-sm text-gray-400"></span>
+              <div class="flex gap-2">
+                <button onclick="errorsPrevPage()" id="errors-prev-btn" class="btn-secondary text-sm" disabled>Prev</button>
+                <button onclick="errorsNextPage()" id="errors-next-btn" class="btn-secondary text-sm">Next</button>
+              </div>
+            </div>
+          </div>
+        </div>
       </main>
     </div>
   </div>
@@ -396,6 +514,7 @@
       if (tab === 'coupons') loadCoupons();
       if (tab === 'users') loadUsers();
       if (tab === 'stats') loadStats();
+      if (tab === 'errors') { loadErrorSettings(); loadErrors(); }
     }
 
     // Coupons
@@ -752,6 +871,217 @@
         document.getElementById('stat-conversations').textContent = '-';
         document.getElementById('stat-coupons').textContent = '-';
         document.getElementById('stat-files').textContent = '-';
+      }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // Errors
+    // ═══════════════════════════════════════════════════════════════════
+
+    let errorsOffset = 0;
+    const errorsLimit = 50;
+    let errorsTotal = 0;
+
+    async function loadErrorSettings() {
+      try {
+        const res = await fetch(`${API_BASE}/api/v1/admin/errors/settings`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!res.ok) return;
+        const s = await res.json();
+        document.getElementById('error-tracking-enabled').checked = s.enabled !== false;
+        document.getElementById('error-min-severity').value = s.min_severity || 'warning';
+        document.getElementById('error-retention').value = String(s.retention_days || 30);
+      } catch (err) {
+        console.error('[Admin] Failed to load error settings:', err);
+      }
+    }
+
+    async function updateErrorSettings() {
+      try {
+        const payload = {
+          enabled: document.getElementById('error-tracking-enabled').checked,
+          min_severity: document.getElementById('error-min-severity').value,
+          retention_days: parseInt(document.getElementById('error-retention').value),
+        };
+        await fetch(`${API_BASE}/api/v1/admin/errors/settings`, {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(payload)
+        });
+      } catch (err) {
+        console.error('[Admin] Failed to update error settings:', err);
+      }
+    }
+
+    async function loadErrors() {
+      const loading = document.getElementById('errors-loading');
+      const empty = document.getElementById('errors-empty');
+      const table = document.getElementById('errors-table');
+      const tbody = document.getElementById('errors-body');
+      const pagination = document.getElementById('errors-pagination');
+
+      loading.classList.remove('hidden');
+      empty.classList.add('hidden');
+      table.classList.add('hidden');
+      pagination.classList.add('hidden');
+
+      const hours = document.getElementById('error-hours').value;
+      const category = document.getElementById('error-filter-category').value;
+      const severity = document.getElementById('error-filter-severity').value;
+
+      let url = `${API_BASE}/api/v1/admin/errors?hours=${hours}&limit=${errorsLimit}&offset=${errorsOffset}`;
+      if (category) url += `&category=${category}`;
+      if (severity) url += `&severity=${severity}`;
+
+      try {
+        // Fetch errors and stats in parallel
+        const [errRes, statsRes] = await Promise.all([
+          fetch(url, { headers: { 'Authorization': `Bearer ${token}` } }),
+          fetch(`${API_BASE}/api/v1/admin/errors/stats?hours=${hours}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          }),
+        ]);
+
+        if (!errRes.ok) throw new Error('Failed to load errors');
+
+        const data = await errRes.json();
+        errorsTotal = data.total;
+
+        // Stats
+        if (statsRes.ok) {
+          const stats = await statsRes.json();
+          document.getElementById('err-stat-total').textContent = (stats.total || 0).toLocaleString();
+          document.getElementById('err-stat-critical').textContent = (stats.by_severity?.critical || 0).toLocaleString();
+          document.getElementById('err-stat-error').textContent = (stats.by_severity?.error || 0).toLocaleString();
+          document.getElementById('err-stat-warning').textContent = (stats.by_severity?.warning || 0).toLocaleString();
+        }
+
+        loading.classList.add('hidden');
+
+        if (data.errors.length === 0) {
+          empty.classList.remove('hidden');
+          return;
+        }
+
+        table.classList.remove('hidden');
+
+        const sevColors = {
+          critical: 'bg-red-500/20 text-red-400',
+          error: 'bg-orange-500/20 text-orange-400',
+          warning: 'bg-yellow-500/20 text-yellow-400',
+        };
+
+        const catLabels = {
+          backend_exception: 'Backend',
+          http_error: 'HTTP',
+          tool_failure: 'Tool',
+          frontend_error: 'Frontend',
+          llm_error: 'LLM',
+          webhook_error: 'Webhook',
+        };
+
+        tbody.innerHTML = data.errors.map(e => {
+          const time = new Date(e.created_at);
+          const timeStr = time.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+          const msg = e.message.length > 80 ? e.message.slice(0, 80) + '...' : e.message;
+          return `
+            <tr class="hover:bg-apex-dark/50 text-sm">
+              <td class="py-2 text-gray-400 whitespace-nowrap">${timeStr}</td>
+              <td class="py-2">
+                <span class="px-2 py-0.5 text-xs rounded bg-apex-dark border border-apex-border">${catLabels[e.category] || e.category}</span>
+              </td>
+              <td class="py-2">
+                <span class="px-2 py-0.5 text-xs rounded ${sevColors[e.severity] || ''}">${e.severity}</span>
+              </td>
+              <td class="py-2 font-mono text-xs text-gray-300">${e.error_type}</td>
+              <td class="py-2 text-gray-300 max-w-xs truncate" title="${e.message.replace(/"/g, '&quot;')}">${msg}</td>
+              <td class="py-2 text-gray-500 text-xs font-mono">${e.endpoint || '-'}</td>
+            </tr>
+          `;
+        }).join('');
+
+        // Pagination
+        if (errorsTotal > errorsLimit) {
+          pagination.classList.remove('hidden');
+          const page = Math.floor(errorsOffset / errorsLimit) + 1;
+          const totalPages = Math.ceil(errorsTotal / errorsLimit);
+          document.getElementById('errors-page-info').textContent = `Page ${page} of ${totalPages} (${errorsTotal} total)`;
+          document.getElementById('errors-prev-btn').disabled = errorsOffset === 0;
+          document.getElementById('errors-next-btn').disabled = errorsOffset + errorsLimit >= errorsTotal;
+        }
+      } catch (err) {
+        loading.textContent = 'Failed to load errors';
+        console.error('[Admin] Error loading errors:', err);
+      }
+    }
+
+    function errorsPrevPage() {
+      errorsOffset = Math.max(0, errorsOffset - errorsLimit);
+      loadErrors();
+    }
+
+    function errorsNextPage() {
+      if (errorsOffset + errorsLimit < errorsTotal) {
+        errorsOffset += errorsLimit;
+        loadErrors();
+      }
+    }
+
+    async function exportErrors(format) {
+      const hours = document.getElementById('error-hours').value;
+      const category = document.getElementById('error-filter-category').value;
+      const severity = document.getElementById('error-filter-severity').value;
+
+      let url = `${API_BASE}/api/v1/admin/errors/export?format=${format}&hours=${hours}`;
+      if (category) url += `&category=${category}`;
+      if (severity) url += `&severity=${severity}`;
+
+      try {
+        const res = await fetch(url, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!res.ok) throw new Error('Export failed');
+
+        if (format === 'csv') {
+          const blob = await res.blob();
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(blob);
+          a.download = 'error_logs.csv';
+          a.click();
+          URL.revokeObjectURL(a.href);
+        } else {
+          const data = await res.json();
+          const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(blob);
+          a.download = 'error_logs.json';
+          a.click();
+          URL.revokeObjectURL(a.href);
+        }
+      } catch (err) {
+        alert('Export failed: ' + err.message);
+      }
+    }
+
+    async function purgeErrors() {
+      if (!confirm('This will delete ALL error logs. Continue?')) return;
+      if (!confirm('Are you sure? This cannot be undone.')) return;
+
+      try {
+        const res = await fetch(`${API_BASE}/api/v1/admin/errors/purge?confirm=true`, {
+          method: 'DELETE',
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!res.ok) throw new Error('Purge failed');
+        const data = await res.json();
+        alert(`Purged ${data.deleted} error log entries`);
+        loadErrors();
+      } catch (err) {
+        alert('Purge failed: ' + err.message);
       }
     }
   </script>

@@ -53,7 +53,7 @@ async def lifespan(app: FastAPI):
     """Application lifespan manager."""
     # Startup
     print("=" * 50)
-    print("ApexAurum Cloud v112 - ApexPocket Integration")
+    print("ApexAurum Cloud v113 - Error Tracking")
     print("=" * 50)
 
     # Import all models before database init to ensure SQLAlchemy
@@ -71,6 +71,19 @@ async def lifespan(app: FastAPI):
 
     # Initialize Vault storage
     init_vault()
+
+    # Auto-purge old error logs (GDPR compliance)
+    try:
+        from app.database import get_db_context
+        from app.services.error_tracking import purge_old_errors
+        async with get_db_context() as db:
+            purged = await purge_old_errors(db)
+            if purged > 0:
+                print(f"Error log purge: removed {purged} old entries")
+            else:
+                print("Error log purge: no old entries")
+    except Exception as e:
+        print(f"Error log purge skipped: {e}")
 
     # Auto-promote initial admin from env var (or auto-create if missing)
     import os
@@ -159,6 +172,92 @@ app.add_middleware(
 app.state.limiter = limiter
 
 
+# Error tracking middleware
+@app.middleware("http")
+async def error_tracking_middleware(request: Request, call_next):
+    """Track HTTP errors and unhandled exceptions for the admin dashboard."""
+    import time as _time
+    start = _time.time()
+
+    try:
+        response = await call_next(request)
+        elapsed_ms = (_time.time() - start) * 1000
+
+        # Log 5xx responses
+        if response.status_code >= 500:
+            try:
+                from app.database import get_db_context
+                from app.services.error_tracking import log_error
+
+                # Extract user_id from JWT without DB hit
+                user_id = None
+                auth_header = request.headers.get("authorization", "")
+                if auth_header.startswith("Bearer "):
+                    try:
+                        import jwt
+                        token = auth_header[7:]
+                        payload = jwt.decode(token, options={"verify_signature": False})
+                        user_id = payload.get("sub")
+                    except Exception:
+                        pass
+
+                async with get_db_context() as db:
+                    await log_error(
+                        db=db,
+                        category="http_error",
+                        error_type=f"HTTP_{response.status_code}",
+                        message=f"{request.method} {request.url.path} returned {response.status_code}",
+                        severity="error",
+                        endpoint=str(request.url.path)[:300],
+                        http_method=request.method,
+                        status_code=response.status_code,
+                        response_time_ms=elapsed_ms,
+                        user_id=user_id,
+                    )
+            except Exception:
+                pass  # Never break the response
+
+        return response
+
+    except Exception as exc:
+        elapsed_ms = (_time.time() - start) * 1000
+
+        # Log unhandled exception
+        try:
+            import traceback as _tb
+            from app.database import get_db_context
+            from app.services.error_tracking import log_error
+
+            user_id = None
+            auth_header = request.headers.get("authorization", "")
+            if auth_header.startswith("Bearer "):
+                try:
+                    import jwt
+                    token = auth_header[7:]
+                    payload = jwt.decode(token, options={"verify_signature": False})
+                    user_id = payload.get("sub")
+                except Exception:
+                    pass
+
+            async with get_db_context() as db:
+                await log_error(
+                    db=db,
+                    category="backend_exception",
+                    error_type=exc.__class__.__name__,
+                    message=str(exc),
+                    severity="critical",
+                    stacktrace=_tb.format_exc(),
+                    endpoint=str(request.url.path)[:300],
+                    http_method=request.method,
+                    response_time_ms=elapsed_ms,
+                    user_id=user_id,
+                )
+        except Exception:
+            pass  # Never suppress the original exception
+
+        raise
+
+
 @app.exception_handler(RateLimitExceeded)
 async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
     """Rate limit exceeded handler with CORS support."""
@@ -192,7 +291,7 @@ async def health_check():
     return {
         "status": "healthy",
         "version": "0.1.0",
-        "build": "v112-apexpocket",
+        "build": "v113-error-tracking",
         "agents": {
             "native": 5,
             "pac": 4,
@@ -252,6 +351,7 @@ async def health_check():
             "apexpocket-device-auth",
             "apexpocket-cloud-api",
             "device-management",
+            "error-tracking",
         ],
     }
 

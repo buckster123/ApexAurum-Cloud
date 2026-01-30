@@ -779,6 +779,35 @@ END $$;
             );
         """)
 
+        # ═══════════════════════════════════════════════════════════════════════
+        # v113: Error Logs - GDPR-compliant centralized error tracking
+        # No PII stored: user_hash is SHA-256, no IPs, messages sanitized
+        # ═══════════════════════════════════════════════════════════════════════
+        migrations.append("""
+            CREATE TABLE IF NOT EXISTS error_logs (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                category VARCHAR(30) NOT NULL,
+                severity VARCHAR(10) NOT NULL,
+                error_type VARCHAR(200) NOT NULL,
+                message TEXT NOT NULL,
+                stacktrace TEXT,
+                endpoint VARCHAR(300),
+                http_method VARCHAR(10),
+                status_code INTEGER,
+                response_time_ms FLOAT,
+                user_hash VARCHAR(64),
+                context JSONB,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+            );
+        """)
+        migrations.append("CREATE INDEX IF NOT EXISTS ix_error_logs_category ON error_logs(category);")
+        migrations.append("CREATE INDEX IF NOT EXISTS ix_error_logs_severity ON error_logs(severity);")
+        migrations.append("CREATE INDEX IF NOT EXISTS ix_error_logs_created_at ON error_logs(created_at);")
+        migrations.append("CREATE INDEX IF NOT EXISTS ix_error_logs_user_hash ON error_logs(user_hash);")
+        migrations.append("CREATE INDEX IF NOT EXISTS ix_error_logs_category_created ON error_logs(category, created_at);")
+        migrations.append("CREATE INDEX IF NOT EXISTS ix_error_logs_severity_created ON error_logs(severity, created_at);")
+        migrations.append("CREATE INDEX IF NOT EXISTS ix_error_logs_endpoint_created ON error_logs(endpoint, created_at);")
+
         for migration in migrations:
             await conn.execute(text(migration))
         print(f"Database migrations complete (embedding_dim={embed_dim})")
