@@ -1714,6 +1714,74 @@ Store: frontend/src/stores/nursery.js (438 lines, 7 computed, 20+ actions, error
 - Community beta testing with launch coupons (via admin panel)
 - Connect SMTP to apexaurum.cloud mail server (email stubs ready)
 - Review and customize legal text (templates deployed)
+- Redis: config exists but unused (in-memory rate limiting, no worker queue)
+- Polish pass: small UI/UX tweaks, edge cases, final pre-launch review
+
+---
+
+## Session 29 Accomplishments
+
+### Platform Provider Grants (v108) - COMPLETE
+**Commits:** 5d9ce80, 159ea67, be57563
+
+**Together.ai key bug fix:**
+- Nursery Forge (start_training, background job, both tools) only checked BYOK keys, ignored platform env vars
+- All 4 call sites now use unified `resolve_provider_access()` with BYOK → grant → platform fallback
+- Chat.py key resolution also unified (was inline ad-hoc chain)
+
+**Platform Provider Grants system:**
+- `system_settings` table (key-value JSONB) for runtime admin config
+- `provider_access.py` service with unified resolution function
+- Two-layer grants: tier-level (DB) + user-level (user.settings JSON)
+- Expiration support for campaign-limited grants
+- Grant bypass for multi_provider tier check (granted Seeker can use Groq)
+- Grantable providers: together, groq, deepseek, qwen, moonshot, suno
+
+**Admin API (4 endpoints):**
+- `GET /admin/grants` - list all tier + user grants
+- `PUT /admin/grants/tier` - set tier-level grants
+- `PUT /admin/grants/user/{id}` - grant user platform access
+- `DELETE /admin/grants/user/{id}/{provider}` - revoke
+
+**Admin panel:** Grants tab with tier checkbox grid, user search + per-provider toggles, active grants overview
+
+**Frontend:**
+- `hasTogetherKey` → `hasTogetherAccess` (checks BYOK + platform key + platform grant)
+- "Platform Granted" gold badge in Settings provider cards
+- Updated Nursery warning text to mention admin grants
+
+**Bug fixes during deploy:**
+- SQLAlchemy `text()` treats `?` as bind param (not JSONB operator) → replaced with ORM query
+- `settings` column is `json` not `jsonb` → `jsonb_typeof()` fails → replaced with Python filtering
+
+### Environment
+- Build: v108-platform-grants
+- Frontend CACHE_BUST: 25
+- Tools: 68 (unchanged)
+
+### Key Files Created/Modified (Session 29)
+
+| File | Status | Changes |
+|------|--------|---------|
+| `backend/app/models/system.py` | NEW | SystemSettings model (key-value JSONB) |
+| `backend/app/services/provider_access.py` | NEW | Unified provider resolution (~160 lines) |
+| `backend/app/database.py` | EDIT | system_settings table migration |
+| `backend/app/models/__init__.py` | EDIT | Import SystemSettings |
+| `backend/app/config.py` | EDIT | platform_grants per tier + GRANTABLE_PROVIDERS |
+| `backend/app/api/v1/chat.py` | EDIT | Unified resolution + grant bypass |
+| `backend/app/api/v1/nursery.py` | EDIT | Together key fix |
+| `backend/app/services/cloud_trainer.py` | EDIT | Background job key fix |
+| `backend/app/tools/nursery.py` | EDIT | Tool key fix (2 locations) |
+| `backend/app/api/v1/admin.py` | EDIT | 4 grant CRUD endpoints |
+| `backend/app/api/v1/user.py` | EDIT | Grant info in provider status |
+| `backend/admin_static/index.html` | EDIT | Grants tab (tier grid + user search) |
+| `frontend/src/stores/nursery.js` | EDIT | hasTogetherAccess |
+| `frontend/src/components/nursery/NurseryTrainingForge.vue` | EDIT | Updated check + warning |
+| `frontend/src/components/nursery/NurseryApprentices.vue` | EDIT | Updated check |
+| `frontend/src/views/NurseryView.vue` | EDIT | Updated function call |
+| `frontend/src/views/SettingsView.vue` | EDIT | Platform Granted badge |
+| `backend/app/main.py` | EDIT | v108, platform-grants feature |
+| `frontend/Dockerfile` | EDIT | CACHE_BUST=25 |
 
 ---
 
