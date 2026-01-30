@@ -1580,6 +1580,75 @@ Store: frontend/src/stores/nursery.js (438 lines, 7 computed, 20+ actions, error
 
 ---
 
+## Session 27 Accomplishments
+
+### Credit Packs + Usage Dashboard Session C (v106) - COMPLETE
+**Commit:** 326b2d6
+
+**Feature credit packs** replace cents-based credits with resource-specific packs:
+
+| Pack | Price | Contents | Type |
+|------|-------|----------|------|
+| Spark | $5 | 50 Opus OR 20 Suno OR 2 Training | Pick one |
+| Flame | $15 | 150 Opus + 50 Suno + 5 Training | Bundle |
+| Inferno | $40 | 500 Opus + 200 Suno + 15 Training | Bundle |
+
+**Backend (14 files):**
+- `models/feature_credit.py`: NEW - FeatureCreditBalance model (per-purchase rows, FIFO deduction, rollover expiry)
+- `services/usage.py`: FeatureCreditService (add/deduct/summary), COUNTER_TO_RESOURCE mapping, check_usage_limit() auto-checks feature credits at tier limit, deduct_feature_credit_if_over_limit() helper
+- `config.py`: New CREDIT_PACKS (Spark/Flame/Inferno), 3 Stripe pack price env vars
+- `services/billing.py`: create_pack_checkout(), feature credits in subscription status
+- `schemas/billing.py`: PackCheckoutRequest/Response, FeatureCreditPack, UsageResourceDetail, UsageSummaryResponse
+- `api/v1/billing.py`: POST /checkout/pack, GET /usage (per-resource dashboard), updated /pricing with feature_packs, feature_credits in /status
+- `api/v1/webhooks.py`: Handle Spark/Flame/Inferno pack fulfillment alongside legacy
+- `api/v1/chat.py`: Opus feature credit deduction after message
+- `api/v1/music.py`: Suno feature credit deduction after generation
+- `api/v1/nursery.py`: Training job usage counter increment
+- `api/v1/admin.py`: GET /users/{id}/usage (admin per-user usage detail)
+- `database.py`: Migration for feature_credit_balances table + indexes
+- `models/__init__.py`: FeatureCreditBalance import
+- `main.py`: v106-credit-packs
+
+**Frontend (3 files):**
+- `billing.js`: usageSummary, featureCredits state + fetchUsageSummary(), createPackCheckout() actions + canBuyPacks, hasFeatureCredits getters
+- `BillingView.vue`: 4-tab layout (Plans/Feature Packs/Usage/History), Spark resource selector, usage dashboard with progress bars (green/yellow/red), feature credits remaining card
+- `Dockerfile`: CACHE_BUST=23
+
+**Key architecture:**
+- `check_usage_limit()` in UsageService transparently checks feature credits -- all existing call sites (chat, music, council, jam) gain feature credit support with zero code changes
+- FIFO deduction: oldest purchase depleted first via ORDER BY purchased_at ASC
+- Credits expire end of current month + 1 full month (rollover once)
+- Old cents-based system preserved for backward compat (legacy transactions, old balance display)
+
+### Environment
+- Build: v106-credit-packs
+- Frontend CACHE_BUST: 23
+- Tools: 68 (unchanged)
+
+### Key Files Modified/Created (Session 27)
+
+| File | Status | Changes |
+|------|--------|---------|
+| `backend/app/models/feature_credit.py` | NEW | FeatureCreditBalance model |
+| `backend/app/models/__init__.py` | EDIT | Import new model |
+| `backend/app/database.py` | EDIT | Migration SQL |
+| `backend/app/config.py` | EDIT | New CREDIT_PACKS + 3 Stripe env vars |
+| `backend/app/services/usage.py` | EDIT | FeatureCreditService + check_usage_limit upgrade |
+| `backend/app/schemas/billing.py` | EDIT | Pack + usage schemas |
+| `backend/app/services/billing.py` | EDIT | create_pack_checkout, feature credits in status |
+| `backend/app/api/v1/billing.py` | EDIT | POST /checkout/pack, GET /usage, pricing |
+| `backend/app/api/v1/webhooks.py` | EDIT | New pack fulfillment |
+| `backend/app/api/v1/chat.py` | EDIT | Opus feature credit deduction |
+| `backend/app/api/v1/music.py` | EDIT | Suno feature credit deduction |
+| `backend/app/api/v1/nursery.py` | EDIT | Training job counter |
+| `backend/app/api/v1/admin.py` | EDIT | Per-user usage endpoint |
+| `backend/app/main.py` | EDIT | v106, feature-credit-packs |
+| `frontend/src/stores/billing.js` | EDIT | Usage + pack state/actions |
+| `frontend/src/views/BillingView.vue` | EDIT | 4-tab layout, usage dashboard |
+| `frontend/Dockerfile` | EDIT | CACHE_BUST=23 |
+
+---
+
 ## Tier Restructure Roadmap
 
 **Masterplan:** `TIER_MASTERPLAN.md` (committed, in repo root)
@@ -1589,25 +1658,30 @@ Store: frontend/src/stores/nursery.js (438 lines, 7 computed, 20+ actions, error
 |---------|-------|--------|
 | **A: Usage Infrastructure** | Per-model counters, usage_counters table, limit middleware, context cap | DONE (Session 25) |
 | **B: Tier Restructure** | 5-tier config, Stripe env vars, billing UI, landing page, feature gates, free trial | DONE (Session 26) |
-| **C: Credit Packs + Dashboard** | Pack purchases, usage display, admin usage reports | NEXT |
-| **D: Legal + Polish** | Terms, privacy, disclaimers, coupon library, package builder | |
+| **C: Credit Packs + Dashboard** | Feature packs (Spark/Flame/Inferno), usage dashboard, admin usage | DONE (Session 27) |
+| **D: Legal + Polish** | Terms, privacy, disclaimers, coupon library, package builder | NEXT |
 
-### Session C Scope (next session)
-- Restructure credit packs: Spark $5, Flame $15, Inferno $40
-- 3 Stripe one-time payment products
-- Credit balance tracking per feature type
-- GET /api/v1/usage endpoint (all counters + limits + %)
-- Frontend usage dashboard (progress bars, warnings at 80%)
-- Pack purchase UI in billing page
-- Admin: view user usage in admin panel
+### Session D Scope (next session)
+- Terms of Service page (/terms)
+- Privacy Policy page (/privacy)
+- Beta disclaimer in footer + registration
+- Registration: checkbox for terms acceptance
+- Coupon library: pre-create beta launch coupons
+- Package builder UI (optional)
+- Usage warning emails at 80%/100% (optional)
+- Admin: usage reports, tier breakdown
 
-### Stripe Dashboard Prerequisite (for Session B)
-Before Session B tier prices work in production, create in Stripe Dashboard:
+### Stripe Dashboard Prerequisites
+**Subscription products (Session B):**
 1. **Seeker** - $10/mo recurring → `STRIPE_PRICE_SEEKER_MONTHLY`
 2. **Adept** - $30/mo recurring → `STRIPE_PRICE_ADEPT_MONTHLY`
 3. **Opus** - $100/mo recurring → `STRIPE_PRICE_OPUS_MONTHLY`
 4. **Azothic** - $300/mo recurring → `STRIPE_PRICE_AZOTHIC_MONTHLY`
-Remove old `STRIPE_PRICE_PRO_MONTHLY` env var.
+
+**Feature pack products (Session C):**
+1. **Spark Pack** - $5 one-time → `STRIPE_PRICE_PACK_SPARK`
+2. **Flame Pack** - $15 one-time → `STRIPE_PRICE_PACK_FLAME`
+3. **Inferno Pack** - $40 one-time → `STRIPE_PRICE_PACK_INFERNO`
 
 ### Remaining Beta Items
 - DNS setup for apexaurum.cloud
