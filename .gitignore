@@ -30,5 +30,6 @@ logs/
 .DS_Store
 Thumbs.db
 railway_logs/
-docs/sunokey.txt
-NURSERY_MASTERPLAN.md
+
+# Archive (internal docs, plans, logs - kept locally)
+archive/

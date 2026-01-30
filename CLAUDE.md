@@ -54,7 +54,7 @@ backend/app/
 ├── services/
 │   ├── llm_provider.py  # Multi-provider LLM
 │   └── billing.py       # Usage tracking
-└── tools/               # 46 tools across tiers
+└── tools/               # 50+ tools across 15 modules
 
 frontend/src/
 ├── stores/
@@ -120,6 +120,16 @@ Backend uses platform Anthropic key if user doesn't have BYOK set. BYOK is optio
 - **Dev Mode:** Konami code (↑↑↓↓←→←→BA) or 7-tap on Au logo
 - **PAC Mode:** Type "AZOTH" while in Dev Mode
 - **PAC prompts:** `backend/native_prompts/*-PAC.txt`
+
+## Repository Structure
+
+- `README.md` - Public-facing project overview
+- `ENCYCLOPEDIA.md` - Complete technical and lore reference
+- `HANDOVER.md` - Session-to-session deployment state (read this first!)
+- `CLAUDE.md` - This file (Claude Code guidance)
+- `archive/` - Internal planning docs, session notes, and logs (gitignored, local only)
+
+**Important:** `admin/index.html` and `backend/admin_static/index.html` are separate files. Docker serves from `admin_static/`. Always edit `backend/admin_static/index.html` for deployed changes.
 
 ## URLs
 
