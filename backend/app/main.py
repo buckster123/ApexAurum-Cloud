@@ -53,7 +53,7 @@ async def lifespan(app: FastAPI):
     """Application lifespan manager."""
     # Startup
     print("=" * 50)
-    print("ApexAurum Cloud v104 - Usage Infrastructure")
+    print("ApexAurum Cloud v105 - Tier Restructure")
     print("=" * 50)
 
     # Import all models before database init to ensure SQLAlchemy
@@ -192,7 +192,7 @@ async def health_check():
     return {
         "status": "healthy",
         "version": "0.1.0",
-        "build": "v104-usage-infrastructure",
+        "build": "v105-tier-restructure",
         "agents": {
             "native": 5,
             "pac": 4,
@@ -244,6 +244,7 @@ async def health_check():
             "nursery-apprentice-protocol",
             "nursery-polish",
             "usage-counters",
+            "tier-restructure",
         ],
     }
 

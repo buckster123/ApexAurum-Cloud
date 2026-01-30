@@ -211,7 +211,7 @@ async def handle_subscription_created(data: dict, billing: BillingService, db: A
     subscription.stripe_price_id = price_id
     subscription.tier = tier
     subscription.status = data.get("status", "active")
-    subscription.messages_limit = TIER_LIMITS.get(tier, TIER_LIMITS["free"])["messages_per_month"]
+    subscription.messages_limit = TIER_LIMITS.get(tier, TIER_LIMITS["free_trial"])["messages_per_month"]
 
     # Set billing period
     if data.get("current_period_start"):
@@ -251,7 +251,7 @@ async def handle_subscription_updated(data: dict, billing: BillingService, db: A
         tier = _get_tier_from_price(price_id)
         subscription.tier = tier
         subscription.stripe_price_id = price_id
-        subscription.messages_limit = TIER_LIMITS.get(tier, TIER_LIMITS["free"])["messages_per_month"]
+        subscription.messages_limit = TIER_LIMITS.get(tier, TIER_LIMITS["free_trial"])["messages_per_month"]
 
     # Update status
     subscription.status = data.get("status", subscription.status)
@@ -284,15 +284,15 @@ async def handle_subscription_deleted(data: dict, billing: BillingService, db: A
         logger.warning(f"No subscription found for Stripe subscription {subscription_id}")
         return
 
-    # Downgrade to free
-    subscription.tier = "free"
+    # Downgrade to free_trial
+    subscription.tier = "free_trial"
     subscription.status = "canceled"
     subscription.stripe_subscription_id = None
     subscription.stripe_price_id = None
-    subscription.messages_limit = TIER_LIMITS["free"]["messages_per_month"]
+    subscription.messages_limit = TIER_LIMITS["free_trial"]["messages_per_month"]
     subscription.messages_used = 0  # Reset usage
 
-    logger.info(f"Subscription canceled for user {subscription.user_id}, downgraded to free")
+    logger.info(f"Subscription canceled for user {subscription.user_id}, downgraded to free_trial")
 
 
 async def handle_invoice_paid(data: dict, billing: BillingService, db: AsyncSession):
@@ -358,18 +358,26 @@ async def handle_invoice_payment_failed(data: dict, billing: BillingService, db:
 def _get_tier_from_price(price_id: str) -> str:
     """Determine subscription tier from Stripe price ID."""
     if not price_id:
-        return "free"
+        return "free_trial"
 
-    if price_id == settings.stripe_price_pro_monthly:
-        return "pro"
+    if price_id == settings.stripe_price_seeker_monthly:
+        return "seeker"
+    elif price_id == settings.stripe_price_adept_monthly:
+        return "adept"
     elif price_id == settings.stripe_price_opus_monthly:
         return "opus"
+    elif price_id == settings.stripe_price_azothic_monthly:
+        return "azothic"
 
     # Fallback: check price ID naming convention
     price_lower = price_id.lower()
-    if "opus" in price_lower:
+    if "azothic" in price_lower:
+        return "azothic"
+    elif "opus" in price_lower:
         return "opus"
-    elif "pro" in price_lower:
-        return "pro"
+    elif "adept" in price_lower:
+        return "adept"
+    elif "seeker" in price_lower:
+        return "seeker"
 
-    return "free"
+    return "seeker"  # Default paid tier, not free_trial

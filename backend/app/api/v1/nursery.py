@@ -71,23 +71,29 @@ class CreateApprenticeRequest(BaseModel):
     variation_level: str = "medium"
 
 
-async def _check_adept_tier(user: User, db: AsyncSession):
-    """Check if user has Adept tier (required for Nursery).
-
-    Reads tier from the Subscription model (same as chat.py),
-    not user.settings which is never populated by Stripe/admin flows.
-    """
-    tier = "free"
+async def _check_nursery_access(user: User, db: AsyncSession, require_training: bool = False):
+    """Check if user has nursery access based on tier."""
+    from app.config import TIER_LIMITS
+    tier = "free_trial"
     result = await db.execute(
         select(Subscription).where(Subscription.user_id == user.id)
     )
     subscription = result.scalar_one_or_none()
     if subscription:
         tier = subscription.tier
-    if tier != "opus":
+    tier_config = TIER_LIMITS.get(tier, TIER_LIMITS["free_trial"])
+    nursery_access = tier_config.get("nursery_access", False)
+
+    if not nursery_access:
         raise HTTPException(
             status_code=403,
-            detail="The Nursery requires Adept tier ($30/mo). Upgrade to access model training."
+            detail="The Nursery requires Opus tier ($100/mo). Upgrade to access model training."
+        )
+
+    if require_training and nursery_access == "view_only":
+        raise HTTPException(
+            status_code=403,
+            detail="Training requires Opus tier ($100/mo). Adept tier can browse the Data Garden."
         )
 
 
@@ -97,7 +103,7 @@ async def list_datasets(
     db: AsyncSession = Depends(get_db),
 ):
     """List user's training datasets."""
-    await _check_adept_tier(user, db)
+    await _check_nursery_access(user, db)
 
     from app.services.nursery import NurseryService
     datasets = await NurseryService.list_datasets(str(user.id))
@@ -113,7 +119,7 @@ async def generate_data(
     db: AsyncSession = Depends(get_db),
 ):
     """Generate synthetic training data."""
-    await _check_adept_tier(user, db)
+    await _check_nursery_access(user, db, require_training=True)
 
     if not body.tool_names:
         raise HTTPException(status_code=400, detail="At least one tool name is required")
@@ -148,7 +154,7 @@ async def extract_data(
     db: AsyncSession = Depends(get_db),
 ):
     """Extract training data from conversation history."""
-    await _check_adept_tier(user, db)
+    await _check_nursery_access(user, db, require_training=True)
 
     from app.services.nursery import NurseryService
     result = await NurseryService.extract_conversation_data(
@@ -171,7 +177,7 @@ async def delete_dataset(
     db: AsyncSession = Depends(get_db),
 ):
     """Delete a dataset and its file."""
-    await _check_adept_tier(user, db)
+    await _check_nursery_access(user, db)
 
     from app.services.nursery import NurseryService
     deleted = await NurseryService.delete_dataset(dataset_id, str(user.id))
@@ -188,7 +194,7 @@ async def get_stats(
     db: AsyncSession = Depends(get_db),
 ):
     """Get nursery statistics."""
-    await _check_adept_tier(user, db)
+    await _check_nursery_access(user, db)
 
     from app.services.nursery import NurseryService
     stats = await NurseryService.get_stats(str(user.id))
@@ -218,7 +224,7 @@ async def estimate_training_cost(
     db: AsyncSession = Depends(get_db),
 ):
     """Estimate the cost of a fine-tuning job."""
-    await _check_adept_tier(user, db)
+    await _check_nursery_access(user, db)
 
     from app.services.nursery import NurseryService
     from app.services.cloud_trainer import CloudTrainerService
@@ -247,7 +253,7 @@ async def start_training(
     db: AsyncSession = Depends(get_db),
 ):
     """Start a cloud fine-tuning job via Together.ai."""
-    await _check_adept_tier(user, db)
+    await _check_nursery_access(user, db, require_training=True)
 
     from app.services.nursery import NurseryService
     from app.services.cloud_trainer import CloudTrainerService, auto_complete_training_job
@@ -376,7 +382,7 @@ async def list_training_jobs(
     db: AsyncSession = Depends(get_db),
 ):
     """List training jobs for the current user."""
-    await _check_adept_tier(user, db)
+    await _check_nursery_access(user, db)
 
     from app.models.nursery import NurseryTrainingJob
 
@@ -424,7 +430,7 @@ async def get_training_job(
     db: AsyncSession = Depends(get_db),
 ):
     """Get detailed info for a specific training job."""
-    await _check_adept_tier(user, db)
+    await _check_nursery_access(user, db)
 
     from app.models.nursery import NurseryTrainingJob
 
@@ -469,7 +475,7 @@ async def cancel_training_job(
     db: AsyncSession = Depends(get_db),
 ):
     """Cancel a running training job."""
-    await _check_adept_tier(user, db)
+    await _check_nursery_access(user, db, require_training=True)
 
     from app.models.nursery import NurseryTrainingJob
     from app.services.cloud_trainer import CloudTrainerService
@@ -534,7 +540,7 @@ async def list_models(
     db: AsyncSession = Depends(get_db),
 ):
     """List user's trained models."""
-    await _check_adept_tier(user, db)
+    await _check_nursery_access(user, db)
     result = await db.execute(
         select(NurseryModelRecord)
         .options(selectinload(NurseryModelRecord.training_job))
@@ -573,7 +579,7 @@ async def discover_village_models(
     db: AsyncSession = Depends(get_db),
 ):
     """Search Village for shared models."""
-    await _check_adept_tier(user, db)
+    await _check_nursery_access(user, db)
     from app.services.neural_memory import NeuralMemoryService
     neural = NeuralMemoryService(db)
     memories = await neural.get_village_memories(
@@ -592,7 +598,7 @@ async def get_village_activity(
     db: AsyncSession = Depends(get_db),
 ):
     """Recent nursery activity feed."""
-    await _check_adept_tier(user, db)
+    await _check_nursery_access(user, db)
     # Get recent jobs
     jobs_result = await db.execute(
         select(NurseryTrainingJob)
@@ -645,7 +651,7 @@ async def get_model_detail(
     db: AsyncSession = Depends(get_db),
 ):
     """Get detailed info for a specific model."""
-    await _check_adept_tier(user, db)
+    await _check_nursery_access(user, db)
     result = await db.execute(
         select(NurseryModelRecord)
         .options(selectinload(NurseryModelRecord.training_job))
@@ -680,7 +686,7 @@ async def register_model_in_village(
     db: AsyncSession = Depends(get_db),
 ):
     """Register a model in the Village for sharing."""
-    await _check_adept_tier(user, db)
+    await _check_nursery_access(user, db, require_training=True)
     from app.services.neural_memory import NeuralMemoryService
     result = await db.execute(
         select(NurseryModelRecord).where(
@@ -733,7 +739,7 @@ async def delete_model(
     db: AsyncSession = Depends(get_db),
 ):
     """Delete a model record."""
-    await _check_adept_tier(user, db)
+    await _check_nursery_access(user, db, require_training=True)
     result = await db.execute(
         select(NurseryModelRecord).where(
             NurseryModelRecord.id == UUID(model_id),
@@ -759,7 +765,7 @@ async def list_apprentices(
     db: AsyncSession = Depends(get_db),
 ):
     """List user's apprentices."""
-    await _check_adept_tier(user, db)
+    await _check_nursery_access(user, db)
 
     result = await db.execute(
         select(NurseryApprentice)
@@ -803,7 +809,7 @@ async def create_apprentice(
     db: AsyncSession = Depends(get_db),
 ):
     """Create an apprentice, optionally auto-generating a dataset."""
-    await _check_adept_tier(user, db)
+    await _check_nursery_access(user, db, require_training=True)
 
     valid_masters = {"AZOTH", "ELYSIAN", "VAJRA", "KETHER"}
     if body.master_agent not in valid_masters:
@@ -881,7 +887,7 @@ async def delete_apprentice(
     db: AsyncSession = Depends(get_db),
 ):
     """Delete an apprentice record."""
-    await _check_adept_tier(user, db)
+    await _check_nursery_access(user, db, require_training=True)
 
     result = await db.execute(
         select(NurseryApprentice).where(

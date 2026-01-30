@@ -194,7 +194,11 @@ export const useChatStore = defineStore('chat', () => {
             // Handle structured error responses (402/403)
             if (typeof errorData.detail === 'object') {
               const detail = errorData.detail
-              if (detail.error === 'model_not_allowed') {
+              if (detail.error === 'trial_expired') {
+                errorMessage = `⏳ Your free trial has expired. Subscribe to continue your journey.\n\n[Upgrade your plan](/billing) to keep using ApexAurum.`
+              } else if (detail.error === 'opus_limit') {
+                errorMessage = `📊 ${detail.message || 'Opus message limit reached for this month.'}`
+              } else if (detail.error === 'model_not_allowed') {
                 errorMessage = `🔒 ${detail.message || 'This model requires a higher tier.'}\n\nTry switching to Haiku or Sonnet in settings, or upgrade your plan.`
               } else if (detail.error === 'tools_not_allowed') {
                 errorMessage = `🔧 ${detail.message || 'Tools require a Pro subscription.'}\n\nUpgrade to unlock AI tools.`
@@ -289,7 +293,7 @@ export const useChatStore = defineStore('chat', () => {
       if (msg) {
         msg.role = 'system'
         // Check if it's a billing/permission error (has emoji)
-        if (e.message.match(/^[🔒🔧📊🌐]/)) {
+        if (e.message.match(/^[🔒🔧📊🌐⏳]/)) {
           msg.content = e.message
         } else {
           msg.content = `⚠️ Something went wrong:\n\n${e.message}\n\nPlease try again or refresh the page.`

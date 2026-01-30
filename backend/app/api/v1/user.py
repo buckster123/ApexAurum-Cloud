@@ -17,8 +17,11 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 
-from app.config import get_settings
+from sqlalchemy import select
+
+from app.config import get_settings, TIER_LIMITS
 from app.database import get_db
+from app.models.billing import Subscription
 from app.models.user import User
 from app.auth.deps import get_current_user
 from app.services.encryption import encrypt_value, decrypt_value, mask_api_key
@@ -327,6 +330,26 @@ async def set_api_key(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="API key is too short."
+        )
+
+    # Check BYOK tier access
+    sub_result = await db.execute(select(Subscription).where(Subscription.user_id == user.id))
+    subscription = sub_result.scalar_one_or_none()
+    tier = subscription.tier if subscription else "free_trial"
+    tier_config = TIER_LIMITS.get(tier, TIER_LIMITS["free_trial"])
+
+    if not tier_config.get("byok_allowed", False):
+        raise HTTPException(
+            status_code=403,
+            detail="BYOK (Bring Your Own Key) requires Adept tier ($30/mo) or higher."
+        )
+
+    byok_providers = tier_config.get("byok_providers")
+    if byok_providers and provider_id not in byok_providers:
+        allowed_str = ", ".join(p.title() for p in byok_providers)
+        raise HTTPException(
+            status_code=403,
+            detail=f"Your Adept plan allows BYOK for: {allowed_str}. Upgrade to Opus ($100/mo) for all providers."
         )
 
     # Validate with provider-specific test call

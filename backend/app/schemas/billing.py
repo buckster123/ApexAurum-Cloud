@@ -5,7 +5,7 @@ ApexAurum monetization API schemas.
 """
 
 from datetime import datetime
-from typing import Optional, List
+from typing import Any, Optional, List
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field
 
 class SubscriptionCheckoutRequest(BaseModel):
     """Request to create a subscription checkout session."""
-    tier: str = Field(..., description="Subscription tier: 'pro' or 'opus'")
+    tier: str = Field(..., description="Subscription tier: 'seeker', 'adept', 'opus', or 'azothic'")
     success_url: Optional[str] = Field(None, description="URL to redirect after successful payment")
     cancel_url: Optional[str] = Field(None, description="URL to redirect if user cancels")
 
@@ -30,7 +30,7 @@ class SubscriptionCheckoutResponse(BaseModel):
 
 class SubscriptionStatus(BaseModel):
     """Current subscription status."""
-    tier: str = Field(..., description="Current tier: 'free', 'pro', or 'opus'")
+    tier: str = Field(..., description="Current tier: 'free_trial', 'seeker', 'adept', 'opus', or 'azothic'")
     status: str = Field(..., description="Subscription status: 'active', 'past_due', 'canceled', 'trialing'")
     messages_used: int = Field(..., description="Messages used this period")
     messages_limit: Optional[int] = Field(None, description="Monthly message limit (None = unlimited)")
@@ -94,6 +94,14 @@ class TierFeatures(BaseModel):
     multi_provider: bool = Field(..., description="Whether multi-provider LLMs are available")
     byok_allowed: bool = Field(..., description="Whether Bring Your Own Key is allowed")
     api_access: bool = Field(False, description="Whether API access is available")
+    dev_mode: bool = False
+    pac_mode: Any = False  # bool or str ("haiku")
+    nursery_access: Any = False  # bool or str ("view_only")
+    council_sessions_per_month: Optional[int] = None
+    suno_generations_per_month: Optional[int] = None
+    jam_sessions_per_month: Optional[int] = None
+    opus_messages_per_month: int = 0
+    byok_providers: Optional[list] = None
 
 
 class BillingStatusResponse(BaseModel):
@@ -104,13 +112,14 @@ class BillingStatusResponse(BaseModel):
     Frontend should call this on load to determine UI state.
     """
     # Subscription info
-    tier: str = Field(..., description="Current tier: 'free', 'pro', or 'opus'")
+    tier: str = Field(..., description="Current tier: 'free_trial', 'seeker', 'adept', 'opus', or 'azothic'")
     subscription_status: str = Field(..., description="Subscription status")
     messages_used: int = Field(..., description="Messages used this period")
     messages_limit: Optional[int] = Field(None, description="Monthly limit (None = unlimited)")
     messages_remaining: Optional[int] = Field(None, description="Messages remaining (None = unlimited)")
     current_period_end: Optional[datetime] = Field(None, description="When current period ends")
     cancel_at_period_end: bool = Field(False, description="Will cancel at end of period")
+    trial_end: Optional[datetime] = None
 
     # Credit balance
     credit_balance_cents: int = Field(..., description="Credit balance in cents")
@@ -144,7 +153,7 @@ class PortalSessionResponse(BaseModel):
 
 class PricingTier(BaseModel):
     """Pricing tier for display."""
-    id: str = Field(..., description="Tier ID: 'free', 'pro', 'opus'")
+    id: str = Field(..., description="Tier ID: 'seeker', 'adept', 'opus', 'azothic'")
     name: str = Field(..., description="Display name")
     tagline: str = Field(..., description="Short tagline")
     price_monthly: float = Field(..., description="Monthly price in USD")

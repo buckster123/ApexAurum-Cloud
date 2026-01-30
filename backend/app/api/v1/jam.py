@@ -250,6 +250,23 @@ async def create_session(
     - jam: Style-guided auto-collaboration
     - auto: Full creative freedom
     """
+    # Check jam session limit
+    from app.config import TIER_LIMITS
+    from app.models.billing import Subscription
+    sub_result = await db.execute(select(Subscription).where(Subscription.user_id == user.id))
+    subscription = sub_result.scalar_one_or_none()
+    tier = subscription.tier if subscription else "free_trial"
+    tier_config = TIER_LIMITS.get(tier, TIER_LIMITS["free_trial"])
+    jam_limit = tier_config.get("jam_sessions_per_month")
+    if jam_limit is not None:
+        if jam_limit == 0:
+            raise HTTPException(status_code=403, detail="Village Band is not available on your current plan. Upgrade to Adept ($30/mo).")
+        from app.services.usage import UsageService
+        usage_service = UsageService(db)
+        allowed, current, limit = await usage_service.check_usage_limit(user.id, "jam_sessions", jam_limit)
+        if not allowed:
+            raise HTTPException(status_code=403, detail=f"Jam session limit reached ({current}/{limit} this month). Upgrade for more.")
+
     # Validate mode
     try:
         mode = JamMode(request.mode)
@@ -299,6 +316,14 @@ async def create_session(
     session = result.scalar_one()
 
     logger.info(f"Created jam session {session.id} with {len(request.agents)} participants")
+
+    # Increment jam session counter
+    try:
+        from app.services.usage import UsageService
+        usage_service = UsageService(db)
+        await usage_service.increment_usage(user.id, "jam_sessions")
+    except Exception as e:
+        logger.warning(f"Jam counter increment failed (non-fatal): {e}")
 
     return session_to_response(session)
 

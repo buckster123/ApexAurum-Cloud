@@ -5,7 +5,7 @@ import api from '@/services/api'
 export const useBillingStore = defineStore('billing', () => {
   // State
   const status = ref({
-    tier: 'free',
+    tier: 'free_trial',
     subscription_status: 'active',
     messages_used: 0,
     messages_limit: 50,
@@ -31,12 +31,35 @@ export const useBillingStore = defineStore('billing', () => {
   const error = ref(null)
 
   // Getters
-  const isFree = computed(() => status.value.tier === 'free')
-  const isPro = computed(() => status.value.tier === 'pro')
+  // Tier identity checks
+  const isFreeTrial = computed(() => status.value.tier === 'free_trial')
+  const isSeeker = computed(() => status.value.tier === 'seeker')
+  const isAdept = computed(() => status.value.tier === 'adept')
   const isOpus = computed(() => status.value.tier === 'opus')
+  const isAzothic = computed(() => status.value.tier === 'azothic')
+
+  // Backward compat aliases
+  const isFree = computed(() => status.value.tier === 'free_trial')
+  const isPro = computed(() => status.value.tier === 'seeker')
+
+  // Tier level for >= comparisons (0=trial, 1=seeker, 2=adept, 3=opus, 4=azothic)
+  const tierLevel = computed(() => {
+    const levels = { free_trial: 0, seeker: 1, adept: 2, opus: 3, azothic: 4 }
+    return levels[status.value.tier] || 0
+  })
+
+  // Convenience
+  const isPaid = computed(() => status.value.tier !== 'free_trial')
+
   const tierName = computed(() => {
-    const names = { free: 'Seeker', pro: 'Alchemist', opus: 'Adept' }
-    return names[status.value.tier] || 'Seeker'
+    const names = {
+      free_trial: 'Free Trial',
+      seeker: 'Seeker',
+      adept: 'Adept',
+      opus: 'Opus',
+      azothic: 'Azothic',
+    }
+    return names[status.value.tier] || 'Unknown'
   })
 
   const usagePercent = computed(() => {
@@ -188,7 +211,7 @@ export const useBillingStore = defineStore('billing', () => {
 
   function reset() {
     status.value = {
-      tier: 'free',
+      tier: 'free_trial',
       subscription_status: 'active',
       messages_used: 0,
       messages_limit: 50,
@@ -220,9 +243,15 @@ export const useBillingStore = defineStore('billing', () => {
     error,
 
     // Getters
+    isFreeTrial,
+    isSeeker,
+    isAdept,
+    isOpus,
+    isAzothic,
     isFree,
     isPro,
-    isOpus,
+    tierLevel,
+    isPaid,
     tierName,
     usagePercent,
     hasCredits,

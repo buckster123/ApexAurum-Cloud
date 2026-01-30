@@ -572,6 +572,13 @@ async def init_db():
             "CREATE INDEX IF NOT EXISTS idx_usage_counters_user_id ON usage_counters(user_id);",
             "CREATE INDEX IF NOT EXISTS idx_usage_counters_user_period ON usage_counters(user_id, period);",
             "CREATE INDEX IF NOT EXISTS idx_usage_counters_user_type ON usage_counters(user_id, counter_type);",
+            # === Tier Restructure Session B: Remap tier IDs ===
+            "UPDATE subscriptions SET tier = 'free_trial' WHERE tier = 'free' AND (stripe_subscription_id IS NULL OR stripe_subscription_id = '');",
+            "UPDATE subscriptions SET tier = 'seeker' WHERE tier = 'free' AND stripe_subscription_id IS NOT NULL AND stripe_subscription_id != '';",
+            "UPDATE subscriptions SET tier = 'seeker' WHERE tier = 'pro';",
+            "UPDATE subscriptions SET tier = 'adept' WHERE tier = 'opus';",
+            # Add trial_end column
+            "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS trial_end TIMESTAMP WITH TIME ZONE;",
         ]
 
         from sqlalchemy import text

@@ -17,6 +17,14 @@ const couponMessage = ref(null)
 // Check for success redirect
 const checkoutSuccess = computed(() => route.query.session_id)
 
+// Trial days remaining
+const trialDaysLeft = computed(() => {
+  if (!billing.status.trial_end) return 0
+  const end = new Date(billing.status.trial_end)
+  const now = new Date()
+  return Math.max(0, Math.ceil((end - now) / (1000 * 60 * 60 * 24)))
+})
+
 onMounted(async () => {
   await billing.fetchStatus()
   await billing.fetchPricing()
@@ -28,7 +36,7 @@ onMounted(async () => {
 })
 
 async function selectPlan(tierId) {
-  if (tierId === 'free') return
+  if (tierId === 'free_trial') return
   if (tierId === billing.status.tier) return
 
   loadingAction.value = tierId
@@ -108,7 +116,15 @@ function formatDate(dateStr) {
     <div class="text-center mb-12">
       <h1 class="text-4xl font-bold mb-4">Choose Your Path</h1>
       <p class="text-gray-400 text-lg">
-        From Seeker to Adept, unlock the full power of the Athanor
+        From Seeker to Azothic, unlock the full power of the Athanor
+      </p>
+    </div>
+
+    <!-- Free Trial Banner -->
+    <div v-if="billing.isFreeTrial" class="mb-6 bg-amber-900/30 border border-amber-500/30 rounded-lg p-4 text-center">
+      <p class="text-amber-300 font-medium">
+        You're on a free trial{{ trialDaysLeft > 0 ? ` (${trialDaysLeft} days remaining)` : ' (expired)' }}.
+        Subscribe to unlock the full Athanor.
       </p>
     </div>
 
@@ -125,7 +141,7 @@ function formatDate(dateStr) {
           <div class="text-sm text-gray-400 mb-1">Current Plan</div>
           <div class="text-2xl font-bold text-gold">{{ billing.tierName }}</div>
           <div class="text-sm text-gray-500 mt-1">
-            {{ `$${billing.status.tier === 'free' ? '3' : billing.status.tier === 'pro' ? '10' : '30'}/month` }}
+            {{ billing.isFreeTrial ? 'Free Trial' : `${{ free_trial: '0', seeker: '10', adept: '30', opus: '100', azothic: '300' }[billing.status.tier] || '?'}/month` }}
           </div>
         </div>
 
@@ -161,7 +177,7 @@ function formatDate(dateStr) {
 
           <!-- Manage Button -->
           <button
-            v-if="billing.status.tier !== 'free'"
+            v-if="billing.status.tier !== 'free_trial'"
             @click="manageSubscription"
             :disabled="loadingAction === 'portal'"
             class="px-4 py-2 bg-surface border border-gray-600 rounded-lg hover:border-gold/50 transition-colors disabled:opacity-50"
@@ -217,7 +233,7 @@ function formatDate(dateStr) {
     </div>
 
     <!-- Plans Tab -->
-    <div v-if="activeTab === 'plans'" class="grid md:grid-cols-3 gap-6">
+    <div v-if="activeTab === 'plans'" class="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
       <div
         v-for="tier in (billing.pricing?.tiers || [])"
         :key="tier.id"
@@ -272,13 +288,13 @@ function formatDate(dateStr) {
         <!-- CTA Button -->
         <button
           @click="selectPlan(tier.id)"
-          :disabled="tier.id === 'free' || billing.status.tier === tier.id || loadingAction === tier.id"
+          :disabled="tier.id === 'free_trial' || billing.status.tier === tier.id || loadingAction === tier.id"
           :class="[
             'w-full py-3 rounded-lg font-medium transition-all',
             tier.popular
               ? 'bg-gold text-black hover:bg-gold/90'
               : 'bg-surface border border-gray-600 hover:border-gold/50',
-            (tier.id === 'free' || billing.status.tier === tier.id) && 'opacity-50 cursor-not-allowed'
+            (tier.id === 'free_trial' || billing.status.tier === tier.id) && 'opacity-50 cursor-not-allowed'
           ]"
         >
           {{
@@ -286,8 +302,8 @@ function formatDate(dateStr) {
               ? 'Processing...'
               : billing.status.tier === tier.id
                 ? 'Current Plan'
-                : tier.id === 'free'
-                  ? 'Free'
+                : tier.id === 'free_trial'
+                  ? 'Free Trial'
                   : `Upgrade to ${tier.name}`
           }}
         </button>

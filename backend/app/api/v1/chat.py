@@ -599,12 +599,12 @@ async def get_available_models(
     """
     # Get user's allowed models (if authenticated)
     allowed_models = None
-    user_tier = "free"
+    user_tier = "free_trial"
     if user and settings.stripe_secret_key:
         billing_service = BillingService(db)
         subscription = await billing_service.get_or_create_subscription(user.id)
         user_tier = subscription.tier
-        tier_config = TIER_LIMITS.get(user_tier, TIER_LIMITS["free"])
+        tier_config = TIER_LIMITS.get(user_tier, TIER_LIMITS["free_trial"])
         allowed_models = set(tier_config["models"])
 
     # For backwards compatibility, return Claude models in original format for anthropic
@@ -695,6 +695,15 @@ async def send_message(
         # Check if user can send a message (subscription limit or credits)
         can_send, billing_reason = await billing_service.can_send_message(user.id)
         if not can_send:
+            if billing_reason == "trial_expired":
+                raise HTTPException(
+                    status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                    detail={
+                        "error": "trial_expired",
+                        "message": "Your free trial has expired. Subscribe to continue your journey.",
+                        "action": "subscribe"
+                    }
+                )
             raise HTTPException(
                 status_code=status.HTTP_402_PAYMENT_REQUIRED,
                 detail={
@@ -783,7 +792,7 @@ async def send_message(
 
         # Context token limit enforcement (128K cap for Seeker tier)
         subscription = await billing_service.get_or_create_subscription(user.id)
-        tier_config = TIER_LIMITS.get(subscription.tier, TIER_LIMITS["free"])
+        tier_config = TIER_LIMITS.get(subscription.tier, TIER_LIMITS["free_trial"])
         context_limit = tier_config.get("context_token_limit")
         if context_limit:
             estimated_tokens = len(request.message) // 4  # ~4 chars per token
@@ -798,6 +807,32 @@ async def send_message(
                         "action": "upgrade"
                     }
                 )
+
+        # Per-model Opus message limits
+        if "opus" in model.lower() and tier_config.get("opus_messages_per_month") is not None:
+            opus_limit = tier_config["opus_messages_per_month"]
+            if opus_limit > 0:
+                try:
+                    from app.services.usage import UsageService
+                    usage_svc = UsageService(db)
+                    allowed, current, limit = await usage_svc.check_usage_limit(
+                        user.id, "messages_opus", opus_limit
+                    )
+                    if not allowed:
+                        raise HTTPException(
+                            status_code=status.HTTP_403_FORBIDDEN,
+                            detail={
+                                "error": "opus_limit",
+                                "message": f"You've used {current} of {limit} Opus messages this month. Upgrade for more.",
+                                "current": current,
+                                "limit": limit,
+                                "action": "upgrade_or_wait"
+                            }
+                        )
+                except HTTPException:
+                    raise
+                except Exception as e:
+                    logger.warning(f"Opus limit check failed (non-fatal): {e}")
 
     # Universal BYOK routing: check user key first, then platform key
     provider_config = PROVIDERS.get(provider)

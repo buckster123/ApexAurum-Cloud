@@ -20,9 +20,11 @@ class Subscription(Base):
     User subscription synced with Stripe.
 
     Tiers:
-    - free: 50 messages/month, Haiku only, no tools
-    - pro: 1000 messages/month, Sonnet + Haiku, all tools, BYOK
-    - opus: Unlimited, all models including Opus, multi-provider, API access
+    - free_trial: 20 messages/7 days, Haiku only, no tools
+    - seeker: 200 messages/month, Haiku + Sonnet, tools enabled ($10/mo)
+    - adept: 1000 messages/month, all models, 50 Opus msgs, BYOK ($30/mo)
+    - opus: 5000 messages/month, all models, 500 Opus msgs, API access ($100/mo)
+    - azothic: 20000 messages/month, all models, 2000 Opus msgs, full access ($300/mo)
     """
 
     __tablename__ = "subscriptions"
@@ -47,13 +49,14 @@ class Subscription(Base):
     stripe_price_id: Mapped[Optional[str]] = mapped_column(String(255))
 
     # Subscription status
-    tier: Mapped[str] = mapped_column(String(20), default="free")  # free, pro, opus
+    tier: Mapped[str] = mapped_column(String(20), default="free_trial")  # free_trial, seeker, adept, opus, azothic
     status: Mapped[str] = mapped_column(String(20), default="active")  # active, past_due, canceled, trialing
 
     # Billing period (from Stripe)
     current_period_start: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     current_period_end: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     cancel_at_period_end: Mapped[bool] = mapped_column(Boolean, default=False)
+    trial_end: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Usage tracking (reset each billing period)
     messages_used: Mapped[int] = mapped_column(Integer, default=0)

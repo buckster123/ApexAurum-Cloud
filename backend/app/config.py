@@ -58,9 +58,10 @@ class Settings(BaseSettings):
     stripe_webhook_secret: Optional[str] = None
 
     # Stripe Price IDs (create these in Stripe Dashboard)
-    stripe_price_seeker_monthly: Optional[str] = None  # $3/mo subscription
-    stripe_price_pro_monthly: Optional[str] = None  # $10/mo subscription
-    stripe_price_opus_monthly: Optional[str] = None  # $30/mo subscription
+    stripe_price_seeker_monthly: Optional[str] = None   # $10/mo Seeker subscription
+    stripe_price_adept_monthly: Optional[str] = None     # $30/mo Adept subscription
+    stripe_price_opus_monthly: Optional[str] = None      # $100/mo Opus subscription
+    stripe_price_azothic_monthly: Optional[str] = None   # $300/mo Azothic subscription
     stripe_price_credits_500: Optional[str] = None  # $5 for 500 credits
     stripe_price_credits_2500: Optional[str] = None  # $20 for 2500 credits
 
@@ -111,60 +112,155 @@ def get_settings() -> Settings:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 TIER_LIMITS = {
-    "free": {
-        "name": "Seeker",
-        "messages_per_month": 50,
+    "free_trial": {
+        "name": "Free Trial",
+        "price_monthly": 0,
+        "messages_per_month": 20,
         "models": ["claude-haiku-4-5-20251001"],
+        "opus_messages_per_month": 0,
         "tools_enabled": False,
         "multi_provider": False,
         "byok_allowed": False,
         "api_access": False,
-        "context_token_limit": 128_000,  # 128K cap for Seeker tier
+        "context_token_limit": 128_000,
+        "council_sessions_per_month": 0,
+        "council_max_rounds": 0,
+        "suno_generations_per_month": 0,
+        "jam_sessions_per_month": 0,
+        "nursery_access": False,
+        "pac_mode": False,
+        "dev_mode": False,
+        "vault_storage_mb": 0,
+        "trial_days": 7,
     },
-    "pro": {
-        "name": "Alchemist",
+    "seeker": {
+        "name": "Seeker",
+        "price_monthly": 10,
+        "messages_per_month": 200,
+        "models": [
+            "claude-haiku-4-5-20251001",
+            "claude-sonnet-4-5-20250929",
+        ],
+        "opus_messages_per_month": 0,
+        "tools_enabled": True,
+        "multi_provider": False,
+        "byok_allowed": False,
+        "api_access": False,
+        "context_token_limit": 128_000,
+        "council_sessions_per_month": 3,
+        "council_max_rounds": 10,
+        "suno_generations_per_month": 10,
+        "jam_sessions_per_month": 0,
+        "nursery_access": False,
+        "pac_mode": False,
+        "dev_mode": False,
+        "vault_storage_mb": 100,
+    },
+    "adept": {
+        "name": "Adept",
+        "price_monthly": 30,
         "messages_per_month": 1000,
         "models": [
             "claude-haiku-4-5-20251001",
             "claude-sonnet-4-5-20250929",
-        ],
-        "tools_enabled": True,
-        "multi_provider": False,
-        "byok_allowed": True,
-        "api_access": False,
-        "context_token_limit": None,  # No cap
-    },
-    "opus": {
-        "name": "Adept",
-        "messages_per_month": None,  # Unlimited
-        "models": [
-            # Current 4.5 family
-            "claude-haiku-4-5-20251001",
-            "claude-sonnet-4-5-20250929",
             "claude-opus-4-5-20251101",
-            # Legacy 4.x family (still available on Anthropic API)
             "claude-opus-4-1-20250805",
             "claude-opus-4-20250514",
             "claude-sonnet-4-20250514",
-            # Claude 3.7 (still available)
             "claude-3-7-sonnet-20250219",
-            # Vintage 3.0 (only Haiku still available)
             "claude-3-haiku-20240307",
         ],
-        # Deprecated models - kept for memorial messages
+        "opus_messages_per_month": 50,
+        "tools_enabled": True,
+        "multi_provider": True,
+        "byok_allowed": True,
+        "byok_providers": ["together", "groq", "deepseek", "qwen", "moonshot"],
+        "api_access": False,
+        "context_token_limit": None,
+        "council_sessions_per_month": 10,
+        "council_max_rounds": 50,
+        "suno_generations_per_month": 50,
+        "jam_sessions_per_month": 3,
+        "nursery_access": "view_only",
+        "pac_mode": "haiku",
+        "dev_mode": False,
+        "vault_storage_mb": 1024,
+    },
+    "opus": {
+        "name": "Opus",
+        "price_monthly": 100,
+        "messages_per_month": 5000,
+        "models": [
+            "claude-haiku-4-5-20251001",
+            "claude-sonnet-4-5-20250929",
+            "claude-opus-4-5-20251101",
+            "claude-opus-4-1-20250805",
+            "claude-opus-4-20250514",
+            "claude-sonnet-4-20250514",
+            "claude-3-7-sonnet-20250219",
+            "claude-3-haiku-20240307",
+        ],
         "deprecated_models": [
             "claude-3-5-sonnet-20241022",
             "claude-3-5-haiku-20241022",
             "claude-3-opus-20240229",
             "claude-3-sonnet-20240229",
         ],
+        "opus_messages_per_month": 500,
         "tools_enabled": True,
         "multi_provider": True,
         "byok_allowed": True,
         "api_access": True,
-        "context_token_limit": None,  # No cap
+        "context_token_limit": None,
+        "council_sessions_per_month": None,
+        "council_max_rounds": 200,
+        "suno_generations_per_month": 200,
+        "jam_sessions_per_month": 20,
+        "nursery_access": True,
+        "pac_mode": True,
+        "dev_mode": True,
+        "vault_storage_mb": 5120,
+    },
+    "azothic": {
+        "name": "Azothic",
+        "price_monthly": 300,
+        "messages_per_month": 20000,
+        "models": [
+            "claude-haiku-4-5-20251001",
+            "claude-sonnet-4-5-20250929",
+            "claude-opus-4-5-20251101",
+            "claude-opus-4-1-20250805",
+            "claude-opus-4-20250514",
+            "claude-sonnet-4-20250514",
+            "claude-3-7-sonnet-20250219",
+            "claude-3-haiku-20240307",
+        ],
+        "deprecated_models": [
+            "claude-3-5-sonnet-20241022",
+            "claude-3-5-haiku-20241022",
+            "claude-3-opus-20240229",
+            "claude-3-sonnet-20240229",
+        ],
+        "opus_messages_per_month": 2000,
+        "tools_enabled": True,
+        "multi_provider": True,
+        "byok_allowed": True,
+        "api_access": True,
+        "context_token_limit": None,
+        "council_sessions_per_month": None,
+        "council_max_rounds": None,
+        "suno_generations_per_month": 500,
+        "jam_sessions_per_month": None,
+        "nursery_access": True,
+        "nursery_training_credits": 5,
+        "pac_mode": True,
+        "dev_mode": True,
+        "vault_storage_mb": 20480,
     },
 }
+
+# Tier hierarchy for >= comparisons
+TIER_HIERARCHY = {"free_trial": 0, "seeker": 1, "adept": 2, "opus": 3, "azothic": 4}
 
 # Credit packs available for purchase
 CREDIT_PACKS = {

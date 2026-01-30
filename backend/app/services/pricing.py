@@ -250,18 +250,18 @@ def get_tier_for_model(model: str) -> str:
     """
     Determine the minimum tier required for a model.
 
-    Returns: 'free', 'pro', or 'opus'
+    Returns: 'free_trial', 'seeker', or 'adept'
     """
-    # Opus models require opus tier
+    # Opus models require adept tier (limited) or higher
     if "opus" in model.lower():
-        return "opus"
+        return "adept"
 
-    # Sonnet models require pro tier
+    # Sonnet models require seeker tier
     if "sonnet" in model.lower():
-        return "pro"
+        return "seeker"
 
-    # Haiku and others available on free tier
-    return "free"
+    # Haiku available on free trial
+    return "free_trial"
 
 
 def format_cost_display(cost_usd: float) -> str:

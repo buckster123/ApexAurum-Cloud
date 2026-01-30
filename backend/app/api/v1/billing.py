@@ -79,6 +79,7 @@ async def get_billing_status(
         messages_remaining=status_data["messages_remaining"],
         current_period_end=status_data["current_period_end"],
         cancel_at_period_end=status_data["cancel_at_period_end"],
+        trial_end=status_data.get("trial_end"),
         credit_balance_cents=status_data["credit_balance_cents"],
         credit_balance_usd=status_data["credit_balance_usd"],
         features=TierFeatures(**status_data["features"]),
@@ -109,10 +110,10 @@ async def create_subscription_checkout(
 
     After successful payment, Stripe webhook will update the subscription.
     """
-    if request.tier not in ("pro", "opus"):
+    if request.tier not in ("seeker", "adept", "opus", "azothic"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid tier. Must be 'pro' or 'opus'."
+            detail="Invalid tier. Must be 'seeker', 'adept', 'opus', or 'azothic'."
         )
 
     # Build URLs - prefer HTTPS production URL over localhost
@@ -324,49 +325,68 @@ async def get_pricing():
     """
     tiers = [
         PricingTier(
-            id="free",
+            id="seeker",
             name="Seeker",
             tagline="Begin your journey",
-            price_monthly=3,
-            messages_per_month=50,
+            price_monthly=10,
+            messages_per_month=200,
             features=[
-                "50 messages per month",
-                "Haiku model",
-                "Basic chat interface",
-                "Conversation history",
+                "200 messages per month",
+                "Haiku + Sonnet models",
+                "All 68 tools",
+                "3 Council sessions/month",
+                "10 Suno generations/month",
+                "128K context limit",
             ],
             popular=False,
         ),
         PricingTier(
-            id="pro",
-            name="Alchemist",
-            tagline="Transform your workflow",
-            price_monthly=10,
+            id="adept",
+            name="Adept",
+            tagline="Master the Athanor",
+            price_monthly=30,
             messages_per_month=1000,
             features=[
                 "1,000 messages per month",
-                "Sonnet + Haiku models",
-                "All 68 tools (The Athanor's Hands)",
-                "Bring Your Own Key (BYOK)",
-                "Village Protocol GUI",
-                "Neo-Cortex memory",
-                "Export without watermark",
+                "All models + 50 Opus/month",
+                "10 Council sessions, 50 Suno/month",
+                "3 Jam sessions/month",
+                "BYOK (OSS providers)",
+                "Nursery Data Garden (browse)",
+                "Full context + PAC Mode (Haiku)",
             ],
             popular=True,
         ),
         PricingTier(
             id="opus",
-            name="Adept",
+            name="Opus",
             tagline="Unlimited mastery",
-            price_monthly=30,
-            messages_per_month=None,
+            price_monthly=100,
+            messages_per_month=5000,
             features=[
-                "Unlimited messages",
-                "All models including Opus",
-                "The Nursery (model training studio)",
-                "Multi-provider LLMs (Groq, DeepSeek, etc.)",
+                "5,000 messages + 500 Opus/month",
+                "All models + Legacy",
+                "Unlimited Council, 200 Suno/month",
+                "Full Nursery access (training)",
                 "Dev Mode + PAC Mode",
-                "All Alchemist features",
+                "BYOK (all providers)",
+                "5GB vault storage",
+            ],
+            popular=False,
+        ),
+        PricingTier(
+            id="azothic",
+            name="Azothic",
+            tagline="The Philosopher's Stone",
+            price_monthly=300,
+            messages_per_month=20000,
+            features=[
+                "20,000 messages + 2,000 Opus/month",
+                "Everything in Opus tier",
+                "Unlimited Council, Jam, 500 Suno/month",
+                "5 training jobs/month included",
+                "20GB vault storage",
+                "Priority routing",
             ],
             popular=False,
         ),

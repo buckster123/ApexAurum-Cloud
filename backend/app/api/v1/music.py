@@ -154,6 +154,23 @@ async def generate_music(
     - V4_5: Better quality
     - V5: Best quality (recommended)
     """
+    # Check suno generation limit
+    from app.config import TIER_LIMITS
+    from app.models.billing import Subscription
+    sub_result = await db.execute(select(Subscription).where(Subscription.user_id == user.id))
+    subscription = sub_result.scalar_one_or_none()
+    tier = subscription.tier if subscription else "free_trial"
+    tier_config = TIER_LIMITS.get(tier, TIER_LIMITS["free_trial"])
+    suno_limit = tier_config.get("suno_generations_per_month")
+    if suno_limit is not None:
+        if suno_limit == 0:
+            raise HTTPException(status_code=403, detail="Music generation is not available on your current plan. Upgrade to Seeker ($10/mo).")
+        from app.services.usage import UsageService
+        usage_service = UsageService(db)
+        allowed, current, limit = await usage_service.check_usage_limit(user.id, "suno_generations", suno_limit)
+        if not allowed:
+            raise HTTPException(status_code=403, detail=f"Suno generation limit reached ({current}/{limit} this month). Upgrade for more.")
+
     # Check API key is configured
     if not getattr(settings, 'suno_api_key', None):
         raise HTTPException(
@@ -176,6 +193,14 @@ async def generate_music(
     db.add(task)
     await db.commit()
     await db.refresh(task)
+
+    # Increment suno generation counter
+    try:
+        from app.services.usage import UsageService
+        usage_service = UsageService(db)
+        await usage_service.increment_usage(user.id, "suno_generations")
+    except Exception as e:
+        logger.warning(f"Suno counter increment failed (non-fatal): {e}")
 
     if request.stream:
         # SSE streaming response

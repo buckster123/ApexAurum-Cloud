@@ -123,57 +123,75 @@ const router = useRouter()
 
     <!-- Pricing -->
     <section class="py-24 px-4">
-      <div class="max-w-4xl mx-auto">
+      <div class="max-w-6xl mx-auto">
         <h2 class="text-3xl sm:text-4xl font-bold text-center mb-4">Choose Your Path</h2>
-        <p class="text-gray-400 text-center mb-16">Start seeking. Become an alchemist. Master the adept tier.</p>
+        <p class="text-gray-400 text-center mb-2">From Seeker to Azothic, unlock the full power of the Athanor.</p>
+        <p class="text-gold text-center text-sm mb-16">Start with 7 days free. No credit card required.</p>
 
-        <div class="grid md:grid-cols-3 gap-6">
+        <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
           <!-- Seeker -->
           <div class="bg-apex-card border border-apex-border rounded-xl p-6">
             <h3 class="font-bold text-lg mb-1">Seeker</h3>
-            <div class="text-3xl font-bold text-gold mb-1">$3<span class="text-sm text-gray-400 font-normal">/mo</span></div>
-            <p class="text-sm text-gray-500 mb-6">Begin the journey</p>
+            <div class="text-3xl font-bold text-gold mb-1">$10<span class="text-sm text-gray-400 font-normal">/mo</span></div>
+            <p class="text-sm text-gray-500 mb-6">Begin your journey</p>
             <ul class="space-y-2 text-sm text-gray-400 mb-6">
-              <li>&#10003; 50 messages / month</li>
-              <li>&#10003; Haiku model</li>
-              <li>&#10003; All 4 agents</li>
-              <li>&#10003; Council &amp; Village access</li>
+              <li>&#10003; 200 messages / month</li>
+              <li>&#10003; Haiku + Sonnet models</li>
+              <li>&#10003; 68 tools</li>
+              <li>&#10003; 3 Council sessions / month</li>
+              <li>&#10003; 10 Suno generations / month</li>
             </ul>
             <button @click="router.push('/register')" class="w-full py-2 border border-apex-border rounded-lg text-sm hover:border-gold/50 transition-colors">
               Get Started
             </button>
           </div>
-          <!-- Alchemist -->
-          <div class="bg-apex-card border-2 border-gold rounded-xl p-6 relative">
-            <div class="absolute -top-3 left-1/2 -translate-x-1/2 bg-gold text-black text-xs font-bold px-3 py-1 rounded-full">Popular</div>
-            <h3 class="font-bold text-lg mb-1">Alchemist</h3>
-            <div class="text-3xl font-bold text-gold mb-1">$10<span class="text-sm text-gray-400 font-normal">/mo</span></div>
-            <p class="text-sm text-gray-500 mb-6">Transmute your workflow</p>
-            <ul class="space-y-2 text-sm text-gray-400 mb-6">
-              <li>&#10003; 1,000 messages / month</li>
-              <li>&#10003; Haiku + Sonnet models</li>
-              <li>&#10003; Bring Your Own Key</li>
-              <li>&#10003; Music generation</li>
-              <li>&#10003; Jam sessions</li>
-            </ul>
-            <button @click="router.push('/register')" class="w-full py-2 bg-gold text-black font-medium rounded-lg text-sm hover:bg-gold/90 transition-colors">
-              Choose Alchemist
-            </button>
-          </div>
           <!-- Adept -->
-          <div class="bg-apex-card border border-apex-border rounded-xl p-6">
+          <div class="bg-apex-card border-2 border-gold rounded-xl p-6 relative">
+            <div class="absolute -top-3 left-1/2 -translate-x-1/2 bg-gold text-black text-xs font-bold px-3 py-1 rounded-full">POPULAR</div>
             <h3 class="font-bold text-lg mb-1">Adept</h3>
             <div class="text-3xl font-bold text-gold mb-1">$30<span class="text-sm text-gray-400 font-normal">/mo</span></div>
             <p class="text-sm text-gray-500 mb-6">Master the Athanor</p>
             <ul class="space-y-2 text-sm text-gray-400 mb-6">
-              <li>&#10003; Unlimited messages</li>
-              <li>&#10003; All models incl. Opus</li>
-              <li>&#10003; The Nursery (model training)</li>
-              <li>&#10003; Dev Mode + PAC Mode</li>
+              <li>&#10003; 1,000 messages + 50 Opus / mo</li>
+              <li>&#10003; All models</li>
+              <li>&#10003; 10 Council / 50 Suno / 3 Jams</li>
+              <li>&#10003; BYOK (open-source providers)</li>
+              <li>&#10003; Nursery browse + PAC Mode</li>
+            </ul>
+            <button @click="router.push('/register')" class="w-full py-2 bg-gold text-black font-medium rounded-lg text-sm hover:bg-gold/90 transition-colors">
+              Choose Adept
+            </button>
+          </div>
+          <!-- Opus -->
+          <div class="bg-apex-card border border-apex-border rounded-xl p-6">
+            <h3 class="font-bold text-lg mb-1">Opus</h3>
+            <div class="text-3xl font-bold text-gold mb-1">$100<span class="text-sm text-gray-400 font-normal">/mo</span></div>
+            <p class="text-sm text-gray-500 mb-6">Unlimited mastery</p>
+            <ul class="space-y-2 text-sm text-gray-400 mb-6">
+              <li>&#10003; 5,000 messages + 500 Opus / mo</li>
+              <li>&#10003; Full Nursery access</li>
+              <li>&#10003; Dev Mode + BYOK all providers</li>
+              <li>&#10003; 5 GB vault storage</li>
               <li>&#10003; Multi-provider LLMs</li>
             </ul>
             <button @click="router.push('/register')" class="w-full py-2 border border-apex-border rounded-lg text-sm hover:border-gold/50 transition-colors">
-              Go Adept
+              Go Opus
+            </button>
+          </div>
+          <!-- Azothic -->
+          <div class="bg-apex-card border border-apex-border rounded-xl p-6">
+            <h3 class="font-bold text-lg mb-1">Azothic</h3>
+            <div class="text-3xl font-bold text-gold mb-1">$300<span class="text-sm text-gray-400 font-normal">/mo</span></div>
+            <p class="text-sm text-gray-500 mb-6">The Philosopher's Stone</p>
+            <ul class="space-y-2 text-sm text-gray-400 mb-6">
+              <li>&#10003; 20,000 msgs + 2,000 Opus / mo</li>
+              <li>&#10003; Unlimited everything</li>
+              <li>&#10003; 5 training jobs / month</li>
+              <li>&#10003; 20 GB vault storage</li>
+              <li>&#10003; Priority support</li>
+            </ul>
+            <button @click="router.push('/register')" class="w-full py-2 border border-apex-border rounded-lg text-sm hover:border-gold/50 transition-colors">
+              Go Azothic
             </button>
           </div>
         </div>

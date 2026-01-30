@@ -9,7 +9,7 @@ Handles:
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta, timezone as tz
 from typing import Optional, Tuple
 from uuid import UUID, uuid4
 
@@ -73,20 +73,21 @@ class BillingService:
         # Create Stripe customer
         stripe_customer_id = await self._create_stripe_customer(user)
 
-        # Create free subscription
+        # Create free trial subscription
         subscription = Subscription(
             id=uuid4(),
             user_id=user_id,
             stripe_customer_id=stripe_customer_id,
-            tier="free",
-            status="active",
+            tier="free_trial",
+            status="trialing",
             messages_used=0,
-            messages_limit=TIER_LIMITS["free"]["messages_per_month"],
+            messages_limit=TIER_LIMITS["free_trial"]["messages_per_month"],
+            trial_end=datetime.now(tz.utc) + timedelta(days=7),
         )
         self.db.add(subscription)
         await self.db.flush()
 
-        logger.info(f"Created free subscription for user {user_id}")
+        logger.info(f"Created free_trial subscription for user {user_id}")
         return subscription
 
     async def _create_stripe_customer(self, user: User) -> str:
@@ -111,7 +112,7 @@ class BillingService:
         subscription = await self.get_or_create_subscription(user_id)
         credit_balance = await self.get_or_create_credit_balance(user_id)
 
-        tier_config = TIER_LIMITS.get(subscription.tier, TIER_LIMITS["free"])
+        tier_config = TIER_LIMITS.get(subscription.tier, TIER_LIMITS["free_trial"])
         messages_limit = tier_config["messages_per_month"]
 
         # Calculate remaining messages
@@ -143,6 +144,7 @@ class BillingService:
             "messages_remaining": messages_remaining,
             "current_period_end": subscription.current_period_end,
             "cancel_at_period_end": subscription.cancel_at_period_end,
+            "trial_end": subscription.trial_end,
             "credit_balance_cents": credit_balance.balance_cents,
             "credit_balance_usd": credit_balance.balance_cents / 100,
             "features": {
@@ -151,6 +153,14 @@ class BillingService:
                 "multi_provider": tier_config["multi_provider"],
                 "byok_allowed": tier_config["byok_allowed"],
                 "api_access": tier_config.get("api_access", False),
+                "dev_mode": tier_config.get("dev_mode", False),
+                "pac_mode": tier_config.get("pac_mode", False),
+                "nursery_access": tier_config.get("nursery_access", False),
+                "council_sessions_per_month": tier_config.get("council_sessions_per_month"),
+                "suno_generations_per_month": tier_config.get("suno_generations_per_month"),
+                "jam_sessions_per_month": tier_config.get("jam_sessions_per_month"),
+                "opus_messages_per_month": tier_config.get("opus_messages_per_month", 0),
+                "byok_providers": tier_config.get("byok_providers"),
             },
             "at_limit": at_limit,
             "near_limit": near_limit,
@@ -275,11 +285,16 @@ class BillingService:
         3. Return (allowed, reason)
         """
         subscription = await self.get_or_create_subscription(user_id)
-        tier_config = TIER_LIMITS.get(subscription.tier, TIER_LIMITS["free"])
+        tier_config = TIER_LIMITS.get(subscription.tier, TIER_LIMITS["free_trial"])
 
         # Check subscription status
         if subscription.status not in ("active", "trialing"):
             return False, "subscription_inactive"
+
+        # Check trial expiry
+        if subscription.tier == "free_trial" and subscription.trial_end:
+            if datetime.now(tz.utc) > subscription.trial_end:
+                return False, "trial_expired"
 
         # Check subscription limit
         messages_limit = tier_config["messages_per_month"]
@@ -300,7 +315,7 @@ class BillingService:
     async def can_use_model(self, user_id: UUID, model: str) -> bool:
         """Check if user's tier allows the specified model."""
         subscription = await self.get_or_create_subscription(user_id)
-        tier_config = TIER_LIMITS.get(subscription.tier, TIER_LIMITS["free"])
+        tier_config = TIER_LIMITS.get(subscription.tier, TIER_LIMITS["free_trial"])
 
         allowed_models = tier_config["models"]
 
@@ -310,7 +325,7 @@ class BillingService:
 
         # Check model tier requirement
         required_tier = get_tier_for_model(model)
-        tier_hierarchy = {"free": 0, "pro": 1, "opus": 2}
+        tier_hierarchy = {"free_trial": 0, "seeker": 1, "adept": 2, "opus": 3, "azothic": 4}
 
         user_tier_level = tier_hierarchy.get(subscription.tier, 0)
         required_tier_level = tier_hierarchy.get(required_tier, 0)
@@ -320,13 +335,13 @@ class BillingService:
     async def can_use_tools(self, user_id: UUID) -> bool:
         """Check if user's tier allows tool usage."""
         subscription = await self.get_or_create_subscription(user_id)
-        tier_config = TIER_LIMITS.get(subscription.tier, TIER_LIMITS["free"])
+        tier_config = TIER_LIMITS.get(subscription.tier, TIER_LIMITS["free_trial"])
         return tier_config["tools_enabled"]
 
     async def can_use_multi_provider(self, user_id: UUID) -> bool:
         """Check if user's tier allows multi-provider LLMs."""
         subscription = await self.get_or_create_subscription(user_id)
-        tier_config = TIER_LIMITS.get(subscription.tier, TIER_LIMITS["free"])
+        tier_config = TIER_LIMITS.get(subscription.tier, TIER_LIMITS["free_trial"])
         return tier_config["multi_provider"]
 
     # ═══════════════════════════════════════════════════════════════════════════
@@ -348,7 +363,7 @@ class BillingService:
         Returns usage info for the message.
         """
         subscription = await self.get_or_create_subscription(user_id)
-        tier_config = TIER_LIMITS.get(subscription.tier, TIER_LIMITS["free"])
+        tier_config = TIER_LIMITS.get(subscription.tier, TIER_LIMITS["free_trial"])
         messages_limit = tier_config["messages_per_month"]
 
         # Calculate cost
@@ -503,14 +518,13 @@ class BillingService:
         customer_id = await self._ensure_valid_stripe_customer(subscription, user)
 
         # Get price ID for tier
-        price_id = None
-        if tier == "pro":
-            price_id = settings.stripe_price_pro_monthly
-        elif tier == "opus":
-            price_id = settings.stripe_price_opus_monthly
-        else:
-            raise ValueError(f"Invalid tier: {tier}")
-
+        tier_price_map = {
+            "seeker": settings.stripe_price_seeker_monthly,
+            "adept": settings.stripe_price_adept_monthly,
+            "opus": settings.stripe_price_opus_monthly,
+            "azothic": settings.stripe_price_azothic_monthly,
+        }
+        price_id = tier_price_map.get(tier)
         if not price_id:
             raise ValueError(f"Price not configured for tier: {tier}")
 

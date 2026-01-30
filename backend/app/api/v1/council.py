@@ -257,6 +257,23 @@ async def create_session(
     db: AsyncSession = Depends(get_db),
 ):
     """Create a new deliberation session with selected agents."""
+    # Check council session limit
+    from app.config import TIER_LIMITS
+    from app.models.billing import Subscription
+    sub_result = await db.execute(select(Subscription).where(Subscription.user_id == user.id))
+    subscription = sub_result.scalar_one_or_none()
+    tier = subscription.tier if subscription else "free_trial"
+    tier_config = TIER_LIMITS.get(tier, TIER_LIMITS["free_trial"])
+    council_limit = tier_config.get("council_sessions_per_month")
+    if council_limit is not None:
+        if council_limit == 0:
+            raise HTTPException(status_code=403, detail="Council deliberation is not available on your current plan. Upgrade to Seeker ($10/mo).")
+        from app.services.usage import UsageService
+        usage_service = UsageService(db)
+        allowed, current, limit = await usage_service.check_usage_limit(user.id, "council_sessions", council_limit)
+        if not allowed:
+            raise HTTPException(status_code=403, detail=f"Council session limit reached ({current}/{limit} this month). Upgrade for more sessions.")
+
     try:
         # Native agents (4 core + custom slots for emergent agents)
         native_agents = ["AZOTH", "ELYSIAN", "VAJRA", "KETHER"]
@@ -342,6 +359,15 @@ async def create_session(
             .where(DeliberationSession.id == session.id)
         )
         session = result.scalar_one()
+
+        # Increment council session counter
+        try:
+            from app.services.usage import UsageService
+            usage_service = UsageService(db)
+            await usage_service.increment_usage(user.id, "council_sessions")
+            await db.commit()
+        except Exception as e:
+            logger.warning(f"Council counter increment failed (non-fatal): {e}")
 
         return SessionResponse(
             id=session.id,

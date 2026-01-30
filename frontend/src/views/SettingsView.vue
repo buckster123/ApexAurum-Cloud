@@ -153,11 +153,11 @@ const agents = ['AZOTH', 'ELYSIAN', 'VAJRA', 'KETHER']
 // Computed
 const tapProgress = computed(() => Math.min(tapCount.value / 7 * 100, 100))
 
-// Computed: BYOK allowed for this tier (Alchemist and Adept only)
+// Computed: BYOK allowed for this tier (Adept and above)
 const canUseBYOK = computed(() => billing.status?.features?.byok_allowed || false)
 
-// Computed: Dev mode allowed for this tier (Adept only)
-const canUseDevMode = computed(() => billing.isOpus)
+// Computed: Dev mode allowed for this tier (Opus and Azothic)
+const canUseDevMode = computed(() => billing.tierLevel >= 3)
 
 onMounted(async () => {
   displayName.value = auth.user?.display_name || ''
@@ -251,9 +251,9 @@ function toggleProvider(providerId) {
 }
 
 function canConfigureProvider(providerId) {
-  // Alchemist can configure Anthropic, Adept can configure all
-  if (billing.isOpus) return true
-  if (billing.isPro && providerId === 'anthropic') return true
+  // Opus+ can configure all providers, Adept can configure OSS providers
+  if (billing.tierLevel >= 3) return true
+  if (billing.tierLevel >= 2 && providerId !== 'anthropic') return true
   return false
 }
 
@@ -1598,7 +1598,7 @@ function getAgentSymbol(agentId) {
             <!-- Tier gate message -->
             <div v-if="activeProvider === providerId && !canConfigureProvider(providerId)" class="px-4 pb-4 border-t border-apex-border" @click.stop>
               <p class="pt-3 text-sm text-amber-400">
-                {{ providerId === 'anthropic' ? 'Upgrade to Alchemist to bring your own key.' : 'Upgrade to Adept to configure all providers.' }}
+                {{ providerId === 'anthropic' ? 'Upgrade to Opus to configure Anthropic keys.' : 'Upgrade to Adept to configure open-source providers.' }}
               </p>
             </div>
           </div>

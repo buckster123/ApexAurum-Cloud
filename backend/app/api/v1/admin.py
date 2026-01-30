@@ -146,7 +146,7 @@ async def list_users(
             id=user.id,
             email=user.email,
             display_name=user.display_name,
-            tier=subscription.tier if subscription else "free",
+            tier=subscription.tier if subscription else "free_trial",
             messages_used=subscription.messages_used if subscription else 0,
             messages_limit=subscription.messages_limit if subscription else 50,
             credit_balance=credit_balance.balance_cents if credit_balance else 0,
@@ -203,10 +203,10 @@ async def update_user_tier(
     db: AsyncSession = Depends(get_db),
 ):
     """Change a user's subscription tier (admin override)."""
-    if request.tier not in ["free", "pro", "opus"]:
+    if request.tier not in ["free_trial", "seeker", "adept", "opus", "azothic"]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Tier must be 'free', 'pro', or 'opus'"
+            detail="Tier must be 'free_trial', 'seeker', 'adept', 'opus', or 'azothic'"
         )
 
     # Get or create subscription
@@ -229,8 +229,9 @@ async def update_user_tier(
         subscription.tier = request.tier
 
     # Update message limits based on tier
-    tier_limits = {"free": 50, "pro": 1000, "opus": None}
-    subscription.messages_limit = tier_limits.get(request.tier)
+    from app.config import TIER_LIMITS
+    tier_config = TIER_LIMITS.get(request.tier, TIER_LIMITS["free_trial"])
+    subscription.messages_limit = tier_config["messages_per_month"]
 
     await db.commit()
 
@@ -277,15 +278,16 @@ async def get_stats(
     )
     tier_results = tier_query.fetchall()
 
-    users_by_tier = {"Seeker": 0, "Alchemist": 0, "Adept": 0}
-    tier_names = {"free": "Seeker", "pro": "Alchemist", "opus": "Adept"}
+    users_by_tier = {"Free Trial": 0, "Seeker": 0, "Adept": 0, "Opus": 0, "Azothic": 0}
+    tier_names = {"free_trial": "Free Trial", "seeker": "Seeker", "adept": "Adept", "opus": "Opus", "azothic": "Azothic"}
 
     for tier, count in tier_results:
         name = tier_names.get(tier, tier)
-        users_by_tier[name] = count
+        if name in users_by_tier:
+            users_by_tier[name] = count
 
     users_with_sub = sum(users_by_tier.values())
-    users_by_tier["Seeker"] += total_users - users_with_sub
+    users_by_tier["Free Trial"] += total_users - users_with_sub
 
     # --- Music tasks ---
     total_music_tasks = 0
