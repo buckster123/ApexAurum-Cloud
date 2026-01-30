@@ -83,6 +83,12 @@ const router = createRouter({
       meta: { requiresAuth: true }
     },
     {
+      path: '/devices',
+      name: 'devices',
+      component: () => import('@/views/DevicesView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
       path: '/neural',
       name: 'neural',
       component: () => import('@/views/NeuralView.vue'),

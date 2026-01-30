@@ -23,6 +23,7 @@ from app.models.nursery import NurseryDataset, NurseryTrainingJob, NurseryModelR
 from app.models.usage import UsageCounter
 from app.models.feature_credit import FeatureCreditBalance
 from app.models.system import SystemSettings
+from app.models.device import Device
 
 # User references all of the above, so import LAST
 from app.models.user import User
@@ -60,5 +61,6 @@ __all__ = [
     "UsageCounter",
     "FeatureCreditBalance",
     "SystemSettings",
+    "Device",
     # "UserVector",  # Temp disabled
 ]

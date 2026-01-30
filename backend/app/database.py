@@ -598,6 +598,34 @@ EXCEPTION WHEN OTHERS THEN
     RAISE NOTICE 'Terms acceptance migration skipped: %', SQLERRM;
 END $$;
 """,
+            # ═══════════════════════════════════════════════════════════════════════
+            # DEVICES - v112: ApexPocket hardware device registration
+            # ═══════════════════════════════════════════════════════════════════════
+            """
+            CREATE TABLE IF NOT EXISTS devices (
+                id UUID PRIMARY KEY,
+                user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                device_name VARCHAR(100) NOT NULL,
+                device_type VARCHAR(50) NOT NULL DEFAULT 'apex_pocket',
+                token_hash VARCHAR(255) NOT NULL UNIQUE,
+                token_prefix VARCHAR(20) NOT NULL,
+                status VARCHAR(20) DEFAULT 'active',
+                soul_state JSONB DEFAULT '{}'::jsonb,
+                last_seen_at TIMESTAMP WITH TIME ZONE,
+                firmware_version VARCHAR(50),
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+            );
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS idx_devices_user_id ON devices(user_id);
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS idx_devices_token_hash ON devices(token_hash);
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS idx_devices_status ON devices(user_id, status);
+            """,
         ]
 
         from sqlalchemy import text

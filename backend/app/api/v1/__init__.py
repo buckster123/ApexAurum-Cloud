@@ -6,7 +6,7 @@ All API endpoints are mounted here.
 
 from fastapi import APIRouter
 
-from app.api.v1 import auth, chat, agents, village, tools, music, user, prompts, import_data, memory, files, cortex, billing, webhooks, council, admin, jam, feedback, nursery
+from app.api.v1 import auth, chat, agents, village, tools, music, user, prompts, import_data, memory, files, cortex, billing, webhooks, council, admin, jam, feedback, nursery, devices, pocket
 
 router = APIRouter()
 
@@ -30,3 +30,5 @@ router.include_router(admin.router)  # Admin endpoints (prefix already in admin.
 router.include_router(jam.router)  # Jam sessions (prefix already in jam.py)
 router.include_router(feedback.router)  # Bug reports and feedback
 router.include_router(nursery.router)  # Nursery - model training studio
+router.include_router(devices.router, prefix="/devices", tags=["Devices"])
+router.include_router(pocket.router, prefix="/pocket", tags=["ApexPocket"])

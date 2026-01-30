@@ -53,7 +53,7 @@ async def lifespan(app: FastAPI):
     """Application lifespan manager."""
     # Startup
     print("=" * 50)
-    print("ApexAurum Cloud v108 - Platform Grants")
+    print("ApexAurum Cloud v112 - ApexPocket Integration")
     print("=" * 50)
 
     # Import all models before database init to ensure SQLAlchemy
@@ -192,7 +192,7 @@ async def health_check():
     return {
         "status": "healthy",
         "version": "0.1.0",
-        "build": "v108-platform-grants",
+        "build": "v112-apexpocket",
         "agents": {
             "native": 5,
             "pac": 4,
@@ -249,6 +249,9 @@ async def health_check():
             "legal-pages",
             "usage-warnings",
             "platform-grants",
+            "apexpocket-device-auth",
+            "apexpocket-cloud-api",
+            "device-management",
         ],
     }
 
