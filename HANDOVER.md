@@ -1,14 +1,14 @@
 # ApexAurum-Cloud Handover Document
 
 **Date:** 2026-01-30
-**Build:** v112-cloud-pocket
-**Status:** BETA READY - ApexPocket Cloud Firmware v2.0.0!
+**Build:** v113-error-tracking
+**Status:** BETA LAUNCH READY - Error tracking live, all systems go!
 
 ---
 
 ## Current State
 
-ApexAurum Cloud is fully functional and polished:
+ApexAurum Cloud is fully functional, polished, and **ready for beta testing**:
 - Auth system working correctly with **2-hour sessions**
 - Chat with all agents operational
 - Billing/Stripe integration live
@@ -22,11 +22,76 @@ ApexAurum Cloud is fully functional and polished:
 - **Pause/Resume/Stop** - Full control over auto-mode
 - **Graceful sessions** - Long wanders with friendly expiry handling
 - **Coupon System** - Promo codes for credits/tier upgrades
-- **Admin Panel** - Separate service for user/coupon management
+- **Admin Panel** - Full dashboard with Users, Stats, Reports, Usage, Grants, Errors
 - **Suno Music Generation** - AI music creation with SSE streaming!
 - **ApexPocket Cloud Firmware** - ESP32-S3 connects to Cloud via HTTPS!
+- **Centralized Error Tracking** - GDPR-compliant, admin dashboard, export, auto-purge
 
 **Pricing:** Seeker $3 | Alchemist $10 | Adept $30
+
+---
+
+## Session 34 Accomplishments
+
+### Centralized Error Tracking (v113) - BETA LAUNCH READY
+
+GDPR-compliant error tracking system for the beta launch. Captures error metadata across the entire platform with no PII stored. Admin dashboard with filters, stats, export, and purge.
+
+**Legal basis:** Legitimate interest (system operation/debugging). Norwegian/EU GDPR compliant.
+
+**New files (3):**
+- `backend/app/models/error_log.py` - ErrorLog model (UUID PK, category, severity, error_type, message, stacktrace, endpoint, user_hash, context JSONB, composite indexes)
+- `backend/app/services/error_tracking.py` - Core service: `log_error()`, `sanitize_text()` (regex strips emails/tokens/passwords/UUIDs), `anonymize_user_id()` (SHA-256 + salt), `purge_old_errors()`, `get_error_stats()`, 60s settings cache
+- `backend/app/api/v1/errors.py` - Public `POST /errors/report` endpoint (rate-limited 10/min, unauthenticated)
+
+**Edited files (8):**
+| File | Change |
+|------|--------|
+| `backend/app/models/__init__.py` | Register ErrorLog import |
+| `backend/app/api/v1/__init__.py` | Mount errors router |
+| `backend/app/main.py` | HTTP middleware (5xx + unhandled exceptions), auto-purge on startup, v113 |
+| `backend/app/api/v1/admin.py` | 6 admin endpoints: list, stats, settings, export (JSON/CSV), purge |
+| `backend/app/tools/__init__.py` | Instrument tool execution failures (timeout + exception) |
+| `backend/app/database.py` | Migration: error_logs table + 7 indexes |
+| `frontend/src/main.js` | Global `window.onerror` + `unhandledrejection` reporters |
+| `backend/admin_static/index.html` | Errors tab: settings, stats cards, filters, table, pagination, export, purge |
+
+**Error categories tracked:**
+| Category | Source | Severity |
+|----------|--------|----------|
+| `backend_exception` | Unhandled Python exceptions | critical |
+| `http_error` | 5xx responses | error |
+| `tool_failure` | Tool execution errors/timeouts | error/warning |
+| `frontend_error` | JS errors from browser | error |
+| `llm_error` | LLM provider API failures | error/warning |
+| `webhook_error` | Stripe webhook failures | critical |
+
+**GDPR safeguards:**
+- No PII: `sanitize_text()` strips emails, tokens, passwords, UUIDs
+- No user_id: SHA-256 hash with server salt (one-way)
+- No IP addresses stored (Norwegian DPA considers IPs personal data)
+- Auto-purge on every startup (configurable retention, default 30 days)
+- Admin toggle to enable/disable tracking
+- Data minimization: only error metadata, no request/response bodies
+
+**Admin Errors tab features:**
+- Enable/disable toggle, min severity filter, retention period selector
+- Stats cards: Total, Critical, Error, Warning counts
+- Filters: category, severity, time range (1h to 30d)
+- Paginated table with color-coded severity badges
+- Export as JSON or CSV (up to 5000 records)
+- Purge with double confirmation
+
+**Important note:** `admin/index.html` and `backend/admin_static/index.html` are separate files. The Docker container serves from `admin_static/`. Always edit `backend/admin_static/index.html` for deployed changes.
+
+### Beta Readiness Summary
+
+The platform is ready for beta testers:
+- **Error visibility**: Any crash, tool failure, frontend JS error, or HTTP 5xx is automatically captured and visible in the admin Errors tab
+- **No PII risk**: All error data is sanitized and anonymized before storage
+- **Export**: If issues arise, export error logs as JSON/CSV for analysis
+- **Toggle**: Can disable tracking entirely if needed during beta
+- **Auto-cleanup**: Old logs purge automatically, no manual maintenance needed
 
 ---
 
