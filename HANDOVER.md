@@ -1,8 +1,8 @@
 # ApexAurum-Cloud Handover Document
 
 **Date:** 2026-01-30
-**Build:** v111-draggable-village
-**Status:** BETA READY - Draggable Village Layouts + WebSocket Auth Fix!
+**Build:** v112-cloud-pocket
+**Status:** BETA READY - ApexPocket Cloud Firmware v2.0.0!
 
 ---
 
@@ -24,8 +24,54 @@ ApexAurum Cloud is fully functional and polished:
 - **Coupon System** - Promo codes for credits/tier upgrades
 - **Admin Panel** - Separate service for user/coupon management
 - **Suno Music Generation** - AI music creation with SSE streaming!
+- **ApexPocket Cloud Firmware** - ESP32-S3 connects to Cloud via HTTPS!
 
 **Pricing:** Seeker $3 | Alchemist $10 | Adept $30
+
+---
+
+## Session 33 Accomplishments
+
+### ApexPocket Firmware v2.0.0 - Cloud Edition - COMPLETE
+
+Full redesign of the ApexPocket ESP32-S3 firmware to connect to ApexAurum Cloud instead of a local Pi.
+
+**New repo: `buckster123/ApexPocket`** (cloned to `Projects/ApexPocket/`)
+
+**New files created (4):**
+- `certs.h` - Root CA bundle (ISRG X1, GlobalSign R3, Amazon) for HTTPS
+- `cloud.h` - HTTPS client with 5 endpoints (status/chat/care/sync/agents), Bearer token auth, exponential backoff, 401/402 handling
+- `sdconfig.h` - SD card config.json reader, LittleFS backup, chat history logging
+- `config.h` - Rewritten with cloud API settings, multi-WiFi, feature flags
+
+**Rewritten files (2):**
+- `main.cpp` - New boot sequence: SD config -> LittleFS cache -> multi-WiFi -> cloud init -> MOTD -> main loop. Auto-sync every 30min, pre-sleep sync
+- `soul.h` - Extended with firmwareVersion, totalChats, totalSyncs, EEPROM schema v2
+
+**Edited files (4):**
+- `display.h` - Cloud status screen (MODE_CLOUD), billing/auth indicators on face, message counts on status screen
+- `hardware.h` - SD init, cloud_configured flag, BLE prep hooks
+- `offline.h` - Billing (402) and auth (401) response pools
+- `platformio.ini` - FW_VERSION/FW_BUILD build flags
+
+**Wokwi simulation verified:**
+- Firmware boots, OLED initializes, WiFi connects, soul starts fresh
+- Graceful degradation: no SD/EEPROM/cloud config -> offline mode
+- Shared source via symlink (`wokwi/src -> esp32/src`)
+- Known limitations: HTTPS/SSL doesn't work in Wokwi CLI (platform limit)
+
+**Architecture:**
+```
+Boot: HW init -> SD config.json -> LittleFS cache -> Soul load ->
+      Multi-WiFi -> Cloud HTTPS init -> MOTD -> Main loop
+Errors: 401=re-pair | 402=chat disabled | 5xx=backoff 5s->60s
+```
+
+### What's Next for ApexPocket
+- Backend: Implement `/api/v1/pocket/*` endpoints in ApexAurum-Cloud
+- Backend: Device pairing UI (generate config.json for download)
+- Hardware: First non-breadboard prototype build with all tools ready
+- Testing: Real hardware HTTPS validation against Railway
 
 ---
 
