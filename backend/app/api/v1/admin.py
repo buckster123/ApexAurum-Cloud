@@ -596,9 +596,16 @@ async def get_platform_grants(
     row = result.scalar_one_or_none()
     tier_grants = row.value if row else {}
 
-    # User-level grants: find users with platform_grants in settings
+    # User-level grants: find users with non-empty platform_grants in settings
+    # Note: can't use ? operator in text() -- SQLAlchemy treats ? as bind param
     user_result = await db.execute(
-        text("SELECT id, email, display_name, settings->'platform_grants' as grants FROM users WHERE settings ? 'platform_grants' AND settings->'platform_grants' != '{}'::jsonb")
+        text(
+            "SELECT id, email, display_name, settings->'platform_grants' as grants "
+            "FROM users "
+            "WHERE settings->'platform_grants' IS NOT NULL "
+            "AND jsonb_typeof(settings->'platform_grants') = 'object' "
+            "AND settings->'platform_grants' != '{}'::jsonb"
+        )
     )
     user_grants = []
     for row in user_result:
