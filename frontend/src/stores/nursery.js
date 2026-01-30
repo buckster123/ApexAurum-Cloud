@@ -25,7 +25,7 @@ export const useNurseryStore = defineStore('nursery', () => {
   const estimating = ref(false)
   const startingTraining = ref(false)
   const loadingJobs = ref(false)
-  const hasTogetherKey = ref(false)
+  const hasTogetherAccess = ref(false)
 
   // Model Cradle state
   const models = ref([])
@@ -251,17 +251,17 @@ export const useNurseryStore = defineStore('nursery', () => {
     }
   }
 
-  async function checkTogetherKey() {
+  async function checkTogetherAccess() {
     try {
       const response = await api.get('/api/v1/api-key/status')
       const providers = response.data.providers || response.data || {}
       const together = providers.together || providers['together'] || {}
-      hasTogetherKey.value = !!together.configured
+      hasTogetherAccess.value = !!(together.configured || together.has_platform_key || together.has_platform_grant)
       lastError.value = null
     } catch (error) {
       console.error('Failed to check API key status:', error)
-      lastError.value = { action: 'checkTogetherKey', message: error.response?.data?.detail || error.message, timestamp: Date.now() }
-      hasTogetherKey.value = false
+      lastError.value = { action: 'checkTogetherAccess', message: error.response?.data?.detail || error.message, timestamp: Date.now() }
+      hasTogetherAccess.value = false
     }
   }
 
@@ -420,8 +420,8 @@ export const useNurseryStore = defineStore('nursery', () => {
     fetchDatasets, generateData, extractData, deleteDataset, fetchStats,
     // Training Forge
     trainingJobs, trainableModels, costEstimate, estimating, startingTraining,
-    loadingJobs, hasTogetherKey,
-    fetchTrainingJobs, fetchTrainableModels, estimateCost, startTraining, cancelJob, checkTogetherKey,
+    loadingJobs, hasTogetherAccess,
+    fetchTrainingJobs, fetchTrainableModels, estimateCost, startTraining, cancelJob, checkTogetherAccess,
     // Model Cradle
     models, loadingModels,
     fetchModels, fetchModelDetail, registerModel, deleteModel,

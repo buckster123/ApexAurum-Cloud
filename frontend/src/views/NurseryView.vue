@@ -21,7 +21,7 @@ const tabs = [
 onMounted(async () => {
   await nursery.fetchDatasets()
   await nursery.fetchStats()
-  await nursery.checkTogetherKey()
+  await nursery.checkTogetherAccess()
 })
 </script>
 

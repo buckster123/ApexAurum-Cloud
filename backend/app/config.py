@@ -144,6 +144,7 @@ TIER_LIMITS = {
         "pac_mode": False,
         "dev_mode": False,
         "vault_storage_mb": 0,
+        "platform_grants": [],
         "trial_days": 7,
     },
     "seeker": {
@@ -168,6 +169,7 @@ TIER_LIMITS = {
         "pac_mode": False,
         "dev_mode": False,
         "vault_storage_mb": 100,
+        "platform_grants": [],
     },
     "adept": {
         "name": "Adept",
@@ -198,6 +200,7 @@ TIER_LIMITS = {
         "pac_mode": "haiku",
         "dev_mode": False,
         "vault_storage_mb": 1024,
+        "platform_grants": [],
     },
     "opus": {
         "name": "Opus",
@@ -233,6 +236,7 @@ TIER_LIMITS = {
         "pac_mode": True,
         "dev_mode": True,
         "vault_storage_mb": 5120,
+        "platform_grants": [],
     },
     "azothic": {
         "name": "Azothic",
@@ -269,8 +273,12 @@ TIER_LIMITS = {
         "pac_mode": True,
         "dev_mode": True,
         "vault_storage_mb": 20480,
+        "platform_grants": [],
     },
 }
+
+# Providers that support admin-controlled platform grants
+GRANTABLE_PROVIDERS = ["together", "groq", "deepseek", "qwen", "moonshot", "suno"]
 
 # Tier hierarchy for >= comparisons
 TIER_HIERARCHY = {"free_trial": 0, "seeker": 1, "adept": 2, "opus": 3, "azothic": 4}

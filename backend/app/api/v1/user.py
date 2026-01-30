@@ -230,6 +230,8 @@ class ProviderKeyInfo(BaseModel):
     added_at: Optional[str] = None
     last_used: Optional[str] = None
     has_platform_key: bool = False
+    has_platform_grant: bool = False
+    grant_source: Optional[str] = None  # "user_grant" | "tier_grant"
     console_url: Optional[str] = None
     key_placeholder: Optional[str] = None
 
@@ -409,21 +411,30 @@ async def remove_api_key(
 @router.get("/api-key/status")
 async def get_api_key_status(
     user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Get API key status for all providers.
 
-    Returns per-provider info: configured, key hint, platform key availability.
+    Returns per-provider info: configured, key hint, platform key availability,
+    and platform grant status.
     """
+    from app.services.provider_access import has_user_platform_grant, has_tier_platform_grant
+
     settings_data = user.settings or {}
     api_keys = settings_data.get("api_keys", {})
+
+    # Get user tier for tier-level grant checks
+    sub_result = await db.execute(select(Subscription).where(Subscription.user_id == user.id))
+    subscription = sub_result.scalar_one_or_none()
+    tier = subscription.tier if subscription else "free_trial"
 
     providers = {}
     for provider_id, provider_config in PROVIDERS.items():
         user_key = api_keys.get(provider_id, {})
         has_platform_key = bool(os.getenv(provider_config["key_env"]))
 
-        providers[provider_id] = ProviderKeyInfo(
+        info = ProviderKeyInfo(
             provider_id=provider_id,
             provider_name=provider_config["name"],
             configured=bool(user_key.get("encrypted_key")),
@@ -434,6 +445,19 @@ async def get_api_key_status(
             console_url=PROVIDER_CONSOLE_URLS.get(provider_id),
             key_placeholder=PROVIDER_KEY_HINTS.get(provider_id),
         )
+
+        # Check platform grants (user-level first, then tier-level)
+        user_grant = has_user_platform_grant(user, provider_id)
+        if user_grant:
+            info.has_platform_grant = True
+            info.grant_source = "user_grant"
+        else:
+            tier_grant = await has_tier_platform_grant(tier, provider_id, db)
+            if tier_grant:
+                info.has_platform_grant = True
+                info.grant_source = "tier_grant"
+
+        providers[provider_id] = info
 
     return {"providers": {k: v.model_dump() for k, v in providers.items()}}
 

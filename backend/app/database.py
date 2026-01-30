@@ -741,6 +741,16 @@ END $$;
             CREATE INDEX IF NOT EXISTS idx_nursery_apprentices_master ON nursery_apprentices(master_agent);
         """)
 
+        # v108: System settings table (runtime config for platform grants, feature flags)
+        migrations.append("""
+            CREATE TABLE IF NOT EXISTS system_settings (
+                key VARCHAR(100) PRIMARY KEY,
+                value JSONB NOT NULL DEFAULT '{}',
+                updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                updated_by UUID REFERENCES users(id)
+            );
+        """)
+
         for migration in migrations:
             await conn.execute(text(migration))
         print(f"Database migrations complete (embedding_dim={embed_dim})")

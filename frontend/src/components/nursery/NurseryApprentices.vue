@@ -82,7 +82,7 @@ async function handleCreateApprentice() {
 }
 
 async function handleAutoTrain(apprentice) {
-  if (!nursery.hasTogetherKey) return
+  if (!nursery.hasTogetherAccess) return
   try {
     await nursery.startTraining({
       datasetId: apprentice.dataset_id,
@@ -285,17 +285,17 @@ onMounted(() => {
               <div class="flex items-center gap-2">
                 <!-- Start Training button (only for dataset_ready with Together key) -->
                 <button
-                  v-if="a.status === 'dataset_ready' && a.dataset_id && nursery.hasTogetherKey"
+                  v-if="a.status === 'dataset_ready' && a.dataset_id && nursery.hasTogetherAccess"
                   @click="handleAutoTrain(a)"
                   class="text-xs bg-gold/10 text-gold px-3 py-1 rounded-lg border border-gold/30 hover:bg-gold/20 transition-colors"
                 >
                   Start Training
                 </button>
                 <span
-                  v-if="a.status === 'dataset_ready' && !nursery.hasTogetherKey"
+                  v-if="a.status === 'dataset_ready' && !nursery.hasTogetherAccess"
                   class="text-xs text-gray-500 italic"
                 >
-                  Needs Together.ai key
+                  Needs Together.ai access
                 </span>
                 <!-- Delete -->
                 <button

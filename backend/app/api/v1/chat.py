@@ -8,7 +8,6 @@ import base64
 import json
 import logging
 import mimetypes
-import os
 from pathlib import Path
 from typing import Optional
 from uuid import UUID, uuid4
@@ -48,7 +47,6 @@ from app.services.llm_provider import (
 from app.services.memory import MemoryService
 from app.services.tool_executor import create_tool_executor
 from app.tools import registry as tool_registry, ToolContext, ToolCategory
-from app.api.v1.user import get_user_api_key
 from app.services.billing import BillingService
 from app.services.neural_memory import store_chat_memory
 from app.config import get_settings, TIER_LIMITS
@@ -689,6 +687,7 @@ async def send_message(
     # BILLING CHECKS (only if Stripe is configured)
     # ═══════════════════════════════════════════════════════════════════════════
     billing_service = None
+    subscription = None
     if settings.stripe_secret_key:
         billing_service = BillingService(db)
 
@@ -778,21 +777,28 @@ async def send_message(
                 }
             )
 
-        # Check if user can use multi-provider (non-anthropic providers)
-        if provider != "anthropic" and not await billing_service.can_use_multi_provider(user.id):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail={
-                    "error": "multi_provider_not_allowed",
-                    "message": "Multi-provider LLMs are only available on the Opus tier.",
-                    "provider": provider,
-                    "action": "upgrade"
-                }
-            )
-
-        # Context token limit enforcement (128K cap for Seeker tier)
+        # Get subscription for tier checks (needed before multi_provider check)
         subscription = await billing_service.get_or_create_subscription(user.id)
         tier_config = TIER_LIMITS.get(subscription.tier, TIER_LIMITS["free_trial"])
+
+        # Check if user can use multi-provider (non-anthropic providers)
+        # Grant bypass: users with BYOK, user_grant, or tier_grant skip billing check
+        if provider != "anthropic":
+            from app.services.provider_access import resolve_provider_access as _rpa
+            _access = await _rpa(user, provider, subscription.tier, db)
+            if _access["source"] not in ("byok", "user_grant", "tier_grant", "platform_default"):
+                if not await billing_service.can_use_multi_provider(user.id):
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail={
+                            "error": "multi_provider_not_allowed",
+                            "message": "Multi-provider LLMs are only available on the Opus tier.",
+                            "provider": provider,
+                            "action": "upgrade"
+                        }
+                    )
+
+        # Context token limit enforcement (128K cap for Seeker tier)
         context_limit = tier_config.get("context_token_limit")
         if context_limit:
             estimated_tokens = len(request.message) // 4  # ~4 chars per token
@@ -834,7 +840,7 @@ async def send_message(
                 except Exception as e:
                     logger.warning(f"Opus limit check failed (non-fatal): {e}")
 
-    # Universal BYOK routing: check user key first, then platform key
+    # Universal provider access resolution
     provider_config = PROVIDERS.get(provider)
     if not provider_config:
         raise HTTPException(
@@ -842,21 +848,15 @@ async def send_message(
             detail=f"Unknown provider: {provider}"
         )
 
-    user_api_key = get_user_api_key(user, provider)
-    if user_api_key:
-        # User has BYOK for this provider
-        api_key = user_api_key
-    elif provider == "anthropic" and settings.anthropic_api_key:
-        # Anthropic platform key
-        api_key = settings.anthropic_api_key
-    elif os.getenv(provider_config["key_env"]):
-        # Platform key from environment for this provider
-        api_key = None  # Let the service get from env
-    else:
+    from app.services.provider_access import resolve_provider_access
+    _user_tier = subscription.tier if (billing_service and subscription) else "free_trial"
+    access = await resolve_provider_access(user, provider, _user_tier, db)
+    if not access["allowed"]:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=f"{provider_config['name']} is not configured. No API key available."
         )
+    api_key = access["api_key"]  # None = let service get from env
 
     # Create multi-provider LLM service
     try:

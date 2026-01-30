@@ -63,8 +63,8 @@ async function handleStartTraining() {
     forgeError.value = 'Select a dataset first.'
     return
   }
-  if (!nursery.hasTogetherKey) {
-    forgeError.value = 'Together.ai API key required. Configure in Settings > API Keys.'
+  if (!nursery.hasTogetherAccess) {
+    forgeError.value = 'Together.ai access required. Configure in Settings > API Keys or contact admin for platform access.'
     return
   }
 
@@ -135,10 +135,10 @@ onUnmounted(() => {
         <div class="card">
           <h2 class="text-xl font-bold mb-4">New Training Job</h2>
 
-          <!-- No Together key warning -->
-          <div v-if="!nursery.hasTogetherKey" class="mb-4 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
-            <p class="text-amber-400 text-sm font-medium mb-1">Together.ai API Key Required</p>
-            <p class="text-gray-400 text-xs mb-2">Training runs on Together.ai GPUs using your API key.</p>
+          <!-- No Together access warning -->
+          <div v-if="!nursery.hasTogetherAccess" class="mb-4 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+            <p class="text-amber-400 text-sm font-medium mb-1">Together.ai Access Required</p>
+            <p class="text-gray-400 text-xs mb-2">Configure your own key in Settings, or contact admin for platform access.</p>
             <router-link to="/settings" class="text-gold text-xs hover:underline">
               Configure in Settings &rarr;
             </router-link>
@@ -288,9 +288,9 @@ onUnmounted(() => {
           <!-- Start Training button -->
           <button
             @click="handleStartTraining"
-            :disabled="nursery.startingTraining || !forgeDataset || !nursery.hasTogetherKey"
+            :disabled="nursery.startingTraining || !forgeDataset || !nursery.hasTogetherAccess"
             class="btn-primary w-full flex items-center justify-center gap-2"
-            :class="{ 'opacity-50 cursor-not-allowed': !forgeDataset || !nursery.hasTogetherKey }"
+            :class="{ 'opacity-50 cursor-not-allowed': !forgeDataset || !nursery.hasTogetherAccess }"
           >
             <svg
               v-if="nursery.startingTraining"

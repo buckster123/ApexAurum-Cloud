@@ -84,6 +84,7 @@
           <button onclick="showTab('stats')" data-tab="stats" class="tab-btn px-4 py-3 text-sm font-medium border-b-2 border-transparent hover:border-gold/50 transition-colors">Stats</button>
           <button onclick="showTab('reports')" data-tab="reports" class="tab-btn px-4 py-3 text-sm font-medium border-b-2 border-transparent hover:border-gold/50 transition-colors">Reports</button>
           <button onclick="showTab('usage')" data-tab="usage" class="tab-btn px-4 py-3 text-sm font-medium border-b-2 border-transparent hover:border-gold/50 transition-colors">Usage</button>
+          <button onclick="showTab('grants')" data-tab="grants" class="tab-btn px-4 py-3 text-sm font-medium border-b-2 border-transparent hover:border-gold/50 transition-colors">Grants</button>
         </div>
       </div>
 
@@ -366,6 +367,82 @@
             </p>
           </div>
         </div>
+
+        <!-- Grants Tab -->
+        <div id="tab-grants" class="tab-content hidden">
+          <h2 class="text-xl font-bold mb-6">Platform Provider Grants</h2>
+
+          <!-- Section A: Tier Grants -->
+          <div class="card mb-6">
+            <div class="flex items-center justify-between mb-4">
+              <h3 class="text-lg font-semibold">Tier Platform Grants</h3>
+              <button onclick="saveTierGrants()" class="btn-primary text-sm">Save Tier Grants</button>
+            </div>
+            <p class="text-sm text-gray-400 mb-4">Enable platform providers for each subscription tier. Changes apply to all users on that tier.</p>
+            <div id="grants-tier-loading" class="text-center py-8 text-gray-400">Loading tier grants...</div>
+            <div class="overflow-x-auto">
+              <table id="grants-tier-table" class="w-full hidden">
+                <thead>
+                  <tr class="text-left text-sm text-gray-400 border-b border-apex-border">
+                    <th class="pb-3 pr-4">Provider</th>
+                    <th class="pb-3 px-3 text-center">Free Trial</th>
+                    <th class="pb-3 px-3 text-center">Seeker</th>
+                    <th class="pb-3 px-3 text-center">Adept</th>
+                    <th class="pb-3 px-3 text-center">Opus</th>
+                    <th class="pb-3 px-3 text-center">Azothic</th>
+                  </tr>
+                </thead>
+                <tbody id="grants-tier-body" class="divide-y divide-apex-border"></tbody>
+              </table>
+            </div>
+            <div id="grants-tier-status" class="text-sm mt-3 hidden"></div>
+          </div>
+
+          <!-- Section B: User Grants -->
+          <div class="card mb-6">
+            <h3 class="text-lg font-semibold mb-4">User Platform Grants</h3>
+            <p class="text-sm text-gray-400 mb-4">Grant or revoke platform provider access for individual users.</p>
+            <div class="flex gap-2 mb-4">
+              <input type="text" id="grant-user-search" class="input flex-1" placeholder="Search by email...">
+              <button onclick="searchGrantUser()" class="btn-primary text-sm">Search</button>
+            </div>
+            <div id="grant-user-result" class="hidden">
+              <div class="border border-apex-border rounded-lg p-4 bg-apex-dark/50">
+                <div class="flex items-center gap-3 mb-4">
+                  <span class="text-sm text-gray-400">User:</span>
+                  <span id="grant-user-email" class="font-semibold text-gold"></span>
+                  <span id="grant-user-tier" class="px-2 py-0.5 rounded text-xs font-medium bg-gray-500/20 text-gray-400"></span>
+                </div>
+                <div id="grant-user-providers" class="space-y-3"></div>
+              </div>
+            </div>
+            <div id="grant-user-empty" class="text-gray-500 text-sm hidden">No user found with that email.</div>
+            <div id="grant-user-status" class="text-sm mt-3 hidden"></div>
+          </div>
+
+          <!-- Section C: Active Grants Overview -->
+          <div class="card">
+            <h3 class="text-lg font-semibold mb-4">Active Grants Overview</h3>
+            <div id="grants-overview-loading" class="text-center py-8 text-gray-400">Loading overview...</div>
+            <div id="grants-overview" class="hidden">
+              <h4 class="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">Tier Grants Summary</h4>
+              <div id="grants-overview-tiers" class="space-y-2 mb-6"></div>
+
+              <h4 class="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">Users with Individual Grants</h4>
+              <div id="grants-overview-users-empty" class="text-gray-500 text-sm hidden">No individual user grants configured.</div>
+              <table id="grants-overview-users-table" class="w-full hidden">
+                <thead>
+                  <tr class="text-left text-sm text-gray-400 border-b border-apex-border">
+                    <th class="pb-3">Email</th>
+                    <th class="pb-3">Name</th>
+                    <th class="pb-3">Granted Providers</th>
+                  </tr>
+                </thead>
+                <tbody id="grants-overview-users-body" class="divide-y divide-apex-border"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
       </main>
     </div>
   </div>
@@ -482,6 +559,7 @@
       if (tab === 'stats') loadStats();
       if (tab === 'reports') loadReports();
       if (tab === 'usage') loadUsage();
+      if (tab === 'grants') loadGrants();
     }
 
     // Coupons
@@ -1063,6 +1141,373 @@
         console.error('Usage load error:', err);
       }
     }
+
+    // Grants
+    const GRANTABLE_PROVIDERS = ['together', 'groq', 'deepseek', 'qwen', 'moonshot', 'suno'];
+    const GRANT_TIERS = ['free_trial', 'seeker', 'adept', 'opus', 'azothic'];
+
+    const PROVIDER_DISPLAY_NAMES = {
+      together: 'Together AI',
+      groq: 'Groq',
+      deepseek: 'DeepSeek',
+      qwen: 'Qwen',
+      moonshot: 'Moonshot (Kimi)',
+      suno: 'Suno'
+    };
+
+    const TIER_DISPLAY_NAMES = {
+      free_trial: 'Free Trial',
+      seeker: 'Seeker',
+      adept: 'Adept',
+      opus: 'Opus',
+      azothic: 'Azothic'
+    };
+
+    let grantsData = null;
+    let grantSelectedUser = null;
+
+    async function loadGrants() {
+      const tierLoading = document.getElementById('grants-tier-loading');
+      const tierTable = document.getElementById('grants-tier-table');
+      const overviewLoading = document.getElementById('grants-overview-loading');
+      const overview = document.getElementById('grants-overview');
+
+      tierLoading.classList.remove('hidden');
+      tierTable.classList.add('hidden');
+      overviewLoading.classList.remove('hidden');
+      overview.classList.add('hidden');
+
+      try {
+        const res = await fetch(`${API_BASE}/api/v1/admin/grants`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (!res.ok) throw new Error('Failed to load grants');
+
+        grantsData = await res.json();
+
+        renderTierGrants(grantsData.tier_grants || {});
+        renderGrantsOverview(grantsData);
+
+        tierLoading.classList.add('hidden');
+        tierTable.classList.remove('hidden');
+        overviewLoading.classList.add('hidden');
+        overview.classList.remove('hidden');
+      } catch (err) {
+        tierLoading.textContent = 'Failed to load grants';
+        overviewLoading.textContent = 'Failed to load grants overview';
+        console.error('Grants load error:', err);
+      }
+    }
+
+    function renderTierGrants(tierGrants) {
+      const tbody = document.getElementById('grants-tier-body');
+      const providers = (grantsData && grantsData.grantable_providers) || GRANTABLE_PROVIDERS;
+
+      tbody.innerHTML = providers.map(provider => {
+        const cells = GRANT_TIERS.map(tier => {
+          const tierData = tierGrants[tier] || {};
+          const granted = !!tierData[provider];
+          return `
+            <td class="py-3 px-3 text-center">
+              <input type="checkbox" id="tier-grant-${tier}-${provider}"
+                     ${granted ? 'checked' : ''}
+                     class="w-4 h-4 accent-gold cursor-pointer">
+            </td>
+          `;
+        }).join('');
+
+        return `
+          <tr class="hover:bg-apex-dark/50">
+            <td class="py-3 pr-4 text-sm font-medium">${PROVIDER_DISPLAY_NAMES[provider] || provider}</td>
+            ${cells}
+          </tr>
+        `;
+      }).join('');
+    }
+
+    async function saveTierGrants() {
+      const statusEl = document.getElementById('grants-tier-status');
+      const providers = (grantsData && grantsData.grantable_providers) || GRANTABLE_PROVIDERS;
+      let saveCount = 0;
+      let errorCount = 0;
+
+      statusEl.textContent = 'Saving...';
+      statusEl.className = 'text-sm mt-3 text-gray-400';
+      statusEl.classList.remove('hidden');
+
+      for (const tier of GRANT_TIERS) {
+        const grants = {};
+        for (const provider of providers) {
+          const checkbox = document.getElementById(`tier-grant-${tier}-${provider}`);
+          if (checkbox && checkbox.checked) {
+            grants[provider] = true;
+          }
+        }
+
+        try {
+          const res = await fetch(`${API_BASE}/api/v1/admin/grants/tier`, {
+            method: 'PUT',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ tier, grants })
+          });
+
+          if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            throw new Error(data.detail || `Failed for ${tier}`);
+          }
+
+          saveCount++;
+        } catch (err) {
+          console.error(`Error saving grants for ${tier}:`, err);
+          errorCount++;
+        }
+      }
+
+      if (errorCount === 0) {
+        statusEl.textContent = `Saved tier grants for all ${saveCount} tiers.`;
+        statusEl.className = 'text-sm mt-3 text-green-400';
+      } else {
+        statusEl.textContent = `Saved ${saveCount} tiers, ${errorCount} failed.`;
+        statusEl.className = 'text-sm mt-3 text-red-400';
+      }
+
+      // Reload to refresh overview
+      setTimeout(() => loadGrants(), 1500);
+    }
+
+    async function searchGrantUser() {
+      const email = document.getElementById('grant-user-search').value.trim();
+      if (!email) return;
+
+      const resultEl = document.getElementById('grant-user-result');
+      const emptyEl = document.getElementById('grant-user-empty');
+      const statusEl = document.getElementById('grant-user-status');
+
+      resultEl.classList.add('hidden');
+      emptyEl.classList.add('hidden');
+      statusEl.classList.add('hidden');
+
+      try {
+        // Search users by email
+        const res = await fetch(`${API_BASE}/api/v1/admin/users`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (!res.ok) throw new Error('Failed to search users');
+
+        const data = await res.json();
+        const userList = data.users || [];
+        const user = userList.find(u => u.email.toLowerCase() === email.toLowerCase());
+
+        if (!user) {
+          emptyEl.classList.remove('hidden');
+          grantSelectedUser = null;
+          return;
+        }
+
+        grantSelectedUser = user;
+
+        // Load current grants for this user from grantsData
+        const userGrants = {};
+        if (grantsData && grantsData.user_grants) {
+          const ug = grantsData.user_grants.find(g => g.user_id === user.id);
+          if (ug && ug.grants) {
+            Object.assign(userGrants, ug.grants);
+          }
+        }
+
+        const tierColors = {
+          free_trial: 'bg-gray-500/20 text-gray-400',
+          seeker: 'bg-green-500/20 text-green-400',
+          adept: 'bg-blue-500/20 text-blue-400',
+          opus: 'bg-yellow-500/20 text-yellow-400',
+          azothic: 'bg-purple-500/20 text-purple-400',
+        };
+
+        document.getElementById('grant-user-email').textContent = user.email;
+        const tierBadge = document.getElementById('grant-user-tier');
+        tierBadge.textContent = TIER_DISPLAY_NAMES[user.tier] || user.tier;
+        tierBadge.className = `px-2 py-0.5 rounded text-xs font-medium ${tierColors[user.tier] || tierColors.free_trial}`;
+
+        const providers = (grantsData && grantsData.grantable_providers) || GRANTABLE_PROVIDERS;
+        const providersEl = document.getElementById('grant-user-providers');
+        providersEl.innerHTML = providers.map(provider => {
+          const granted = !!userGrants[provider];
+          const grantObj = userGrants[provider];
+          const expiresAt = (grantObj && typeof grantObj === 'object' && grantObj.expires_at) ? grantObj.expires_at.slice(0, 16) : '';
+          const note = (grantObj && typeof grantObj === 'object' && grantObj.note) ? grantObj.note : '';
+
+          return `
+            <div class="flex flex-wrap items-center gap-3 py-2 border-b border-apex-border last:border-0">
+              <label class="flex items-center gap-2 min-w-[160px] cursor-pointer">
+                <input type="checkbox" id="user-grant-${provider}" ${granted ? 'checked' : ''} class="w-4 h-4 accent-gold cursor-pointer">
+                <span class="text-sm font-medium">${PROVIDER_DISPLAY_NAMES[provider] || provider}</span>
+              </label>
+              <div class="flex items-center gap-2 flex-1 flex-wrap">
+                <input type="datetime-local" id="user-grant-expiry-${provider}" class="input text-xs w-48" value="${expiresAt}" placeholder="Expires (optional)">
+                <input type="text" id="user-grant-note-${provider}" class="input text-xs flex-1 min-w-[120px]" value="${note}" placeholder="Note (optional)">
+                <button onclick="saveUserGrant('${user.id}', '${provider}')" class="btn-primary text-xs px-3 py-1">Save</button>
+              </div>
+            </div>
+          `;
+        }).join('');
+
+        resultEl.classList.remove('hidden');
+      } catch (err) {
+        emptyEl.textContent = 'Error searching users: ' + err.message;
+        emptyEl.classList.remove('hidden');
+        console.error('Grant user search error:', err);
+      }
+    }
+
+    async function saveUserGrant(userId, provider) {
+      const checkbox = document.getElementById(`user-grant-${provider}`);
+      const expiryInput = document.getElementById(`user-grant-expiry-${provider}`);
+      const noteInput = document.getElementById(`user-grant-note-${provider}`);
+      const statusEl = document.getElementById('grant-user-status');
+
+      const enabled = checkbox ? checkbox.checked : false;
+      const expiresAt = expiryInput ? expiryInput.value : '';
+      const note = noteInput ? noteInput.value : '';
+
+      statusEl.classList.remove('hidden');
+      statusEl.textContent = 'Saving...';
+      statusEl.className = 'text-sm mt-3 text-gray-400';
+
+      try {
+        if (!enabled) {
+          // Delete the grant
+          const res = await fetch(`${API_BASE}/api/v1/admin/grants/user/${userId}/${provider}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+
+          if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            throw new Error(data.detail || 'Failed to remove grant');
+          }
+
+          statusEl.textContent = `Removed ${PROVIDER_DISPLAY_NAMES[provider] || provider} grant.`;
+          statusEl.className = 'text-sm mt-3 text-green-400';
+        } else {
+          // Create/update the grant
+          const payload = {
+            provider,
+            enabled: true
+          };
+          if (expiresAt) {
+            payload.expires_at = new Date(expiresAt).toISOString();
+          }
+          if (note) {
+            payload.note = note;
+          }
+
+          const res = await fetch(`${API_BASE}/api/v1/admin/grants/user/${userId}`, {
+            method: 'PUT',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(payload)
+          });
+
+          if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            throw new Error(data.detail || 'Failed to save grant');
+          }
+
+          statusEl.textContent = `Saved ${PROVIDER_DISPLAY_NAMES[provider] || provider} grant.`;
+          statusEl.className = 'text-sm mt-3 text-green-400';
+        }
+
+        // Reload grants data to refresh overview
+        setTimeout(() => loadGrants(), 1000);
+      } catch (err) {
+        statusEl.textContent = 'Error: ' + err.message;
+        statusEl.className = 'text-sm mt-3 text-red-400';
+        console.error('Save user grant error:', err);
+      }
+    }
+
+    function renderGrantsOverview(data) {
+      const tiersEl = document.getElementById('grants-overview-tiers');
+      const usersEmptyEl = document.getElementById('grants-overview-users-empty');
+      const usersTable = document.getElementById('grants-overview-users-table');
+      const usersBody = document.getElementById('grants-overview-users-body');
+
+      // Tier grants summary
+      const tierGrants = data.tier_grants || {};
+      const tierEntries = GRANT_TIERS.map(tier => {
+        const grants = tierGrants[tier] || {};
+        const activeProviders = Object.keys(grants).filter(p => !!grants[p]);
+        return { tier, activeProviders };
+      });
+
+      const tierColors = {
+        free_trial: 'text-gray-400',
+        seeker: 'text-green-400',
+        adept: 'text-blue-400',
+        opus: 'text-yellow-400',
+        azothic: 'text-purple-400'
+      };
+
+      tiersEl.innerHTML = tierEntries.map(({ tier, activeProviders }) => {
+        const providerBadges = activeProviders.length > 0
+          ? activeProviders.map(p => `<span class="px-2 py-0.5 rounded text-xs font-medium bg-gold/20 text-gold">${PROVIDER_DISPLAY_NAMES[p] || p}</span>`).join(' ')
+          : '<span class="text-gray-500 text-sm">No providers granted</span>';
+
+        return `
+          <div class="flex items-center gap-3 py-2">
+            <span class="text-sm font-medium min-w-[100px] ${tierColors[tier] || 'text-gray-400'}">${TIER_DISPLAY_NAMES[tier] || tier}</span>
+            <div class="flex flex-wrap gap-1">${providerBadges}</div>
+          </div>
+        `;
+      }).join('');
+
+      // User grants list
+      const userGrants = data.user_grants || [];
+      const usersWithGrants = userGrants.filter(u => u.grants && Object.keys(u.grants).length > 0);
+
+      if (usersWithGrants.length === 0) {
+        usersEmptyEl.classList.remove('hidden');
+        usersTable.classList.add('hidden');
+      } else {
+        usersEmptyEl.classList.add('hidden');
+        usersTable.classList.remove('hidden');
+
+        usersBody.innerHTML = usersWithGrants.map(u => {
+          const providerBadges = Object.keys(u.grants)
+            .filter(p => !!u.grants[p])
+            .map(p => `<span class="px-2 py-0.5 rounded text-xs font-medium bg-gold/20 text-gold">${PROVIDER_DISPLAY_NAMES[p] || p}</span>`)
+            .join(' ');
+
+          return `
+            <tr class="hover:bg-apex-dark/50">
+              <td class="py-3 text-sm">${u.email || '-'}</td>
+              <td class="py-3 text-sm text-gray-400">${u.display_name || '-'}</td>
+              <td class="py-3">${providerBadges || '<span class="text-gray-500 text-sm">None</span>'}</td>
+            </tr>
+          `;
+        }).join('');
+      }
+    }
+
+    // Allow Enter key in grant user search
+    document.addEventListener('DOMContentLoaded', () => {
+      const searchInput = document.getElementById('grant-user-search');
+      if (searchInput) {
+        searchInput.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            searchGrantUser();
+          }
+        });
+      }
+    });
   </script>
 </body>
 </html>

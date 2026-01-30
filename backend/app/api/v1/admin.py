@@ -7,7 +7,7 @@ All endpoints require is_admin=True on the authenticated user.
 import logging
 from typing import Optional
 from uuid import UUID
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from pydantic import BaseModel, Field
@@ -55,6 +55,18 @@ class UpdateAdminRequest(BaseModel):
 
 class UpdateTierRequest(BaseModel):
     tier: str  # free, pro, opus
+
+
+class TierGrantUpdate(BaseModel):
+    tier: str
+    grants: dict  # {"together": true, "groq": {"expires_at": "2026-03-01"}}
+
+
+class UserGrantUpdate(BaseModel):
+    provider: str
+    enabled: bool = True
+    expires_at: Optional[str] = None
+    note: Optional[str] = None
 
 
 class ProviderStatus(BaseModel):
@@ -562,3 +574,165 @@ async def update_report(
     logger.info(f"Report {report_id} updated by {admin.email}: status={report.status}")
 
     return {"success": True, "status": report.status}
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PLATFORM GRANTS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@router.get("/grants")
+async def get_platform_grants(
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get all platform provider grants."""
+    from app.models.system import SystemSettings
+    from app.config import GRANTABLE_PROVIDERS
+
+    # Tier-level grants from system_settings
+    result = await db.execute(
+        select(SystemSettings).where(SystemSettings.key == "platform_tier_grants")
+    )
+    row = result.scalar_one_or_none()
+    tier_grants = row.value if row else {}
+
+    # User-level grants: find users with platform_grants in settings
+    user_result = await db.execute(
+        text("SELECT id, email, display_name, settings->'platform_grants' as grants FROM users WHERE settings ? 'platform_grants' AND settings->'platform_grants' != '{}'::jsonb")
+    )
+    user_grants = []
+    for row in user_result:
+        user_grants.append({
+            "user_id": str(row.id),
+            "email": row.email,
+            "display_name": row.display_name,
+            "grants": row.grants or {},
+        })
+
+    return {
+        "grantable_providers": GRANTABLE_PROVIDERS,
+        "tier_grants": tier_grants,
+        "user_grants": user_grants,
+    }
+
+
+@router.put("/grants/tier")
+async def set_tier_grants(
+    request: TierGrantUpdate,
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Set platform grants for a tier (full replace for that tier)."""
+    from app.models.system import SystemSettings
+    from app.config import TIER_LIMITS, GRANTABLE_PROVIDERS
+    from app.services.provider_access import invalidate_tier_grants_cache
+
+    # Validate tier
+    if request.tier not in TIER_LIMITS:
+        raise HTTPException(status_code=400, detail=f"Invalid tier: {request.tier}")
+
+    # Validate providers in grants
+    for provider in request.grants:
+        if provider not in GRANTABLE_PROVIDERS:
+            raise HTTPException(status_code=400, detail=f"Invalid provider: {provider}")
+
+    # Upsert system_settings row
+    result = await db.execute(
+        select(SystemSettings).where(SystemSettings.key == "platform_tier_grants")
+    )
+    settings_row = result.scalar_one_or_none()
+
+    if settings_row:
+        current = settings_row.value or {}
+        current[request.tier] = request.grants
+        settings_row.value = current
+        settings_row.updated_at = datetime.now(timezone.utc)
+        settings_row.updated_by = admin.id
+        from sqlalchemy.orm.attributes import flag_modified
+        flag_modified(settings_row, "value")
+    else:
+        settings_row = SystemSettings(
+            key="platform_tier_grants",
+            value={request.tier: request.grants},
+            updated_at=datetime.now(timezone.utc),
+            updated_by=admin.id,
+        )
+        db.add(settings_row)
+
+    await db.commit()
+    invalidate_tier_grants_cache()
+
+    return {"status": "ok", "tier": request.tier, "grants": request.grants}
+
+
+@router.put("/grants/user/{user_id}")
+async def set_user_grant(
+    user_id: UUID,
+    request: UserGrantUpdate,
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Grant or update a user's platform access to a provider."""
+    from app.config import GRANTABLE_PROVIDERS
+
+    if request.provider not in GRANTABLE_PROVIDERS:
+        raise HTTPException(status_code=400, detail=f"Invalid provider: {request.provider}")
+
+    # Find user
+    result = await db.execute(select(User).where(User.id == user_id))
+    target_user = result.scalar_one_or_none()
+    if not target_user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Update settings
+    if not target_user.settings:
+        target_user.settings = {}
+    if "platform_grants" not in target_user.settings:
+        target_user.settings["platform_grants"] = {}
+
+    if request.enabled:
+        grant_value = True
+        if request.expires_at or request.note:
+            grant_value = {}
+            if request.expires_at:
+                grant_value["expires_at"] = request.expires_at
+            if request.note:
+                grant_value["note"] = request.note
+            grant_value["granted_by"] = str(admin.id)
+            grant_value["granted_at"] = datetime.now(timezone.utc).isoformat()
+        target_user.settings["platform_grants"][request.provider] = grant_value
+    else:
+        target_user.settings["platform_grants"].pop(request.provider, None)
+
+    from sqlalchemy.orm.attributes import flag_modified
+    flag_modified(target_user, "settings")
+    await db.commit()
+
+    return {
+        "status": "ok",
+        "user_id": str(user_id),
+        "provider": request.provider,
+        "enabled": request.enabled,
+    }
+
+
+@router.delete("/grants/user/{user_id}/{provider}")
+async def revoke_user_grant(
+    user_id: UUID,
+    provider: str,
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Revoke a user's platform grant for a specific provider."""
+    result = await db.execute(select(User).where(User.id == user_id))
+    target_user = result.scalar_one_or_none()
+    if not target_user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if target_user.settings and "platform_grants" in target_user.settings:
+        target_user.settings["platform_grants"].pop(provider, None)
+        from sqlalchemy.orm.attributes import flag_modified
+        flag_modified(target_user, "settings")
+        await db.commit()
+
+    return {"status": "ok", "user_id": str(user_id), "provider": provider, "revoked": True}

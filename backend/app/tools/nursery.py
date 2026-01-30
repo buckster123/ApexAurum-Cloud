@@ -393,11 +393,13 @@ Use to:
         suffix = params.get("suffix")
 
         try:
+            import os
             from app.services.nursery import NurseryService
             from app.services.cloud_trainer import CloudTrainerService, auto_complete_training_job
             from app.models.nursery import NurseryTrainingJob
             from app.models.user import User
-            from app.api.v1.user import get_user_api_key
+            from app.models.billing import Subscription
+            from app.services.provider_access import resolve_provider_access
             from app.database import get_db_context
             from sqlalchemy import select, func
             from uuid import uuid4
@@ -409,7 +411,7 @@ Use to:
 
             # Single DB context for user lookup, concurrent check, and job save
             async with get_db_context() as db:
-                # 2. Get Together API key from user settings
+                # 2. Get Together access (BYOK or platform grant)
                 result = await db.execute(
                     select(User).where(User.id == UUID(str(context.user_id)))
                 )
@@ -418,12 +420,21 @@ Use to:
                 if not user:
                     return ToolResult(success=False, error="User not found")
 
-                api_key = get_user_api_key(user, "together")
-                if not api_key:
+                sub_result = await db.execute(
+                    select(Subscription).where(Subscription.user_id == user.id)
+                )
+                subscription = sub_result.scalar_one_or_none()
+                tier = subscription.tier if subscription else "free_trial"
+
+                access = await resolve_provider_access(user, "together", tier, db)
+                if not access["allowed"]:
                     return ToolResult(
                         success=False,
-                        error="Together.ai API key required. Configure in Settings > API Keys.",
+                        error="Together.ai access required. Configure a key in Settings or contact admin.",
                     )
+                api_key = access["api_key"]
+                if api_key is None:
+                    api_key = os.getenv("TOGETHER_API_KEY")
 
                 # 3. Check concurrent job limit
                 running_count_result = await db.execute(
@@ -1199,12 +1210,14 @@ Use to:
             return ToolResult(success=False, error="apprentice_id is required")
 
         try:
+            import os
             from app.database import get_db_context
             from app.models.nursery import NurseryApprentice, NurseryTrainingJob
             from app.models.user import User
+            from app.models.billing import Subscription
             from app.services.nursery import NurseryService
             from app.services.cloud_trainer import CloudTrainerService, auto_complete_training_job
-            from app.api.v1.user import get_user_api_key
+            from app.services.provider_access import resolve_provider_access
             from sqlalchemy import select, func
             from uuid import uuid4
 
@@ -1255,13 +1268,23 @@ Use to:
 
             num_examples = dataset.get("num_examples", 0)
 
-            # 3. Get Together API key
-            api_key = get_user_api_key(user, "together")
-            if not api_key:
+            # 3. Get Together access (BYOK or platform grant)
+            async with get_db_context() as db:
+                sub_result = await db.execute(
+                    select(Subscription).where(Subscription.user_id == user.id)
+                )
+                subscription = sub_result.scalar_one_or_none()
+                tier = subscription.tier if subscription else "free_trial"
+
+                access = await resolve_provider_access(user, "together", tier, db)
+            if not access["allowed"]:
                 return ToolResult(
                     success=False,
-                    error="Together.ai API key required. Configure in Settings > API Keys.",
+                    error="Together.ai access required. Configure a key in Settings or contact admin.",
                 )
+            api_key = access["api_key"]
+            if api_key is None:
+                api_key = os.getenv("TOGETHER_API_KEY")
 
             # 4. Estimate cost
             estimate = CloudTrainerService.estimate_cost(

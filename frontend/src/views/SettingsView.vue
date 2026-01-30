@@ -1509,8 +1509,9 @@ function getAgentSymbol(agentId) {
             class="rounded-lg border transition-all cursor-pointer"
             :class="{
               'border-green-500/40 bg-green-500/5': info.configured,
-              'border-blue-500/30 bg-blue-500/5': !info.configured && info.has_platform_key,
-              'border-apex-border bg-apex-darker': !info.configured && !info.has_platform_key,
+              'border-gold/40 bg-gold/5': !info.configured && info.has_platform_grant,
+              'border-blue-500/30 bg-blue-500/5': !info.configured && !info.has_platform_grant && info.has_platform_key,
+              'border-apex-border bg-apex-darker': !info.configured && !info.has_platform_grant && !info.has_platform_key,
               'ring-1 ring-gold/50': activeProvider === providerId,
             }"
             @click="canConfigureProvider(providerId) ? toggleProvider(providerId) : null"
@@ -1532,6 +1533,9 @@ function getAgentSymbol(agentId) {
                   <!-- Status Badge -->
                   <span v-if="info.configured" class="text-xs px-2 py-0.5 rounded bg-green-500/20 text-green-400">
                     Your Key
+                  </span>
+                  <span v-else-if="info.has_platform_grant" class="text-xs px-2 py-0.5 rounded bg-gold/20 text-gold font-medium">
+                    Platform Granted
                   </span>
                   <span v-else-if="info.has_platform_key" class="text-xs px-2 py-0.5 rounded bg-blue-500/20 text-blue-400">
                     Platform

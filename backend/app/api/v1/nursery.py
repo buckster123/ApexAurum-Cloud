@@ -257,15 +257,23 @@ async def start_training(
 
     from app.services.nursery import NurseryService
     from app.services.cloud_trainer import CloudTrainerService, auto_complete_training_job
-    from app.api.v1.user import get_user_api_key
+    from app.services.provider_access import resolve_provider_access
 
-    # Get Together API key
-    api_key = get_user_api_key(user, "together")
-    if not api_key:
+    # Get Together access (BYOK or platform grant)
+    sub_result = await db.execute(select(Subscription).where(Subscription.user_id == user.id))
+    subscription = sub_result.scalar_one_or_none()
+    tier = subscription.tier if subscription else "free_trial"
+
+    access = await resolve_provider_access(user, "together", tier, db)
+    if not access["allowed"]:
         raise HTTPException(
             status_code=400,
-            detail="Together.ai API key required. Configure in Settings > API Keys.",
+            detail="Together.ai access required. Configure a key in Settings or contact admin for platform access.",
         )
+    api_key = access["api_key"]
+    if api_key is None and access["allowed"]:
+        import os
+        api_key = os.getenv("TOGETHER_API_KEY")
 
     # Validate dataset
     dataset = await NurseryService.get_dataset(body.dataset_id, str(user.id))

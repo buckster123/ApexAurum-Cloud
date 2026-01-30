@@ -267,7 +267,8 @@ async def auto_complete_training_job(job_db_id: str, user_id: str):
     from app.database import get_db_context
     from app.models.nursery import NurseryTrainingJob, NurseryModelRecord
     from app.models.user import User
-    from app.api.v1.user import get_user_api_key
+    from app.models.billing import Subscription
+    from app.services.provider_access import resolve_provider_access
 
     logger.info(f"Training auto-complete started for job {job_db_id}")
 
@@ -284,7 +285,7 @@ async def auto_complete_training_job(job_db_id: str, user_id: str):
                 logger.error(f"Training auto-complete: job {job_db_id} not found or no provider_job_id")
                 return
 
-            # Get user's Together API key
+            # Get user and resolve Together access
             user_result = await db.execute(
                 select(User).where(User.id == UUID(user_id))
             )
@@ -293,10 +294,24 @@ async def auto_complete_training_job(job_db_id: str, user_id: str):
                 logger.error(f"Training auto-complete: user {user_id} not found")
                 return
 
-            api_key = get_user_api_key(user, "together")
+            sub_result = await db.execute(
+                select(Subscription).where(Subscription.user_id == user.id)
+            )
+            subscription = sub_result.scalar_one_or_none()
+            tier = subscription.tier if subscription else "free_trial"
+
+            access = await resolve_provider_access(user, "together", tier, db)
+            if not access["allowed"]:
+                job.status = "failed"
+                job.error_message = "Together.ai access not available"
+                await db.commit()
+                return
+            api_key = access["api_key"]
+            if api_key is None:
+                api_key = os.getenv("TOGETHER_API_KEY")
             if not api_key:
                 job.status = "failed"
-                job.error_message = "Together.ai API key not found"
+                job.error_message = "Together.ai API key not configured"
                 await db.commit()
                 return
 
