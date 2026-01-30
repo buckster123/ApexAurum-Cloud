@@ -573,13 +573,49 @@ async def execute_round(
     # Get active agents
     active_agents = [a for a in session.agents if a.is_active]
 
-    # Execute all agents in parallel
+    # Pre-load agent prompts and village memories sequentially
     claude = get_claude_service()
+    agent_prompts = {}
+    agent_village_memories = {}
+    for agent in active_agents:
+        try:
+            prompt = await get_agent_prompt_with_memory(
+                agent_id=agent.agent_id,
+                user=user,
+                use_pac=False,
+                db=db,
+            )
+            agent_prompts[agent.agent_id] = prompt
+        except Exception as e:
+            logger.warning(f"Failed to load prompt for {agent.agent_id}: {e}")
+            agent_prompts[agent.agent_id] = load_native_prompt(agent.agent_id, use_pac=False)
+
+        try:
+            neural = NeuralMemoryService(db)
+            village_memories = await neural.get_village_memories(
+                user_id=user.id,
+                topic=session.topic,
+                limit=5,
+                collection="council",
+            )
+            if village_memories:
+                agent_village_memories[agent.agent_id] = neural.format_village_memories_for_prompt(
+                    village_memories, max_chars=1500,
+                )
+            else:
+                agent_village_memories[agent.agent_id] = ""
+        except Exception as e:
+            logger.warning(f"Failed to get village memories for {agent.agent_id}: {e}")
+            agent_village_memories[agent.agent_id] = ""
+
+    # Execute all agents in parallel (prompts pre-loaded, no DB contention)
     tasks = []
     for agent in active_agents:
         tasks.append(
             execute_agent_turn(
-                claude, session, round_record, agent, context, db, user=user
+                claude, session, round_record, agent, context, db, user=user,
+                base_prompt=agent_prompts.get(agent.agent_id),
+                village_memory_block=agent_village_memories.get(agent.agent_id, ""),
             )
         )
 
@@ -982,12 +1018,49 @@ async def auto_deliberate(
             # Get active agents
             active_agents = [a for a in session.agents if a.is_active]
 
-            # Execute all agents in parallel
+            # Pre-load agent prompts and village memories sequentially
+            # (DB session can't handle concurrent operations)
+            agent_prompts = {}
+            agent_village_memories = {}
+            for agent in active_agents:
+                try:
+                    prompt = await get_agent_prompt_with_memory(
+                        agent_id=agent.agent_id,
+                        user=user,
+                        use_pac=False,
+                        db=db,
+                    )
+                    agent_prompts[agent.agent_id] = prompt
+                except Exception as e:
+                    logger.warning(f"Failed to load prompt for {agent.agent_id}: {e}")
+                    agent_prompts[agent.agent_id] = load_native_prompt(agent.agent_id, use_pac=False)
+
+                try:
+                    neural = NeuralMemoryService(db)
+                    village_memories = await neural.get_village_memories(
+                        user_id=user.id,
+                        topic=session.topic,
+                        limit=5,
+                        collection="council",
+                    )
+                    if village_memories:
+                        agent_village_memories[agent.agent_id] = neural.format_village_memories_for_prompt(
+                            village_memories, max_chars=1500,
+                        )
+                    else:
+                        agent_village_memories[agent.agent_id] = ""
+                except Exception as e:
+                    logger.warning(f"Failed to get village memories for {agent.agent_id}: {e}")
+                    agent_village_memories[agent.agent_id] = ""
+
+            # Execute all agents in parallel (prompts pre-loaded, no DB contention)
             tasks = []
             for agent in active_agents:
                 tasks.append(
                     execute_agent_turn(
-                        claude, session, round_record, agent, context, db, user=user
+                        claude, session, round_record, agent, context, db, user=user,
+                        base_prompt=agent_prompts.get(agent.agent_id),
+                        village_memory_block=agent_village_memories.get(agent.agent_id, ""),
                     )
                 )
 
@@ -1059,7 +1132,14 @@ async def auto_deliberate(
             round_record.convergence_score = convergence_score
             session.convergence_score = convergence_score
 
-            await db.commit()
+            try:
+                await db.commit()
+            except Exception as commit_err:
+                logger.error(f"Council round {round_number} commit failed: {commit_err}")
+                await db.rollback()
+                yield f"data: {json.dumps({'type': 'round_error', 'round_number': round_number, 'error': 'Failed to save round data'})}\n\n"
+                rounds_executed += 1
+                continue
 
             # Yield round complete event
             yield f"data: {json.dumps({'type': 'round_complete', 'round_number': round_number, 'convergence_score': convergence_score, 'cost_usd': round_cost, 'total_cost_usd': session.total_cost_usd})}\n\n"
@@ -1350,41 +1430,45 @@ async def execute_agent_turn(
     context: str,
     db: AsyncSession,
     user: User = None,
+    base_prompt: str = None,
+    village_memory_block: str = None,
 ) -> dict:
     """Execute a single agent's turn in the deliberation with tool support and memory."""
-    # Get agent's base prompt WITH memory injection (The Cortex remembers)
-    if user and db:
-        base_prompt = await get_agent_prompt_with_memory(
-            agent_id=agent.agent_id,
-            user=user,
-            use_pac=False,
-            db=db,
-        )
-    else:
-        base_prompt = load_native_prompt(agent.agent_id, use_pac=False)
+    # Use pre-loaded prompt if available, otherwise load (non-parallel safe)
+    if not base_prompt:
+        if user and db:
+            base_prompt = await get_agent_prompt_with_memory(
+                agent_id=agent.agent_id,
+                user=user,
+                use_pac=False,
+                db=db,
+            )
+        else:
+            base_prompt = load_native_prompt(agent.agent_id, use_pac=False)
 
     if not base_prompt:
         base_prompt = f"You are {agent.agent_id}, an AI assistant with a distinct perspective."
 
-    # Inject Village memories (shared wisdom from past deliberations)
-    village_memory_block = ""
-    if user and db:
-        try:
-            neural = NeuralMemoryService(db)
-            village_memories = await neural.get_village_memories(
-                user_id=user.id,
-                topic=session.topic,  # Semantic search by topic
-                limit=5,
-                collection="council",
-            )
-            if village_memories:
-                village_memory_block = neural.format_village_memories_for_prompt(
-                    village_memories,
-                    max_chars=1500,
+    # Use pre-loaded village memories if available
+    if village_memory_block is None:
+        village_memory_block = ""
+        if user and db:
+            try:
+                neural = NeuralMemoryService(db)
+                village_memories = await neural.get_village_memories(
+                    user_id=user.id,
+                    topic=session.topic,
+                    limit=5,
+                    collection="council",
                 )
-                logger.debug(f"Injected {len(village_memories)} Village memories for {agent.agent_id}")
-        except Exception as e:
-            logger.warning(f"Failed to get Village memories: {e}")
+                if village_memories:
+                    village_memory_block = neural.format_village_memories_for_prompt(
+                        village_memories,
+                        max_chars=1500,
+                    )
+                    logger.debug(f"Injected {len(village_memories)} Village memories for {agent.agent_id}")
+            except Exception as e:
+                logger.warning(f"Failed to get Village memories: {e}")
 
     # Build deliberation system prompt with legitimizing preamble
     other_agents = [a.agent_id for a in session.agents if a.is_active and a.agent_id != agent.agent_id]
@@ -1514,6 +1598,8 @@ async def execute_agent_turn_streaming(
     on_token=None,
     on_tool=None,
     user: User = None,
+    base_prompt: str = None,
+    village_memory_block: str = None,
 ) -> dict:
     """
     Execute a single agent's turn with per-token streaming.
@@ -1526,34 +1612,36 @@ async def execute_agent_turn_streaming(
         on_tool: async callback(agent_id: str, event: dict) -- called on tool events
     """
     # === SAME SETUP AS execute_agent_turn ===
-    if user and db:
-        base_prompt = await get_agent_prompt_with_memory(
-            agent_id=agent.agent_id,
-            user=user,
-            use_pac=False,
-            db=db,
-        )
-    else:
-        base_prompt = load_native_prompt(agent.agent_id, use_pac=False)
+    if not base_prompt:
+        if user and db:
+            base_prompt = await get_agent_prompt_with_memory(
+                agent_id=agent.agent_id,
+                user=user,
+                use_pac=False,
+                db=db,
+            )
+        else:
+            base_prompt = load_native_prompt(agent.agent_id, use_pac=False)
 
     if not base_prompt:
         base_prompt = f"You are {agent.agent_id}, an AI assistant with a distinct perspective."
 
-    village_memory_block = ""
-    if user and db:
-        try:
-            neural = NeuralMemoryService(db)
-            village_memories = await neural.get_village_memories(
-                user_id=user.id,
-                topic=session.topic,
-                limit=5,
-                collection="council",
-            )
-            if village_memories:
-                village_memory_block = neural.format_village_memories_for_prompt(
-                    village_memories, max_chars=1500,
+    if village_memory_block is None:
+        village_memory_block = ""
+        if user and db:
+            try:
+                neural = NeuralMemoryService(db)
+                village_memories = await neural.get_village_memories(
+                    user_id=user.id,
+                    topic=session.topic,
+                    limit=5,
+                    collection="council",
                 )
-        except Exception as e:
+                if village_memories:
+                    village_memory_block = neural.format_village_memories_for_prompt(
+                        village_memories, max_chars=1500,
+                    )
+            except Exception as e:
             logger.warning(f"Failed to get Village memories: {e}")
 
     other_agents = [a.agent_id for a in session.agents if a.is_active and a.agent_id != agent.agent_id]
