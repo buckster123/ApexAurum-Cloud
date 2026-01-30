@@ -43,6 +43,11 @@ class User(Base):
     # Admin flag (for coupon management, etc.)
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
 
+    # Terms acceptance
+    terms_accepted_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=None
+    )
+
     # Relationships
     conversations = relationship("Conversation", back_populates="user", cascade="all, delete-orphan")
     agents = relationship("Agent", back_populates="user", cascade="all, delete-orphan")

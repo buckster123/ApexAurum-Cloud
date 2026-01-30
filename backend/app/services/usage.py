@@ -48,6 +48,16 @@ COUNTER_TO_RESOURCE = {
     COUNTER_NURSERY_TRAINING: "training_jobs",
 }
 
+# Maps counter types to TIER_LIMITS keys for threshold warnings
+COUNTER_TO_LIMIT_KEY = {
+    "messages_haiku": "messages_per_month",
+    "messages_sonnet": "messages_per_month",
+    "messages_opus": "opus_messages_per_month",
+    "suno_generations": "suno_generations_per_month",
+    "council_sessions": "council_sessions_per_month",
+    "jam_sessions": "jam_sessions_per_month",
+}
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # HELPER FUNCTIONS
@@ -145,6 +155,12 @@ class UsageService:
             f"Usage increment: user={user_id} type={counter_type} "
             f"period={period} amount={amount} new_count={new_count}"
         )
+
+        # Check for usage warning thresholds (non-fatal)
+        try:
+            await self._check_usage_thresholds(user_id, counter_type, new_count)
+        except Exception as e:
+            logger.warning(f"Usage warning trigger failed (non-fatal): {e}")
 
         return new_count
 
@@ -284,6 +300,73 @@ class UsageService:
         except Exception as e:
             logger.warning(f"Feature credit deduction failed (non-fatal): {e}")
             return False
+
+    async def _check_usage_thresholds(
+        self,
+        user_id: UUID,
+        counter_type: str,
+        current_count: int,
+    ) -> None:
+        """
+        Check if usage has crossed 80% or 100% thresholds and trigger email warnings.
+        Only fires on exact threshold crossing (prev < threshold <= current).
+        Non-fatal: failures are logged but don't affect the calling operation.
+        """
+        limit_key = COUNTER_TO_LIMIT_KEY.get(counter_type)
+        if not limit_key:
+            return
+
+        try:
+            from app.models.billing import Subscription
+            from app.config import TIER_LIMITS
+            from sqlalchemy import select
+
+            # Look up user's tier
+            result = await self.db.execute(
+                select(Subscription.tier).where(Subscription.user_id == user_id)
+            )
+            tier = result.scalar_one_or_none() or "free_trial"
+            tier_config = TIER_LIMITS.get(tier, TIER_LIMITS["free_trial"])
+
+            limit = tier_config.get(limit_key)
+            if not limit or limit <= 0:
+                return  # Unlimited or not configured
+
+            percent = (current_count * 100) // limit
+            prev_percent = ((current_count - 1) * 100) // limit
+
+            # Determine which thresholds were just crossed
+            thresholds = []
+            if percent >= 100 and prev_percent < 100:
+                thresholds.append(100)
+            elif percent >= 80 and prev_percent < 80:
+                thresholds.append(80)
+
+            if not thresholds:
+                return
+
+            # Fetch user email
+            from app.models.user import User
+            user_result = await self.db.execute(
+                select(User.email, User.display_name).where(User.id == user_id)
+            )
+            user_row = user_result.one_or_none()
+            if not user_row:
+                return
+
+            from app.services.email import send_usage_warning
+
+            for threshold in thresholds:
+                await send_usage_warning(
+                    user_email=user_row.email,
+                    user_display_name=user_row.display_name,
+                    resource=counter_type,
+                    percent=threshold,
+                    current=current_count,
+                    limit=limit,
+                )
+        except Exception as e:
+            logger.warning(f"Usage threshold check failed (non-fatal): {e}")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

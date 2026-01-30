@@ -70,6 +70,14 @@ class Settings(BaseSettings):
     stripe_price_pack_flame: Optional[str] = None
     stripe_price_pack_inferno: Optional[str] = None
 
+    # Email (stub - logs instead of sending)
+    smtp_host: Optional[str] = None
+    smtp_port: int = 587
+    smtp_user: Optional[str] = None
+    smtp_password: Optional[str] = None
+    smtp_from_address: str = "noreply@apexaurum.cloud"
+    smtp_from_name: str = "ApexAurum Cloud"
+
     # Embedding config (for vector search)
     # Providers: "local" (FastEmbed), "openai", or "voyage"
     embedding_provider: str = "local"  # Default to local for privacy

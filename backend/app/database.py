@@ -585,6 +585,19 @@ async def init_db():
             "CREATE TABLE IF NOT EXISTS feature_credit_balances (id UUID PRIMARY KEY, user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE, pack_id VARCHAR(20) NOT NULL, resource_type VARCHAR(30), opus_messages INTEGER NOT NULL DEFAULT 0, suno_generations INTEGER NOT NULL DEFAULT 0, training_jobs INTEGER NOT NULL DEFAULT 0, purchased_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(), expires_at TIMESTAMP WITH TIME ZONE NOT NULL, is_expired BOOLEAN DEFAULT FALSE, stripe_payment_intent_id VARCHAR(255), created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW());",
             "CREATE INDEX IF NOT EXISTS idx_feature_credits_user ON feature_credit_balances(user_id);",
             "CREATE INDEX IF NOT EXISTS idx_feature_credits_active ON feature_credit_balances(user_id, is_expired);",
+            # v107: Terms acceptance tracking
+            """
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                   WHERE table_name = 'users' AND column_name = 'terms_accepted_at') THEN
+        ALTER TABLE users ADD COLUMN terms_accepted_at TIMESTAMP WITH TIME ZONE;
+        RAISE NOTICE 'Added terms_accepted_at column to users';
+    END IF;
+EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'Terms acceptance migration skipped: %', SQLERRM;
+END $$;
+""",
         ]
 
         from sqlalchemy import text

@@ -12,6 +12,7 @@ const confirmPassword = ref('')
 const displayName = ref('')
 const error = ref('')
 const loading = ref(false)
+const termsAccepted = ref(false)
 
 // Parse registration errors into friendly messages
 function parseRegisterError(e) {
@@ -64,10 +65,15 @@ async function handleSubmit() {
     return
   }
 
+  if (!termsAccepted.value) {
+    error.value = 'You must accept the Terms of Service'
+    return
+  }
+
   loading.value = true
 
   try {
-    await auth.register(email.value, password.value, displayName.value || null)
+    await auth.register(email.value, password.value, displayName.value || null, termsAccepted.value)
     // Wait for Vue reactivity to propagate
     await nextTick()
     await router.push('/chat')
@@ -161,6 +167,23 @@ async function handleSubmit() {
               placeholder="Repeat your password"
               :disabled="loading"
             />
+          </div>
+
+          <!-- Terms Acceptance -->
+          <div class="flex items-start gap-3">
+            <input
+              id="terms"
+              v-model="termsAccepted"
+              type="checkbox"
+              class="mt-1 h-4 w-4 rounded border-gray-600 bg-apex-dark text-gold focus:ring-gold"
+              :disabled="loading"
+            />
+            <label for="terms" class="text-sm text-gray-400">
+              I agree to the
+              <router-link to="/terms" target="_blank" class="text-gold hover:text-gold-bright underline">Terms of Service</router-link>
+              and
+              <router-link to="/privacy" target="_blank" class="text-gold hover:text-gold-bright underline">Privacy Policy</router-link>
+            </label>
           </div>
 
           <!-- Submit -->

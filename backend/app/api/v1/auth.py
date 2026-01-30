@@ -26,6 +26,7 @@ class RegisterRequest(BaseModel):
     email: EmailStr
     password: str = Field(..., min_length=8)
     display_name: str | None = None
+    terms_accepted: bool = False
 
 
 class LoginRequest(BaseModel):
@@ -60,11 +61,20 @@ async def register(
             detail="Email already registered"
         )
 
+    # Require terms acceptance
+    if not request.terms_accepted:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="You must accept the Terms of Service to create an account"
+        )
+
     # Create user
+    from datetime import datetime, timezone
     user = User(
         email=request.email,
         password_hash=hash_password(request.password),
         display_name=request.display_name,
+        terms_accepted_at=datetime.now(timezone.utc),
     )
     db.add(user)
     await db.flush()  # Get the user ID

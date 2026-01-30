@@ -124,6 +124,18 @@ const router = createRouter({
       component: () => import('@/views/BillingView.vue'),
       meta: { requiresAuth: true }  // Need auth to verify purchase
     },
+    {
+      path: '/terms',
+      name: 'terms',
+      component: () => import('@/views/TermsView.vue'),
+      meta: { requiresAuth: false }
+    },
+    {
+      path: '/privacy',
+      name: 'privacy',
+      component: () => import('@/views/PrivacyView.vue'),
+      meta: { requiresAuth: false }
+    },
   ]
 })
 

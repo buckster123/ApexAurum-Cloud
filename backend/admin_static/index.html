@@ -83,6 +83,7 @@
           <button onclick="showTab('users')" data-tab="users" class="tab-btn px-4 py-3 text-sm font-medium border-b-2 border-transparent hover:border-gold/50 transition-colors">Users</button>
           <button onclick="showTab('stats')" data-tab="stats" class="tab-btn px-4 py-3 text-sm font-medium border-b-2 border-transparent hover:border-gold/50 transition-colors">Stats</button>
           <button onclick="showTab('reports')" data-tab="reports" class="tab-btn px-4 py-3 text-sm font-medium border-b-2 border-transparent hover:border-gold/50 transition-colors">Reports</button>
+          <button onclick="showTab('usage')" data-tab="usage" class="tab-btn px-4 py-3 text-sm font-medium border-b-2 border-transparent hover:border-gold/50 transition-colors">Usage</button>
         </div>
       </div>
 
@@ -121,8 +122,11 @@
               <div id="tier-select-wrapper" class="hidden">
                 <label class="block text-sm text-gray-400 mb-1">Target Tier</label>
                 <select id="coupon-tier" class="input">
-                  <option value="pro">Alchemist (Pro)</option>
-                  <option value="opus">Adept (Opus)</option>
+                  <option value="">Select tier...</option>
+                  <option value="seeker">Seeker ($10)</option>
+                  <option value="adept">Adept ($30)</option>
+                  <option value="opus">Opus ($100)</option>
+                  <option value="azothic">Azothic ($300)</option>
                 </select>
               </div>
               <div>
@@ -330,6 +334,38 @@
             </table>
           </div>
         </div>
+
+        <!-- Usage Tab -->
+        <div id="tab-usage" class="tab-content hidden">
+          <h2 class="text-xl font-bold mb-6">Usage Reports</h2>
+
+          <div class="grid md:grid-cols-2 gap-6 mb-6">
+            <!-- Messages & Features -->
+            <div class="bg-apex-dark/50 border border-apex-border rounded-lg p-6">
+              <h3 class="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4">Messages &amp; Features</h3>
+              <div id="usage-features" class="space-y-3">
+                <div class="text-gray-500 text-sm">Loading...</div>
+              </div>
+            </div>
+
+            <!-- Tier Distribution -->
+            <div class="bg-apex-dark/50 border border-apex-border rounded-lg p-6">
+              <h3 class="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4">Tier Distribution</h3>
+              <div id="usage-tier-dist" class="space-y-3">
+                <div class="text-gray-500 text-sm">Loading...</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Revenue -->
+          <div class="bg-apex-dark/50 border border-apex-border rounded-lg p-6">
+            <h3 class="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4">Revenue Overview</h3>
+            <p class="text-gray-500 text-sm py-4 text-center">
+              Revenue tracking integrates with your Stripe Dashboard.<br>
+              <a href="https://dashboard.stripe.com" target="_blank" class="text-gold hover:text-gold-bright">Open Stripe Dashboard &rarr;</a>
+            </p>
+          </div>
+        </div>
       </main>
     </div>
   </div>
@@ -445,6 +481,7 @@
       if (tab === 'users') loadUsers();
       if (tab === 'stats') loadStats();
       if (tab === 'reports') loadReports();
+      if (tab === 'usage') loadUsage();
     }
 
     // Coupons
@@ -638,12 +675,26 @@
       table.classList.remove('hidden');
 
       const tierColors = {
+        free_trial: 'bg-gray-500/20 text-gray-400',
+        seeker: 'bg-green-500/20 text-green-400',
+        adept: 'bg-blue-500/20 text-blue-400',
+        opus: 'bg-yellow-500/20 text-yellow-400',
+        azothic: 'bg-purple-500/20 text-purple-400',
+        // Legacy fallbacks
         free: 'bg-gray-500/20 text-gray-400',
-        pro: 'bg-blue-500/20 text-blue-400',
-        opus: 'bg-gold/20 text-gold'
+        pro: 'bg-green-500/20 text-green-400',
       };
 
-      const tierNames = { free: 'Seeker', pro: 'Alchemist', opus: 'Adept' };
+      const tierNames = {
+        free_trial: 'Free Trial',
+        seeker: 'Seeker',
+        adept: 'Adept',
+        opus: 'Opus',
+        azothic: 'Azothic',
+        // Legacy
+        free: 'Free Trial',
+        pro: 'Seeker',
+      };
 
       tbody.innerHTML = list.map(u => `
         <tr class="hover:bg-apex-dark/50">
@@ -663,9 +714,11 @@
           <td class="py-3 text-sm text-gray-400">${new Date(u.created_at).toLocaleDateString()}</td>
           <td class="py-3">
             <select onchange="changeTier('${u.id}', this.value)" class="bg-apex-dark border border-apex-border rounded px-2 py-1 text-sm">
-              <option value="free" ${u.tier === 'free' ? 'selected' : ''}>Seeker</option>
-              <option value="pro" ${u.tier === 'pro' ? 'selected' : ''}>Alchemist</option>
-              <option value="opus" ${u.tier === 'opus' ? 'selected' : ''}>Adept</option>
+              <option value="free_trial" ${u.tier === 'free_trial' ? 'selected' : ''}>Free Trial</option>
+              <option value="seeker" ${u.tier === 'seeker' ? 'selected' : ''}>Seeker ($10)</option>
+              <option value="adept" ${u.tier === 'adept' ? 'selected' : ''}>Adept ($30)</option>
+              <option value="opus" ${u.tier === 'opus' ? 'selected' : ''}>Opus ($100)</option>
+              <option value="azothic" ${u.tier === 'azothic' ? 'selected' : ''}>Azothic ($300)</option>
             </select>
           </td>
         </tr>
@@ -792,7 +845,7 @@
         // Users by tier
         const breakdown = document.getElementById('tier-breakdown');
         if (stats.users_by_tier) {
-          const tierColors = { Seeker: 'text-gray-400', Alchemist: 'text-blue-400', Adept: 'text-gold' };
+          const tierColors = { 'Free Trial': 'text-gray-400', Seeker: 'text-green-400', Adept: 'text-blue-400', Opus: 'text-yellow-400', Azothic: 'text-purple-400' };
           breakdown.innerHTML = Object.entries(stats.users_by_tier).map(([tier, count]) => `
             <div class="flex justify-between items-center">
               <span class="${tierColors[tier] || 'text-gray-400'}">${tier}</span>
@@ -957,6 +1010,57 @@
         loadReports(filter);
       } catch (err) {
         alert(err.message);
+      }
+    }
+
+    // Usage
+    async function loadUsage() {
+      try {
+        const res = await fetch(`${API_BASE}/api/v1/admin/stats`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!res.ok) throw new Error('Failed to load stats');
+        const stats = await res.json();
+
+        // Messages & Features
+        const featEl = document.getElementById('usage-features');
+        if (featEl) {
+          featEl.innerHTML = `
+            <div class="flex justify-between text-sm"><span class="text-gray-300">Total Messages</span><span class="font-mono text-gold">${(stats.total_messages || 0).toLocaleString()}</span></div>
+            <div class="flex justify-between text-sm"><span class="text-gray-300">Conversations</span><span class="font-mono">${(stats.total_conversations || 0).toLocaleString()}</span></div>
+            <div class="flex justify-between text-sm"><span class="text-gray-300">Music Tasks</span><span class="font-mono">${(stats.total_music_tasks || 0).toLocaleString()}</span></div>
+            <div class="flex justify-between text-sm"><span class="text-gray-300">Council Sessions</span><span class="font-mono">${(stats.total_council_sessions || 0).toLocaleString()}</span></div>
+            <div class="flex justify-between text-sm"><span class="text-gray-300">Jam Sessions</span><span class="font-mono">${(stats.total_jam_sessions || 0).toLocaleString()}</span></div>
+            <div class="flex justify-between text-sm"><span class="text-gray-300">Active Coupons</span><span class="font-mono">${(stats.active_coupons || 0).toLocaleString()}</span></div>
+          `;
+        }
+
+        // Tier Distribution
+        const distEl = document.getElementById('usage-tier-dist');
+        if (distEl && stats.users_by_tier) {
+          const tierBarColors = {
+            'Free Trial': '#6b7280', 'Seeker': '#22c55e',
+            'Adept': '#3b82f6', 'Opus': '#d4af37', 'Azothic': '#a855f7'
+          };
+          const total = Object.values(stats.users_by_tier).reduce((a, b) => a + b, 0) || 1;
+          distEl.innerHTML = Object.entries(stats.users_by_tier).map(([tier, count]) => {
+            const pct = Math.round(count / total * 100);
+            const color = tierBarColors[tier] || '#6b7280';
+            return `
+              <div>
+                <div class="flex justify-between text-sm mb-1">
+                  <span style="color: ${color}">${tier}</span>
+                  <span class="text-gray-400">${count} (${pct}%)</span>
+                </div>
+                <div class="h-2 bg-apex-darker rounded-full overflow-hidden">
+                  <div class="h-full rounded-full" style="width:${pct}%; background:${color}; opacity:0.7;"></div>
+                </div>
+              </div>
+            `;
+          }).join('');
+        }
+      } catch (err) {
+        console.error('Usage load error:', err);
       }
     }
   </script>

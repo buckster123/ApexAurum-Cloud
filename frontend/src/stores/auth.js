@@ -32,11 +32,12 @@ export const useAuthStore = defineStore('auth', () => {
     await fetchProfile()
   }
 
-  async function register(email, password, displayName) {
+  async function register(email, password, displayName, termsAccepted = false) {
     const response = await api.post('/api/v1/auth/register', {
       email,
       password,
-      display_name: displayName
+      display_name: displayName,
+      terms_accepted: termsAccepted,
     })
     setTokens(response.data)
     await fetchProfile()
