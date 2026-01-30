@@ -84,17 +84,6 @@ function setView(mode) {
         3D
       </button>
       <button
-        @click="setView('2d')"
-        :class="[
-          'px-3 py-1 text-xs rounded transition-colors',
-          store.viewMode === '2d'
-            ? 'bg-gold text-black'
-            : 'text-gray-400 hover:text-white'
-        ]"
-      >
-        2D
-      </button>
-      <button
         @click="setView('list')"
         :class="[
           'px-3 py-1 text-xs rounded transition-colors',

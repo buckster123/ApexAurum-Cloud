@@ -9,11 +9,14 @@
  * - Click detection for agents and zones
  * - Speech bubbles for approval/input needed
  *
+ * Phase 6: Pixel art billboard sprites from usePixelSprites system
+ *
  * "Where agents walk between buildings in isometric splendor"
  */
 
 import { ref, shallowRef, onMounted, onUnmounted } from 'vue'
 import * as THREE from 'three'
+import { usePixelSprites } from '@/composables/usePixelSprites'
 
 // Polyfill for roundRect (not available in all browsers)
 if (typeof CanvasRenderingContext2D !== 'undefined' && !CanvasRenderingContext2D.prototype.roundRect) {
@@ -96,44 +99,74 @@ export const ZONES_3D = {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// PIXEL SPRITE -> THREE.JS TEXTURE BRIDGE
+// ═══════════════════════════════════════════════════════════════════════════
+
+function canvasToTexture(canvas) {
+  if (!canvas) return null
+  const texture = new THREE.CanvasTexture(canvas)
+  texture.magFilter = THREE.NearestFilter
+  texture.minFilter = THREE.NearestFilter
+  texture.generateMipmaps = false
+  return texture
+}
+
+function createBillboardSprite(canvas, width, height) {
+  const texture = canvasToTexture(canvas)
+  if (!texture) return null
+  const material = new THREE.SpriteMaterial({
+    map: texture,
+    transparent: true,
+    alphaTest: 0.1,
+    depthTest: true,
+    depthWrite: false,
+  })
+  const sprite = new THREE.Sprite(material)
+  sprite.scale.set(width, height, 1)
+  return sprite
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // AGENT CLASS (3D)
 // ═══════════════════════════════════════════════════════════════════════════
 
 class Agent3D {
-  constructor(id, scene, color = '#00aaff') {
+  constructor(id, scene, color, pixelSprites) {
     this.id = id
     this.color = color
     this.scene = scene
+    this.pixelSprites = pixelSprites
     this.state = 'idle'
     this.currentZone = 'village_square'
     this.currentTool = null
     this.message = null
+    this.targetPosition = new THREE.Vector3(0, 0, 0)
 
-    // Target position for movement
-    this.targetPosition = new THREE.Vector3(0, 1.5, 0)
+    // Animation state (mirrors 2D VillageCanvas Agent)
+    this.facing = 'down'
+    this.animFrame = 0
+    this.animTimer = 0
 
-    // Create mesh
     this.createMesh()
   }
 
   createMesh() {
-    // Agent sphere
-    const geometry = new THREE.SphereGeometry(1, 16, 16)
-    const material = new THREE.MeshStandardMaterial({
-      color: new THREE.Color(this.color),
-      emissive: new THREE.Color(this.color),
-      emissiveIntensity: 0.3,
-      metalness: 0.2,
-      roughness: 0.5
-    })
+    // Group holds sprite + glow ring + label
+    this.group = new THREE.Group()
+    this.group.userData = { type: 'agent', id: this.id }
 
-    this.mesh = new THREE.Mesh(geometry, material)
-    this.mesh.position.set(0, 1.5, 0)
-    this.mesh.userData = { type: 'agent', id: this.id }
-    this.scene.add(this.mesh)
+    // Character sprite billboard (48x72 canvas -> ~3x4.5 world units)
+    const WORLD_CHAR_W = 3
+    const WORLD_CHAR_H = 4.5
+    const idleCanvas = this.pixelSprites.getSprite(this.id, 'idle', 0)
+    this.charSprite = createBillboardSprite(idleCanvas, WORLD_CHAR_W, WORLD_CHAR_H)
+    if (this.charSprite) {
+      this.charSprite.position.y = WORLD_CHAR_H / 2
+      this.group.add(this.charSprite)
+    }
 
-    // Glow ring (for working state)
-    const ringGeometry = new THREE.RingGeometry(1.2, 1.5, 32)
+    // Glow ring on ground (working state indicator)
+    const ringGeometry = new THREE.RingGeometry(1.5, 2.0, 32)
     const ringMaterial = new THREE.MeshBasicMaterial({
       color: new THREE.Color(this.color),
       transparent: true,
@@ -142,11 +175,14 @@ class Agent3D {
     })
     this.glowRing = new THREE.Mesh(ringGeometry, ringMaterial)
     this.glowRing.rotation.x = -Math.PI / 2
-    this.glowRing.position.y = 0.1
-    this.mesh.add(this.glowRing)
+    this.glowRing.position.y = 0.05
+    this.group.add(this.glowRing)
 
-    // Name label sprite
+    // Name label
     this.createLabel()
+
+    this.group.position.set(0, 0, 0)
+    this.scene.add(this.group)
   }
 
   createLabel() {
@@ -154,30 +190,49 @@ class Agent3D {
     const ctx = canvas.getContext('2d')
     canvas.width = 128
     canvas.height = 32
-
     ctx.fillStyle = '#ffffff'
     ctx.font = 'bold 20px monospace'
     ctx.textAlign = 'center'
+    ctx.shadowColor = '#000000'
+    ctx.shadowBlur = 4
     ctx.fillText(this.id, 64, 22)
 
     const texture = new THREE.CanvasTexture(canvas)
     const material = new THREE.SpriteMaterial({ map: texture, transparent: true })
     this.label = new THREE.Sprite(material)
     this.label.scale.set(4, 1, 1)
-    this.label.position.y = 2.5
-    this.mesh.add(this.label)
+    this.label.position.y = 5.5
+    this.group.add(this.label)
+  }
+
+  updateSpriteTexture() {
+    if (!this.charSprite || !this.pixelSprites) return
+
+    let animation = 'idle'
+    if (this.state === 'moving') {
+      animation = `walk_${this.facing}`
+    } else if (this.state === 'working') {
+      animation = 'working'
+    }
+
+    const canvas = this.pixelSprites.getSprite(this.id, animation, this.animFrame)
+    if (canvas) {
+      const newTexture = canvasToTexture(canvas)
+      if (newTexture) {
+        if (this.charSprite.material.map) {
+          this.charSprite.material.map.dispose()
+        }
+        this.charSprite.material.map = newTexture
+        this.charSprite.material.needsUpdate = true
+      }
+    }
   }
 
   moveTo(zoneName) {
     const zone = ZONES_3D[zoneName]
     if (!zone) return
-
     this.currentZone = zoneName
-    this.targetPosition.set(
-      zone.position.x,
-      1.5,
-      zone.position.z
-    )
+    this.targetPosition.set(zone.position.x, 0, zone.position.z)
     this.state = 'moving'
   }
 
@@ -191,9 +246,7 @@ class Agent3D {
     this.currentTool = null
     this.state = 'moving'
     this.glowRing.material.opacity = 0
-
-    // Return to village square
-    this.targetPosition.set(0, 1.5, 0)
+    this.targetPosition.set(0, 0, 0)
     this.currentZone = 'village_square'
   }
 
@@ -202,36 +255,66 @@ class Agent3D {
   }
 
   update(deltaTime) {
-    // Smooth movement towards target
     const speed = 0.08
-    this.mesh.position.lerp(this.targetPosition, speed)
+    const prevPos = this.group.position.clone()
+    this.group.position.lerp(this.targetPosition, speed)
+
+    // Determine facing from movement
+    const dx = this.group.position.x - prevPos.x
+    const dz = this.group.position.z - prevPos.z
+    if (Math.abs(dx) > 0.01 || Math.abs(dz) > 0.01) {
+      if (Math.abs(dx) > Math.abs(dz)) {
+        this.facing = dx > 0 ? 'right' : 'left'
+      } else {
+        this.facing = dz > 0 ? 'down' : 'up'
+      }
+    }
 
     // Check if arrived
-    if (this.mesh.position.distanceTo(this.targetPosition) < 0.1) {
+    if (this.group.position.distanceTo(this.targetPosition) < 0.1) {
       if (this.state === 'moving' && !this.currentTool) {
         this.state = 'idle'
       }
     }
 
-    // Pulse animation when working
-    if (this.state === 'working') {
-      const pulse = Math.sin(Date.now() * 0.005) * 0.15 + 1
-      this.mesh.scale.setScalar(pulse)
+    // Animation timer (ms-based, mirrors 2D Agent)
+    this.animTimer += deltaTime * 1000
+    if (this.state === 'moving') {
+      if (this.animTimer >= 200) {
+        this.animTimer = 0
+        this.animFrame = (this.animFrame + 1) % 2
+      }
+    } else if (this.state === 'working') {
+      if (this.animTimer >= 250) {
+        this.animTimer = 0
+        this.animFrame = (this.animFrame + 1) % 3
+      }
       this.glowRing.rotation.z += 0.02
     } else {
-      this.mesh.scale.setScalar(1)
+      if (this.animTimer >= 600) {
+        this.animTimer = 0
+        this.animFrame = (this.animFrame + 1) % 2
+      }
     }
 
-    // Hover animation when idle
-    if (this.state === 'idle') {
-      this.mesh.position.y = 1.5 + Math.sin(Date.now() * 0.002) * 0.1
-    }
+    this.updateSpriteTexture()
+  }
+
+  // Backward compat: existing code accesses agent.mesh.position
+  get mesh() {
+    return this.group
   }
 
   dispose() {
-    this.scene.remove(this.mesh)
-    this.mesh.geometry.dispose()
-    this.mesh.material.dispose()
+    this.scene.remove(this.group)
+    if (this.charSprite?.material?.map) this.charSprite.material.map.dispose()
+    if (this.charSprite?.material) this.charSprite.material.dispose()
+    if (this.glowRing) {
+      this.glowRing.geometry.dispose()
+      this.glowRing.material.dispose()
+    }
+    if (this.label?.material?.map) this.label.material.map.dispose()
+    if (this.label?.material) this.label.material.dispose()
   }
 }
 
@@ -421,10 +504,10 @@ class SpeechBubble {
     // Icon for approval type
     if (this.type === 'approval') {
       ctx.font = '20px sans-serif'
-      ctx.fillText('⚠️', 30, 43)
+      ctx.fillText('\u26a0\ufe0f', 30, 43)
     } else if (this.type === 'input') {
       ctx.font = '20px sans-serif'
-      ctx.fillText('✏️', 30, 43)
+      ctx.fillText('\u270f\ufe0f', 30, 43)
     }
 
     const texture = new THREE.CanvasTexture(canvas)
@@ -495,6 +578,10 @@ export function useVillageIsometric(containerRef, options = {}) {
   let raycaster
   let mouse
 
+  // Pixel sprite system
+  const { initSpriteCache, getSprite, getBuildingSprite, getTerrainTile, SPRITE_SCALE } = usePixelSprites()
+  const pixelSprites = { getSprite, getBuildingSprite, getTerrainTile, SPRITE_SCALE }
+
   function init() {
     if (!containerRef.value) return false
 
@@ -537,7 +624,7 @@ export function useVillageIsometric(containerRef, options = {}) {
       1000
     )
 
-    // Isometric camera angle (45° rotation, ~35° tilt)
+    // Isometric camera angle (45deg rotation, ~35deg tilt)
     camera.position.set(50, 50, 50)
     camera.lookAt(0, 0, 0)
 
@@ -559,6 +646,9 @@ export function useVillageIsometric(containerRef, options = {}) {
 
     // Lighting
     setupLighting()
+
+    // Initialize pixel sprite cache
+    initSpriteCache()
 
     // Ground plane
     createGround()
@@ -611,22 +701,75 @@ export function useVillageIsometric(containerRef, options = {}) {
   }
 
   function createGround() {
-    // Ground plane with grid
-    const groundGeometry = new THREE.PlaneGeometry(60, 60)
+    const groundSize = 60
+
+    // Composite terrain canvas with pixel art tiles
+    const TILES_ACROSS = 20
+    const tilePixels = 16 * pixelSprites.SPRITE_SCALE  // 48px per tile
+    const canvasSize = TILES_ACROSS * tilePixels
+    const terrainCanvas = document.createElement('canvas')
+    terrainCanvas.width = canvasSize
+    terrainCanvas.height = canvasSize
+    const ctx = terrainCanvas.getContext('2d')
+    ctx.imageSmoothingEnabled = false
+
+    const tile0 = pixelSprites.getTerrainTile('grass_0')
+    const tile1 = pixelSprites.getTerrainTile('grass_1')
+    for (let y = 0; y < TILES_ACROSS; y++) {
+      for (let x = 0; x < TILES_ACROSS; x++) {
+        const tile = ((x + y) % 3 === 0) ? tile1 : tile0
+        if (tile) ctx.drawImage(tile, x * tilePixels, y * tilePixels)
+      }
+    }
+
+    // Draw dirt paths from village square to each zone
+    const center = ZONES_3D.village_square.position
+    const worldToUV = (wx, wz) => ({
+      u: ((wx + groundSize / 2) / groundSize) * canvasSize,
+      v: ((wz + groundSize / 2) / groundSize) * canvasSize,
+    })
+
+    const centerUV = worldToUV(center.x, center.z)
+    ctx.strokeStyle = '#8b7355'
+    ctx.lineWidth = 12
+    ctx.lineCap = 'round'
+    for (const [name, config] of Object.entries(ZONES_3D)) {
+      if (name === 'village_square') continue
+      const zoneUV = worldToUV(config.position.x, config.position.z)
+      ctx.beginPath()
+      ctx.moveTo(centerUV.u, centerUV.v)
+      ctx.lineTo(zoneUV.u, zoneUV.v)
+      ctx.stroke()
+    }
+    // Path border (darker)
+    ctx.strokeStyle = '#6b5540'
+    ctx.lineWidth = 16
+    ctx.globalCompositeOperation = 'destination-over'
+    for (const [name, config] of Object.entries(ZONES_3D)) {
+      if (name === 'village_square') continue
+      const zoneUV = worldToUV(config.position.x, config.position.z)
+      ctx.beginPath()
+      ctx.moveTo(centerUV.u, centerUV.v)
+      ctx.lineTo(zoneUV.u, zoneUV.v)
+      ctx.stroke()
+    }
+    ctx.globalCompositeOperation = 'source-over'
+
+    const texture = new THREE.CanvasTexture(terrainCanvas)
+    texture.magFilter = THREE.NearestFilter
+    texture.minFilter = THREE.NearestFilter
+    texture.generateMipmaps = false
+
+    const groundGeometry = new THREE.PlaneGeometry(groundSize, groundSize)
     const groundMaterial = new THREE.MeshStandardMaterial({
-      color: 0x1a1a2e,
-      roughness: 0.9,
-      metalness: 0.1
+      map: texture,
+      roughness: 0.95,
+      metalness: 0.0
     })
     const ground = new THREE.Mesh(groundGeometry, groundMaterial)
     ground.rotation.x = -Math.PI / 2
     ground.receiveShadow = true
     scene.add(ground)
-
-    // Subtle grid
-    const gridHelper = new THREE.GridHelper(60, 30, 0x2a2a3e, 0x2a2a3e)
-    gridHelper.position.y = 0.01
-    scene.add(gridHelper)
   }
 
   function createZones() {
@@ -639,43 +782,50 @@ export function useVillageIsometric(containerRef, options = {}) {
   function createZoneBuilding(name, config) {
     const { position, size, color, label } = config
 
-    // Building geometry
-    const geometry = new THREE.BoxGeometry(size.w, size.h, size.d)
-    const material = new THREE.MeshStandardMaterial({
-      color: new THREE.Color(color),
-      emissive: new THREE.Color(color),
-      emissiveIntensity: 0.15,
-      roughness: 0.7,
-      metalness: 0.1,
-      transparent: true,
-      opacity: 0.85
-    })
+    const buildingCanvas = pixelSprites.getBuildingSprite(name)
+    const WORLD_BUILD_W = Math.max(size.w, 6)
+    const WORLD_BUILD_H = Math.max(size.h, 6)
 
-    const mesh = new THREE.Mesh(geometry, material)
-    mesh.position.set(position.x, size.h / 2, position.z)
-    mesh.castShadow = true
-    mesh.receiveShadow = true
+    let mesh
+    let spriteMaterial = null
+
+    if (buildingCanvas) {
+      // Pixel art billboard
+      mesh = new THREE.Group()
+      const buildingSprite = createBillboardSprite(buildingCanvas, WORLD_BUILD_W, WORLD_BUILD_H)
+      if (buildingSprite) {
+        buildingSprite.position.y = WORLD_BUILD_H / 2
+        mesh.add(buildingSprite)
+        spriteMaterial = buildingSprite.material
+      }
+      mesh.position.set(position.x, 0, position.z)
+    } else {
+      // Fallback: colored box
+      const geometry = new THREE.BoxGeometry(size.w, size.h, size.d)
+      const material = new THREE.MeshStandardMaterial({
+        color: new THREE.Color(color),
+        emissive: new THREE.Color(color),
+        emissiveIntensity: 0.15,
+        roughness: 0.7,
+        metalness: 0.1,
+        transparent: true,
+        opacity: 0.85
+      })
+      mesh = new THREE.Mesh(geometry, material)
+      mesh.position.set(position.x, size.h / 2, position.z)
+      mesh.castShadow = true
+      mesh.receiveShadow = true
+    }
+
     mesh.userData = { type: 'zone', name, label }
     scene.add(mesh)
 
-    // Roof accent
-    const roofGeometry = new THREE.BoxGeometry(size.w + 0.2, 0.3, size.d + 0.2)
-    const roofMaterial = new THREE.MeshStandardMaterial({
-      color: new THREE.Color(color),
-      emissive: new THREE.Color(color),
-      emissiveIntensity: 0.3,
-      roughness: 0.5
-    })
-    const roof = new THREE.Mesh(roofGeometry, roofMaterial)
-    roof.position.y = size.h / 2 + 0.15
-    mesh.add(roof)
-
-    // Label
+    // Label above building
     const labelSprite = createLabelSprite(label)
-    labelSprite.position.y = size.h / 2 + 1.5
+    labelSprite.position.y = WORLD_BUILD_H + 1.0
     mesh.add(labelSprite)
 
-    return { mesh, material, config }
+    return { mesh, material: spriteMaterial || mesh.material, config }
   }
 
   function createLabelSprite(text) {
@@ -702,16 +852,21 @@ export function useVillageIsometric(containerRef, options = {}) {
   function ensureAgent(agentId) {
     if (!agents.has(agentId)) {
       const color = AGENT_COLORS[agentId] || AGENT_COLORS.default
-      const agent = new Agent3D(agentId, scene, color)
+      const agent = new Agent3D(agentId, scene, color, pixelSprites)
       agents.set(agentId, agent)
     }
     return agents.get(agentId)
   }
 
   function setActiveZone(zoneName) {
-    // Reset previous active zone
     for (const [name, zone] of Object.entries(zones)) {
-      zone.material.emissiveIntensity = name === zoneName ? 0.4 : 0.15
+      const mat = zone.material
+      if (mat && mat.isSpriteMaterial) {
+        mat.opacity = (name === zoneName) ? 1.0 : 0.85
+        mat.color.set(name === zoneName ? 0xffffff : 0xdddddd)
+      } else if (mat && mat.emissiveIntensity !== undefined) {
+        mat.emissiveIntensity = name === zoneName ? 0.4 : 0.15
+      }
     }
     activeZone.value = zoneName
   }
@@ -800,7 +955,7 @@ export function useVillageIsometric(containerRef, options = {}) {
       objects.push(zone.mesh)
     }
 
-    return raycaster.intersectObjects(objects, false)
+    return raycaster.intersectObjects(objects, true)
   }
 
   function handleClick(event) {
@@ -808,14 +963,19 @@ export function useVillageIsometric(containerRef, options = {}) {
     const intersections = getIntersections()
 
     if (intersections.length > 0) {
-      const hit = intersections[0].object
-      const userData = hit.userData
-
-      if (userData.type === 'agent') {
-        selectedAgent.value = userData.id
-        options.onAgentClick?.(userData.id, agents.get(userData.id))
-      } else if (userData.type === 'zone') {
-        options.onZoneClick?.(userData.name, userData.label)
+      let hit = intersections[0].object
+      // Walk up parent chain to find object with userData.type
+      while (hit && !hit.userData?.type) {
+        hit = hit.parent
+      }
+      if (hit) {
+        const userData = hit.userData
+        if (userData.type === 'agent') {
+          selectedAgent.value = userData.id
+          options.onAgentClick?.(userData.id, agents.get(userData.id))
+        } else if (userData.type === 'zone') {
+          options.onZoneClick?.(userData.name, userData.label)
+        }
       }
     } else {
       selectedAgent.value = null
@@ -827,17 +987,18 @@ export function useVillageIsometric(containerRef, options = {}) {
     const intersections = getIntersections()
 
     if (intersections.length > 0) {
-      const hit = intersections[0].object
-      const userData = hit.userData
-
-      if (userData.type === 'agent' || userData.type === 'zone') {
-        hoveredObject.value = userData
-        renderer.domElement.style.cursor = 'pointer'
+      let hit = intersections[0].object
+      while (hit && !hit.userData?.type) {
+        hit = hit.parent
       }
-    } else {
-      hoveredObject.value = null
-      renderer.domElement.style.cursor = 'default'
+      if (hit && (hit.userData?.type === 'agent' || hit.userData?.type === 'zone')) {
+        hoveredObject.value = hit.userData
+        renderer.domElement.style.cursor = 'pointer'
+        return
+      }
     }
+    hoveredObject.value = null
+    renderer.domElement.style.cursor = 'default'
   }
 
   function animate() {

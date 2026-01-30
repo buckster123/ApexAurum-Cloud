@@ -144,10 +144,8 @@ watch(() => store.filters, async () => {
           @select="onMemorySelect"
         />
 
-        <!-- 2D/List View - Show when no WebGL or when mode is not 3d -->
-        <MemoryList
-          v-if="!store.webglSupported || store.viewMode !== '3d'"
-        />
+        <!-- List View (fallback when no WebGL or list mode) -->
+        <MemoryList v-else />
 
         <!-- Error display -->
         <div

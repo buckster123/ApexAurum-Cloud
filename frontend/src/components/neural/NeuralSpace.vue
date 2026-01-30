@@ -6,7 +6,7 @@
  * "Memories float like stars in the neural cosmos"
  */
 
-import { ref, watch, onMounted, onUnmounted, computed } from 'vue'
+import { ref, shallowRef, watch, onMounted, onUnmounted, computed } from 'vue'
 import * as THREE from 'three'
 import { useThreeScene, createMemoryNode, createConnectionLine } from '@/composables/useThreeScene'
 import { useNeoCortexStore, AGENT_COLORS, LAYER_CONFIG } from '@/stores/neocortex'
@@ -48,8 +48,8 @@ const {
 const { playTone } = useSound()
 
 // Node tracking
-const nodeGroup = ref(null)
-const connectionGroup = ref(null)
+const nodeGroup = shallowRef(null)
+const connectionGroup = shallowRef(null)
 const nodeMap = new Map() // id -> mesh
 const hoveredNode = ref(null)
 const selectedNode = ref(null)
@@ -57,6 +57,7 @@ const selectedNode = ref(null)
 // Ambient neural pulse system
 let ambientSystem = null
 let removeAmbientCallback = null
+let initCheckInterval = null
 
 // Build visualization from graph data
 function buildVisualization() {
@@ -227,17 +228,19 @@ onMounted(() => {
     initAmbient()
   } else {
     // Wait for initialization
-    const checkInterval = setInterval(() => {
+    initCheckInterval = setInterval(() => {
       if (isInitialized.value) {
         buildVisualization()
         initAmbient()
-        clearInterval(checkInterval)
+        clearInterval(initCheckInterval)
+        initCheckInterval = null
       }
     }, 100)
   }
 })
 
 onUnmounted(() => {
+  if (initCheckInterval) clearInterval(initCheckInterval)
   if (containerRef.value) {
     containerRef.value.removeEventListener('mousemove', onMouseMove)
     containerRef.value.removeEventListener('click', onClick)

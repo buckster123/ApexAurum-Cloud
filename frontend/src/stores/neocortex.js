@@ -61,7 +61,7 @@ export const useNeoCortexStore = defineStore('neocortex', () => {
   // View settings
   // Check WebGL availability and default to 2D if not supported
   const webglSupported = ref(false)
-  const viewMode = ref('list') // '3d' | '2d' | 'list' - default to list, set to 3d in initialize() if WebGL available
+  const viewMode = ref('list') // '3d' | 'list' - default to list, set to 3d in initialize() if WebGL available
   const showConnections = ref(true)
   const autoRotate = ref(true)
   const nodeScale = ref(1.0)
