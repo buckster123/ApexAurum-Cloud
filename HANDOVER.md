@@ -1453,7 +1453,55 @@ Store: frontend/src/stores/nursery.js (438 lines, 7 computed, 20+ actions, error
 
 ---
 
-## Next Major Milestone: Tier Restructure
+## Session 25 Accomplishments
+
+### Tier Restructure Session A: Usage Infrastructure (v104) - COMPLETE
+**Commits:** 46ef2e5 (v104), 43e4eda (migration fix)
+
+**New `usage_counters` table** with atomic PostgreSQL upsert:
+- Composite unique on (user_id, counter_type, period)
+- 8 counter types: messages_haiku, messages_sonnet, messages_opus, messages_other, suno_generations, council_sessions, jam_sessions, nursery_training_jobs
+- Period format: "YYYY-MM" -- lazy-reset by auto-creating new rows each month
+
+**UsageService** (`backend/app/services/usage.py`):
+- `increment_usage()` -- atomic INSERT ON CONFLICT upsert, returns new count
+- `check_usage_limit()` -- (allowed, current, limit) tuple
+- `get_usage_summary()` -- all counters for a user/period as dict
+- `classify_model_family()` -- maps provider+model to counter type
+
+**Integration into billing:**
+- `record_message_usage()` now calls `increment_usage()` after every message (chat, council, agent)
+- Per-model counters run in parallel with existing `subscription.messages_used` single counter
+- `get_subscription_status()` enriched with `usage_counters` dict in response
+- All wrapped in try/except -- existing billing never broken by new counters
+
+**Context limit enforcement:**
+- `context_token_limit` added to TIER_LIMITS (128K for Seeker, None for Pro/Opus)
+- chat.py checks estimated tokens before LLM call, returns 413 if over limit
+
+**Deploy fix:** asyncpg cannot execute multiple SQL commands per prepared statement. Split 3 CREATE INDEX into 3 separate migration entries.
+
+### Environment
+- Build: v104-usage-infrastructure
+- Frontend CACHE_BUST: 21 (unchanged)
+- Tools: 68 (unchanged)
+
+### Key Files Modified/Created (Session 25)
+
+| File | Status | Changes |
+|------|--------|---------|
+| `backend/app/models/usage.py` | NEW | UsageCounter SQLAlchemy model |
+| `backend/app/services/usage.py` | NEW | UsageService with atomic upsert, classify, summary |
+| `backend/app/models/__init__.py` | EDIT | Import UsageCounter |
+| `backend/app/database.py` | EDIT | CREATE TABLE + 3 indexes (separate statements) |
+| `backend/app/services/billing.py` | EDIT | Wire increment + enrich status response |
+| `backend/app/config.py` | EDIT | context_token_limit per tier |
+| `backend/app/api/v1/chat.py` | EDIT | Context limit enforcement block |
+| `backend/app/main.py` | EDIT | v104, usage-counters feature |
+
+---
+
+## Tier Restructure Roadmap
 
 **Masterplan:** `TIER_MASTERPLAN.md` (committed, in repo root)
 
@@ -1467,12 +1515,21 @@ Store: frontend/src/stores/nursery.js (438 lines, 7 computed, 20+ actions, error
 | Azothic ($300) | $300/mo | 20,000 | 2,000 | Everything, training credits, priority |
 
 ### Implementation Roadmap (4 sessions)
-| Session | Scope |
-|---------|-------|
-| **A: Usage Infrastructure** | Per-model counters, usage_counters table, limit middleware, context cap |
-| **B: Tier Restructure** | 4-tier config, Stripe products, billing UI, landing page, feature gates |
-| **C: Credit Packs + Dashboard** | Pack purchases, usage display, admin usage reports |
-| **D: Legal + Polish** | Terms, privacy, disclaimers, coupon library, package builder |
+| Session | Scope | Status |
+|---------|-------|--------|
+| **A: Usage Infrastructure** | Per-model counters, usage_counters table, limit middleware, context cap | DONE (Session 25) |
+| **B: Tier Restructure** | 4-tier config, Stripe products, billing UI, landing page, feature gates | NEXT |
+| **C: Credit Packs + Dashboard** | Pack purchases, usage display, admin usage reports | |
+| **D: Legal + Polish** | Terms, privacy, disclaimers, coupon library, package builder | |
+
+### Session B Scope (next session)
+- Expand `TIER_LIMITS` from 3 tiers (free/pro/opus) to 5 (free_trial/seeker/adept/opus/azothic) with per-feature limits
+- Create 4 new Stripe subscription products ($10/$30/$100/$300)
+- Wire all feature endpoints to use `UsageService.check_usage_limit()` before execution
+- Update billing page UI with 4-tier display
+- Update landing page pricing section
+- Free trial flow (7-day, 20 messages, auto-expire)
+- Migration plan for existing subscribers
 
 ### Remaining Beta Items
 - DNS setup for apexaurum.cloud
