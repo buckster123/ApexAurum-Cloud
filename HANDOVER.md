@@ -1,8 +1,8 @@
 # ApexAurum-Cloud Handover Document
 
-**Date:** 2026-01-29
-**Build:** v97-byok-attachments
-**Status:** BETA READY - Multi-provider BYOK, file attachments, vision support!
+**Date:** 2026-01-30
+**Build:** v109-rpg-neural
+**Status:** BETA READY - RPG Village + Neural Ambient Pulse!
 
 ---
 
@@ -26,6 +26,50 @@ ApexAurum Cloud is fully functional and polished:
 - **Suno Music Generation** - AI music creation with SSE streaming!
 
 **Pricing:** Seeker $3 | Alchemist $10 | Adept $30
+
+---
+
+## Session 30 Accomplishments
+
+### Village RPG Pixel Art - COMPLETE
+- **Pixel art sprite system** (`usePixelSprites.js`) - All art defined as code, no external files
+- 5 agents with unique palette-swapped robes (CLAUDE=blue, AZOTH=gold, VAJRA=cyan, ELYSIAN=pink, KETHER=purple)
+- Animation frames: idle (2), walk_down/up/left/right (2 each), working (3 with sparkle effects)
+- 8 themed pixel buildings (fountain plaza, music shop, garden, shed, forge, portal, library, watchtower)
+- Tiled grass terrain with dirt path connections between buildings
+- Offscreen canvas cache at 3x scale for O(1) rendering per frame
+- `image-rendering: pixelated` CSS for crisp pixel art
+- Directional facing based on movement vector
+
+### RPG Chiptune Sounds - COMPLETE
+- 4 new synthesized sounds in `useSound.js`: footstep, toolStartJingle, toolCompleteJingle, toolErrorJingle
+- Wired to Village WebSocket events (replaced plain tone beeps)
+
+### Neural Ambient Pulse - COMPLETE
+- **NeuralAmbientSystem** (`useNeuralAmbient.js`) - Always-on 3D effects in Neural Space
+- Ghost nodes: 40 dim pulsing spheres in spherical shell (potential memory positions)
+- Synaptic pulses: Traveling light between ghost nodes with trailing comet effect
+- Radial waves: Expanding ring heartbeat from center (every 5-10s)
+- Ambient particles: 150 drifting points creating neural soup atmosphere
+- Dims to 30% when real memories exist (doesn't compete)
+- Replaced brain emoji empty state with subtle "Neural space awaiting memories..." pill badge
+- **Animation callback hook** added to `useThreeScene.js` for extensible per-frame updates
+
+### Deploy
+- Commit: `5347d11` - 8 files, 1400 insertions
+- CACHE_BUST: 26
+- Frontend-only changes (no backend modifications)
+
+---
+
+## Session 29 Accomplishments
+
+### Platform Provider Grants - COMPLETE
+- Two-layer grant system: tier-level (SystemSettings DB table) + user-level (user.settings JSON)
+- Unified `resolve_provider_access()` replaces all ad-hoc key lookups
+- Together.ai key bug fixed across 4 call sites (nursery, cloud_trainer, tools)
+- Admin panel "Grants" tab with tier grid + user search
+- Grantable providers: together, groq, deepseek, qwen, moonshot, suno
 
 ---
 
