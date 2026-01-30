@@ -31,6 +31,8 @@ from app.api.v1.council import (
     store_council_memories,
     COUNCIL_MODEL,
 )
+from app.api.v1.chat import load_native_prompt, get_agent_prompt_with_memory
+from app.services.neural_memory import NeuralMemoryService
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Council WebSocket"])
@@ -268,197 +270,253 @@ async def run_streaming_deliberation(
         total_session_input = 0
         total_session_output = 0
 
-        while rounds_executed < num_rounds and session.current_round < session.max_rounds:
-            # Check for pause/stop
-            await db.refresh(session)
-            if session.state == "paused":
-                await send_event(websocket, {"type": "paused", "round_number": session.current_round})
-                break
-            if session.state == "complete":
-                await send_event(websocket, {"type": "stopped", "round_number": session.current_round})
-                break
+        try:
+            while rounds_executed < num_rounds and session.current_round < session.max_rounds:
+                # Check for pause/stop
+                await db.refresh(session)
+                if session.state == "paused":
+                    await send_event(websocket, {"type": "paused", "round_number": session.current_round})
+                    break
+                if session.state == "complete":
+                    await send_event(websocket, {"type": "stopped", "round_number": session.current_round})
+                    break
 
-            round_number = session.current_round + 1
+                round_number = session.current_round + 1
 
-            # Check for human butt-in
-            human_message = session.pending_human_message
-            if human_message:
-                await send_event(websocket, {
-                    "type": "human_message_injected",
-                    "content": human_message,
-                })
-                session.pending_human_message = None
-
-            # Create round record
-            round_record = DeliberationRound(
-                session_id=session.id,
-                round_number=round_number,
-                human_message=human_message,
-                started_at=datetime.utcnow(),
-            )
-            db.add(round_record)
-            await db.flush()
-
-            await send_event(websocket, {"type": "round_start", "round_number": round_number})
-
-            # Build context
-            context = build_round_context(session, round_number, human_message)
-            active_agents = [a for a in session.agents if a.is_active]
-
-            # Token callback -- sends each token to the WebSocket
-            async def make_on_token(ws):
-                async def on_token(agent_id: str, token: str):
-                    await send_event(ws, {
-                        "type": "agent_token",
-                        "agent_id": agent_id,
-                        "token": token,
+                # Check for human butt-in
+                human_message = session.pending_human_message
+                if human_message:
+                    await send_event(websocket, {
+                        "type": "human_message_injected",
+                        "content": human_message,
                     })
-                return on_token
+                    session.pending_human_message = None
 
-            # Tool callback
-            async def make_on_tool(ws):
-                async def on_tool(agent_id: str, event: dict):
-                    await send_event(ws, {
-                        "type": f"agent_{event['type']}",
-                        "agent_id": agent_id,
-                        **{k: v for k, v in event.items() if k != "type"},
-                    })
-                return on_tool
-
-            on_token = await make_on_token(websocket)
-            on_tool = await make_on_tool(websocket)
-
-            # Run all agents in parallel, each streaming tokens independently
-            tasks = []
-            for agent in active_agents:
-                tasks.append(
-                    execute_agent_turn_streaming(
-                        claude, session, round_record, agent, context, db,
-                        on_token=on_token, on_tool=on_tool, user=user,
-                    )
-                )
-
-            agent_results = await asyncio.gather(*tasks, return_exceptions=True)
-
-            # Process results
-            total_round_input = 0
-            total_round_output = 0
-            round_messages = []
-
-            for i, agent_result in enumerate(agent_results):
-                agent = active_agents[i]
-                if isinstance(agent_result, Exception):
-                    logger.error(f"Agent {agent.agent_id} failed: {agent_result}")
-                    content = f"[Error: {str(agent_result)}]"
-                    input_tokens = 0
-                    output_tokens = 0
-                    tool_calls = None
-                else:
-                    content = agent_result["content"]
-                    input_tokens = agent_result["input_tokens"]
-                    output_tokens = agent_result["output_tokens"]
-                    tool_calls = agent_result.get("tool_calls")
-
-                # Save message
-                msg = SessionMessage(
+                # Create round record
+                round_record = DeliberationRound(
                     session_id=session.id,
-                    round_id=round_record.id,
-                    role="agent",
-                    agent_id=agent.agent_id,
-                    content=content,
-                    tool_calls=tool_calls,
-                    input_tokens=input_tokens,
-                    output_tokens=output_tokens,
+                    round_number=round_number,
+                    human_message=human_message,
+                    started_at=datetime.utcnow(),
                 )
-                db.add(msg)
-                round_messages.append(msg)
+                db.add(round_record)
+                await db.flush()
 
-                agent.input_tokens += input_tokens
-                agent.output_tokens += output_tokens
-                total_round_input += input_tokens
-                total_round_output += output_tokens
+                await send_event(websocket, {"type": "round_start", "round_number": round_number})
 
-                # Signal agent complete (tokens already streamed)
+                # Build context
+                context = build_round_context(session, round_number, human_message)
+                active_agents = [a for a in session.agents if a.is_active]
+
+                # Pre-load agent prompts and village memories sequentially
+                # (DB session can't handle concurrent operations)
+                agent_prompts = {}
+                agent_village_memories = {}
+                for agent in active_agents:
+                    try:
+                        prompt = await get_agent_prompt_with_memory(
+                            agent_id=agent.agent_id,
+                            user=user,
+                            use_pac=False,
+                            db=db,
+                        )
+                        agent_prompts[agent.agent_id] = prompt
+                    except Exception as e:
+                        logger.warning(f"Failed to load prompt for {agent.agent_id}: {e}")
+                        agent_prompts[agent.agent_id] = load_native_prompt(agent.agent_id, use_pac=False)
+
+                    try:
+                        neural = NeuralMemoryService(db)
+                        village_memories = await neural.get_village_memories(
+                            user_id=user.id,
+                            topic=session.topic,
+                            limit=5,
+                            collection="council",
+                        )
+                        if village_memories:
+                            agent_village_memories[agent.agent_id] = neural.format_village_memories_for_prompt(
+                                village_memories, max_chars=1500,
+                            )
+                        else:
+                            agent_village_memories[agent.agent_id] = ""
+                    except Exception as e:
+                        logger.warning(f"Failed to get village memories for {agent.agent_id}: {e}")
+                        agent_village_memories[agent.agent_id] = ""
+
+                # Token callback -- sends each token to the WebSocket
+                async def make_on_token(ws):
+                    async def on_token(agent_id: str, token: str):
+                        await send_event(ws, {
+                            "type": "agent_token",
+                            "agent_id": agent_id,
+                            "token": token,
+                        })
+                    return on_token
+
+                # Tool callback
+                async def make_on_tool(ws):
+                    async def on_tool(agent_id: str, event: dict):
+                        await send_event(ws, {
+                            "type": f"agent_{event['type']}",
+                            "agent_id": agent_id,
+                            **{k: v for k, v in event.items() if k != "type"},
+                        })
+                    return on_tool
+
+                on_token = await make_on_token(websocket)
+                on_tool = await make_on_tool(websocket)
+
+                # Run all agents in parallel (prompts pre-loaded, no DB contention)
+                tasks = []
+                for agent in active_agents:
+                    tasks.append(
+                        execute_agent_turn_streaming(
+                            claude, session, round_record, agent, context, db,
+                            on_token=on_token, on_tool=on_tool, user=user,
+                            base_prompt=agent_prompts.get(agent.agent_id),
+                            village_memory_block=agent_village_memories.get(agent.agent_id, ""),
+                        )
+                    )
+
+                agent_results = await asyncio.gather(*tasks, return_exceptions=True)
+
+                # Process results
+                total_round_input = 0
+                total_round_output = 0
+                round_messages = []
+
+                for i, agent_result in enumerate(agent_results):
+                    agent = active_agents[i]
+                    if isinstance(agent_result, Exception):
+                        logger.error(f"Agent {agent.agent_id} failed: {agent_result}")
+                        content = f"[Error: {str(agent_result)}]"
+                        input_tokens = 0
+                        output_tokens = 0
+                        tool_calls = None
+                    else:
+                        content = agent_result["content"]
+                        input_tokens = agent_result["input_tokens"]
+                        output_tokens = agent_result["output_tokens"]
+                        tool_calls = agent_result.get("tool_calls")
+
+                    # Save message
+                    msg = SessionMessage(
+                        session_id=session.id,
+                        round_id=round_record.id,
+                        role="agent",
+                        agent_id=agent.agent_id,
+                        content=content,
+                        tool_calls=tool_calls,
+                        input_tokens=input_tokens,
+                        output_tokens=output_tokens,
+                    )
+                    db.add(msg)
+                    round_messages.append(msg)
+
+                    agent.input_tokens += input_tokens
+                    agent.output_tokens += output_tokens
+                    total_round_input += input_tokens
+                    total_round_output += output_tokens
+
+                    # Signal agent complete (tokens already streamed)
+                    await send_event(websocket, {
+                        "type": "agent_complete",
+                        "agent_id": agent.agent_id,
+                        "input_tokens": input_tokens,
+                        "output_tokens": output_tokens,
+                    })
+
+                # Update session stats
+                session.current_round = round_number
+                session.total_input_tokens += total_round_input
+                session.total_output_tokens += total_round_output
+                total_session_input += total_round_input
+                total_session_output += total_round_output
+
+                round_cost = (total_round_input * 0.25 + total_round_output * 1.25) / 1_000_000
+                session.total_cost_usd += round_cost
+
+                round_record.completed_at = datetime.utcnow()
+
+                # Convergence check
+                convergence_score = check_convergence(round_messages)
+                round_record.convergence_score = convergence_score
+                session.convergence_score = convergence_score
+
+                try:
+                    await db.commit()
+                except Exception as commit_err:
+                    logger.error(f"Council WS round {round_number} commit failed: {commit_err}")
+                    await db.rollback()
+                    await send_event(websocket, {
+                        "type": "error",
+                        "message": f"Failed to save round {round_number} data",
+                    })
+                    rounds_executed += 1
+                    continue
+
                 await send_event(websocket, {
-                    "type": "agent_complete",
-                    "agent_id": agent.agent_id,
-                    "input_tokens": input_tokens,
-                    "output_tokens": output_tokens,
+                    "type": "round_complete",
+                    "round_number": round_number,
+                    "convergence_score": convergence_score,
+                    "cost_usd": round_cost,
+                    "total_cost_usd": session.total_cost_usd,
                 })
 
-            # Update session stats
-            session.current_round = round_number
-            session.total_input_tokens += total_round_input
-            session.total_output_tokens += total_round_output
-            total_session_input += total_round_input
-            total_session_output += total_round_output
+                # Consensus detection
+                if convergence_score >= 0.8:
+                    session.state = "complete"
+                    session.termination_reason = "consensus"
+                    await db.commit()
+                    await send_event(websocket, {
+                        "type": "consensus",
+                        "score": convergence_score,
+                        "round_number": round_number,
+                    })
+                    break
 
-            round_cost = (total_round_input * 0.25 + total_round_output * 1.25) / 1_000_000
-            session.total_cost_usd += round_cost
+                # Store neural memories
+                try:
+                    stored = await store_council_memories(
+                        db=db, user_id=user.id, session_id=session.id,
+                        messages=round_messages, topic=session.topic,
+                    )
+                    if stored > 0:
+                        logger.debug(f"Stored {stored} council memories for round {round_number}")
+                except Exception as e:
+                    logger.warning(f"Failed to store council memories: {e}")
 
-            round_record.completed_at = datetime.utcnow()
+                rounds_executed += 1
 
-            # Convergence check
-            convergence_score = check_convergence(round_messages)
-            round_record.convergence_score = convergence_score
-            session.convergence_score = convergence_score
+                # Reload session for next round
+                await db.refresh(session)
+                result = await db.execute(
+                    select(DeliberationSession)
+                    .options(
+                        selectinload(DeliberationSession.agents),
+                        selectinload(DeliberationSession.rounds).selectinload(DeliberationRound.messages),
+                    )
+                    .where(DeliberationSession.id == session_id)
+                )
+                session = result.scalar_one()
+
+            # Final state
+            if session.state != "paused":
+                if session.current_round >= session.max_rounds:
+                    session.state = "complete"
+                    session.termination_reason = "max_rounds"
+                elif rounds_executed >= num_rounds:
+                    session.state = "running"
 
             await db.commit()
 
-            await send_event(websocket, {
-                "type": "round_complete",
-                "round_number": round_number,
-                "convergence_score": convergence_score,
-                "cost_usd": round_cost,
-                "total_cost_usd": session.total_cost_usd,
-            })
-
-            # Consensus detection
-            if convergence_score >= 0.8:
-                session.state = "complete"
-                session.termination_reason = "consensus"
-                await db.commit()
-                await send_event(websocket, {
-                    "type": "consensus",
-                    "score": convergence_score,
-                    "round_number": round_number,
-                })
-                break
-
-            # Store neural memories
+        except Exception as e:
+            logger.error(f"Council WS deliberation error: {e}", exc_info=True)
+            await send_event(websocket, {"type": "error", "message": str(e)})
             try:
-                stored = await store_council_memories(
-                    db=db, user_id=user.id, session_id=session.id,
-                    messages=round_messages, topic=session.topic,
-                )
-                if stored > 0:
-                    logger.debug(f"Stored {stored} council memories for round {round_number}")
-            except Exception as e:
-                logger.warning(f"Failed to store council memories: {e}")
-
-            rounds_executed += 1
-
-            # Reload session for next round
-            await db.refresh(session)
-            result = await db.execute(
-                select(DeliberationSession)
-                .options(
-                    selectinload(DeliberationSession.agents),
-                    selectinload(DeliberationSession.rounds).selectinload(DeliberationRound.messages),
-                )
-                .where(DeliberationSession.id == session_id)
-            )
-            session = result.scalar_one()
-
-        # Final state
-        if session.state != "paused":
-            if session.current_round >= session.max_rounds:
-                session.state = "complete"
-                session.termination_reason = "max_rounds"
-            elif rounds_executed >= num_rounds:
-                session.state = "running"
-
-        await db.commit()
+                await db.rollback()
+            except Exception:
+                pass
 
         model = session.model or COUNCIL_MODEL
         await send_event(websocket, {

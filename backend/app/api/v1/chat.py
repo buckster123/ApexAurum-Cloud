@@ -301,6 +301,11 @@ async def get_agent_prompt_with_memory(
     # Get base prompt (existing logic)
     base_prompt = get_agent_prompt(agent_id, user, use_pac=use_pac)
 
+    # Inject user context so agents know who they're talking to
+    if user:
+        user_name = user.display_name or user.email.split("@")[0]
+        base_prompt = f"{base_prompt}\n\n## Current User\nYou are speaking with **{user_name}**. Address them by name when appropriate."
+
     # If no user or no db session, return base prompt
     if not user or not db:
         return base_prompt

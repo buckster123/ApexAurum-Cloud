@@ -1,8 +1,8 @@
 # ApexAurum-Cloud Handover Document
 
-**Date:** 2026-01-30
-**Build:** v113-error-tracking
-**Status:** BETA LAUNCHED - Repo cleaned, docs published, testers invited!
+**Date:** 2026-01-31
+**Build:** v114-beta-bugfixes
+**Status:** BETA LIVE - First testers active, critical bugs fixed
 
 ---
 
@@ -27,7 +27,32 @@ ApexAurum Cloud is fully functional, polished, and **ready for beta testing**:
 - **ApexPocket Cloud Firmware** - ESP32-S3 connects to Cloud via HTTPS!
 - **Centralized Error Tracking** - GDPR-compliant, admin dashboard, export, auto-purge
 
-**Pricing:** Seeker $3 | Alchemist $10 | Adept $30
+**Pricing:** Seeker $10 | Adept $30 | Opus $100 | Azothic $300
+
+---
+
+## Session 36 Accomplishments
+
+### Beta Bugfixes (v114) - First Live Tester
+
+First registered beta tester active. Identified and fixed 7 bugs from production logs.
+
+**Critical fixes:**
+- **SQLAlchemy upsert API** (usage.py) - `on_conflict_on_constraint` doesn't exist in SQLAlchemy 2.0, changed to `on_conflict_do_update`. Fixed jam counters + Suno credit tracking.
+- **Jam auto-jam UUID** (api/v1/jam.py) - AI agents weren't given the session UUID, fabricated garbage strings. Injected `session.id` into system prompt.
+- **Concurrent DB sessions** (jam.py + council.py) - `asyncio.gather` running parallel agent turns all hit DB on shared session. Pre-load prompts/memories sequentially, then run Claude calls in parallel. Fixed in both Jam and Council (all 3 paths: single-round, SSE, WebSocket).
+- **Music SSE serialization** (music.py) - UUID objects not JSON-serializable in SSE stream. Fixed with `model_dump(mode="json")`.
+- **DB pool exhaustion** (database.py) - `pool_size=5` too small for auto-jam bursts. Increased to `pool_size=10, max_overflow=20`, added `pool_recycle=300s`.
+- **Council rollback recovery** - Added rollback on commit failure so one bad round doesn't poison the entire deliberation.
+- **Deploy crash** - Indentation error in council.py from the streaming fix. Syntax-checked before re-push.
+
+**Also:**
+- Created `archive/STRIPE_PRICES.md` - complete Stripe price env var reference
+- Aligned pricing tiers with Stripe dashboard (Seeker $10, Adept $30, Opus $100, Azothic $300)
+
+**Pattern identified:** Any `asyncio.gather` running agent turns in parallel with a shared DB session causes `InFailedSQLTransactionError` cascades. Fix pattern: pre-load DB data sequentially, then run API calls in parallel.
+
+**Commits:** `eefe71f`, `03d1269`, `6e6b77e`, `247a1dc`
 
 ---
 
