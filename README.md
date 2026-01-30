@@ -215,18 +215,6 @@ npm run dev
 Full interactive docs at `/docs` (debug mode).
 
 ---
-
-## Live URLs
-
-| Service | URL |
-|---------|-----|
-| Frontend | https://frontend-production-5402.up.railway.app |
-| Backend | https://backend-production-507c.up.railway.app |
-| Health | https://backend-production-507c.up.railway.app/health |
-| Admin | https://backend-production-507c.up.railway.app/admin |
-
----
-
 ## Documentation
 
 - **[ENCYCLOPEDIA.md](ENCYCLOPEDIA.md)** --- The complete Apex Aurum Encyclopedia of Tek and Lore. Every system, agent, tool, easter egg, and architectural detail documented.
