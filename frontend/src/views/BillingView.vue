@@ -52,18 +52,6 @@ async function selectPlan(tierId) {
   }
 }
 
-async function buyCredits(packId) {
-  loadingAction.value = `credits-${packId}`
-  try {
-    await billing.createCreditsCheckout(packId)
-  } catch (e) {
-    console.error('Checkout error:', e)
-    checkoutError.value = e.response?.data?.detail || 'Credit purchase failed. Please try again.'
-    setTimeout(() => checkoutError.value = null, 5000)
-  } finally {
-    loadingAction.value = null
-  }
-}
 
 async function manageSubscription() {
   loadingAction.value = 'portal'
