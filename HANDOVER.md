@@ -1649,7 +1649,42 @@ Store: frontend/src/stores/nursery.js (438 lines, 7 computed, 20+ actions, error
 
 ---
 
-## Tier Restructure Roadmap
+## Session 28 Accomplishments
+
+### Legal + Polish Session D (v107) - COMPLETE
+**Commit:** dd92bc2
+
+**Legal pages, terms acceptance, email stubs, admin polish.**
+
+**Backend (7 files):**
+- `services/email.py`: NEW - Email stub service (logs instead of sending), branded HTML usage warning templates
+- `models/user.py`: Added `terms_accepted_at` (nullable datetime) column
+- `database.py`: Migration to add terms_accepted_at column
+- `api/v1/auth.py`: Registration requires `terms_accepted: true`, stores timestamp
+- `config.py`: SMTP settings (host, port, user, password, from_address, from_name)
+- `services/usage.py`: `_check_usage_thresholds()` fires email warnings at 80%/100% on exact threshold crossing, wired into `increment_usage()`
+- `main.py`: v107-legal-polish, legal-pages + usage-warnings features
+
+**Frontend (6 files):**
+- `views/TermsView.vue`: NEW - 13-section Terms of Service (Norwegian law, beta disclaimer, AI usage, GDPR)
+- `views/PrivacyView.vue`: NEW - 12-section Privacy Policy (GDPR-compliant, data rights, Datatilsynet reference)
+- `router/index.js`: /terms and /privacy routes (public, no auth)
+- `App.vue`: Global beta footer on all pages (Beta badge + Terms + Privacy links)
+- `stores/auth.js`: register() passes terms_accepted
+- `views/RegisterView.vue`: Terms acceptance checkbox with /terms and /privacy links
+- `Dockerfile`: CACHE_BUST=24
+
+**Admin (1 file):**
+- `admin_static/index.html`: Fixed all 5 tier names (was Alchemist/Adept, now Free Trial/Seeker/Adept/Opus/Azothic), added Usage Reports tab with tier distribution bars and feature counts
+
+### Environment
+- Build: v107-legal-polish
+- Frontend CACHE_BUST: 24
+- Tools: 68 (unchanged)
+
+---
+
+## Tier Restructure Roadmap - COMPLETE
 
 **Masterplan:** `TIER_MASTERPLAN.md` (committed, in repo root)
 
@@ -1659,17 +1694,7 @@ Store: frontend/src/stores/nursery.js (438 lines, 7 computed, 20+ actions, error
 | **A: Usage Infrastructure** | Per-model counters, usage_counters table, limit middleware, context cap | DONE (Session 25) |
 | **B: Tier Restructure** | 5-tier config, Stripe env vars, billing UI, landing page, feature gates, free trial | DONE (Session 26) |
 | **C: Credit Packs + Dashboard** | Feature packs (Spark/Flame/Inferno), usage dashboard, admin usage | DONE (Session 27) |
-| **D: Legal + Polish** | Terms, privacy, disclaimers, coupon library, package builder | NEXT |
-
-### Session D Scope (next session)
-- Terms of Service page (/terms)
-- Privacy Policy page (/privacy)
-- Beta disclaimer in footer + registration
-- Registration: checkbox for terms acceptance
-- Coupon library: pre-create beta launch coupons
-- Package builder UI (optional)
-- Usage warning emails at 80%/100% (optional)
-- Admin: usage reports, tier breakdown
+| **D: Legal + Polish** | Terms, privacy, beta footer, terms checkbox, email stubs, admin fixes | DONE (Session 28) |
 
 ### Stripe Dashboard Prerequisites
 **Subscription products (Session B):**
@@ -1686,7 +1711,9 @@ Store: frontend/src/stores/nursery.js (438 lines, 7 computed, 20+ actions, error
 ### Remaining Beta Items
 - DNS setup for apexaurum.cloud
 - Backfill old assistant messages
-- Community beta testing with launch coupons (defined in masterplan)
+- Community beta testing with launch coupons (via admin panel)
+- Connect SMTP to apexaurum.cloud mail server (email stubs ready)
+- Review and customize legal text (templates deployed)
 
 ---
 
