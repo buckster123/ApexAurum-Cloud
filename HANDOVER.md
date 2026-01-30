@@ -1501,35 +1501,113 @@ Store: frontend/src/stores/nursery.js (438 lines, 7 computed, 20+ actions, error
 
 ---
 
+## Session 26 Accomplishments
+
+### Tier Restructure Session B: 5-Tier System (v105) - COMPLETE
+**Commit:** c6a3562
+
+**5-tier restructure** from `free/pro/opus` to `free_trial/seeker/adept/opus/azothic`:
+
+| Tier | Price | Messages | Opus | Council | Suno | Jam | Nursery |
+|------|-------|----------|------|---------|------|-----|---------|
+| Free Trial | $0 (7d) | 20 | 0 | 0 | 0 | 0 | No |
+| Seeker | $10/mo | 200 | 0 | 3/mo | 10/mo | 0 | No |
+| Adept | $30/mo | 1,000 | 50/mo | 10/mo | 50/mo | 3/mo | View only |
+| Opus | $100/mo | 5,000 | 500/mo | Unlim | 200/mo | 20/mo | Full |
+| Azothic | $300/mo | 20,000 | 2,000/mo | Unlim | 500/mo | Unlim | Full+5 jobs |
+
+**Backend (16 files):**
+- `config.py`: 5-tier TIER_LIMITS with 20+ per-feature fields, TIER_HIERARCHY, new Stripe price env vars
+- `database.py`: 5 migrations (4 tier ID remap + trial_end column)
+- `models/billing.py`: trial_end field, updated tier default
+- `services/billing.py`: free_trial default, trial expiry check, expanded status with 8 new feature flags, new Stripe checkout mapping
+- `services/pricing.py`: Updated get_tier_for_model (free→free_trial, pro→seeker, opus→adept)
+- `schemas/billing.py`: trial_end + 8 new TierFeatures fields, updated tier descriptions
+- `api/v1/billing.py`: 4-tier pricing endpoint, updated checkout validation
+- `api/v1/webhooks.py`: New price→tier mapping for 4 paid tiers
+- `api/v1/chat.py`: Opus per-model limit check via UsageService, trial_expired handling
+- `api/v1/council.py`: Session limit check + council_sessions counter increment
+- `api/v1/music.py`: Generation limit check + suno_generations counter increment
+- `api/v1/jam.py`: Session limit check + jam_sessions counter increment
+- `api/v1/nursery.py`: Replaced _check_adept_tier with _check_nursery_access (view_only vs full)
+- `api/v1/user.py`: BYOK provider restriction (adept=OSS only, opus+=all)
+- `api/v1/admin.py`: Updated tier validation, tier names, stats by tier
+- `main.py`: v105-tier-restructure
+
+**Frontend (6 files):**
+- `billing.js`: 5 tier getters, tierLevel for >= comparisons, backward compat aliases
+- `BillingView.vue`: 4-tier pricing grid, trial banner with countdown, updated checkout
+- `LandingView.vue`: 4-tier pricing section with "7 days free" messaging
+- `SettingsView.vue`: Dev mode tierLevel>=3, BYOK provider restrictions
+- `chat.js`: trial_expired + opus_limit error handling
+- `Dockerfile`: CACHE_BUST=22
+
+**Free trial flow:** New users get free_trial tier, status="trialing", trial_end=+7 days. can_send_message() checks expiry. Frontend shows countdown.
+
+**Per-feature limits wired:** Council sessions, Suno generations, Jam sessions, Opus messages all checked via UsageService.check_usage_limit() before allowing, and incremented after success. All wrapped in try/except for failure isolation.
+
+### Environment
+- Build: v105-tier-restructure
+- Frontend CACHE_BUST: 22
+- Tools: 68 (unchanged)
+
+### Key Files Modified (Session 26)
+
+| File | Status | Changes |
+|------|--------|---------|
+| `backend/app/config.py` | EDIT | 5-tier TIER_LIMITS, TIER_HIERARCHY, Stripe env vars |
+| `backend/app/database.py` | EDIT | 5 migrations (tier remap + trial_end) |
+| `backend/app/models/billing.py` | EDIT | trial_end field, updated defaults |
+| `backend/app/services/billing.py` | EDIT | Trial logic, expanded status, checkout mapping |
+| `backend/app/services/pricing.py` | EDIT | get_tier_for_model updated |
+| `backend/app/schemas/billing.py` | EDIT | trial_end, 8 new TierFeatures fields |
+| `backend/app/api/v1/billing.py` | EDIT | 4-tier pricing, checkout validation |
+| `backend/app/api/v1/webhooks.py` | EDIT | price→tier mapping |
+| `backend/app/api/v1/chat.py` | EDIT | Opus limit, trial_expired |
+| `backend/app/api/v1/council.py` | EDIT | Session limit + counter |
+| `backend/app/api/v1/music.py` | EDIT | Generation limit + counter |
+| `backend/app/api/v1/jam.py` | EDIT | Session limit + counter |
+| `backend/app/api/v1/nursery.py` | EDIT | Tier-based access |
+| `backend/app/api/v1/user.py` | EDIT | BYOK provider restriction |
+| `backend/app/api/v1/admin.py` | EDIT | Tier validation + stats |
+| `backend/app/main.py` | EDIT | v105, tier-restructure feature |
+| `frontend/src/stores/billing.js` | EDIT | 5-tier getters, tierLevel |
+| `frontend/src/stores/chat.js` | EDIT | trial_expired + opus_limit errors |
+| `frontend/src/views/BillingView.vue` | EDIT | 4-tier display, trial banner |
+| `frontend/src/views/LandingView.vue` | EDIT | 4-tier pricing |
+| `frontend/src/views/SettingsView.vue` | EDIT | Updated tier checks |
+| `frontend/Dockerfile` | EDIT | CACHE_BUST=22 |
+
+---
+
 ## Tier Restructure Roadmap
 
 **Masterplan:** `TIER_MASTERPLAN.md` (committed, in repo root)
-
-### New Tier Map (4 tiers replacing 3)
-| Tier | Price | Messages | Opus Msgs | Key Features |
-|------|-------|----------|-----------|--------------|
-| Free Trial | $0 | 20 (7 days) | 0 | Haiku only, taste the Athanor |
-| Seeker ($10) | $10/mo | 200 | 0 | Haiku+Sonnet, 128K ctx cap, 10 Suno |
-| Adept ($30) | $30/mo | 1,000 | 50 | All models, full ctx, BYOK OSS, nursery tease |
-| Opus ($100) | $100/mo | 5,000 | 500 | Full access, nursery, dev mode, 1M beta |
-| Azothic ($300) | $300/mo | 20,000 | 2,000 | Everything, training credits, priority |
 
 ### Implementation Roadmap (4 sessions)
 | Session | Scope | Status |
 |---------|-------|--------|
 | **A: Usage Infrastructure** | Per-model counters, usage_counters table, limit middleware, context cap | DONE (Session 25) |
-| **B: Tier Restructure** | 4-tier config, Stripe products, billing UI, landing page, feature gates | NEXT |
-| **C: Credit Packs + Dashboard** | Pack purchases, usage display, admin usage reports | |
+| **B: Tier Restructure** | 5-tier config, Stripe env vars, billing UI, landing page, feature gates, free trial | DONE (Session 26) |
+| **C: Credit Packs + Dashboard** | Pack purchases, usage display, admin usage reports | NEXT |
 | **D: Legal + Polish** | Terms, privacy, disclaimers, coupon library, package builder | |
 
-### Session B Scope (next session)
-- Expand `TIER_LIMITS` from 3 tiers (free/pro/opus) to 5 (free_trial/seeker/adept/opus/azothic) with per-feature limits
-- Create 4 new Stripe subscription products ($10/$30/$100/$300)
-- Wire all feature endpoints to use `UsageService.check_usage_limit()` before execution
-- Update billing page UI with 4-tier display
-- Update landing page pricing section
-- Free trial flow (7-day, 20 messages, auto-expire)
-- Migration plan for existing subscribers
+### Session C Scope (next session)
+- Restructure credit packs: Spark $5, Flame $15, Inferno $40
+- 3 Stripe one-time payment products
+- Credit balance tracking per feature type
+- GET /api/v1/usage endpoint (all counters + limits + %)
+- Frontend usage dashboard (progress bars, warnings at 80%)
+- Pack purchase UI in billing page
+- Admin: view user usage in admin panel
+
+### Stripe Dashboard Prerequisite (for Session B)
+Before Session B tier prices work in production, create in Stripe Dashboard:
+1. **Seeker** - $10/mo recurring → `STRIPE_PRICE_SEEKER_MONTHLY`
+2. **Adept** - $30/mo recurring → `STRIPE_PRICE_ADEPT_MONTHLY`
+3. **Opus** - $100/mo recurring → `STRIPE_PRICE_OPUS_MONTHLY`
+4. **Azothic** - $300/mo recurring → `STRIPE_PRICE_AZOTHIC_MONTHLY`
+Remove old `STRIPE_PRICE_PRO_MONTHLY` env var.
 
 ### Remaining Beta Items
 - DNS setup for apexaurum.cloud
@@ -1540,10 +1618,10 @@ Store: frontend/src/stores/nursery.js (438 lines, 7 computed, 20+ actions, error
 
 ## Easter Eggs
 
-- **Dev Mode:** Konami code (up up down down left right left right BA) or 7-tap on Au logo (Adept only!)
-- **PAC Mode:** Type "AZOTH" while in Dev Mode
+- **Dev Mode:** Konami code (up up down down left right left right BA) or 7-tap on Au logo (Opus+ only!)
+- **PAC Mode:** Type "AZOTH" while in Dev Mode (Adept+, Haiku-only for Adept)
 - **PAC prompts:** `backend/native_prompts/*-PAC.txt`
 
 ---
 
-*"The Council convenes. The Athanor blazes. The gold multiplies. The Nursery tends. The Forge burns. New minds are born."*
+*"Four agents. Five tiers. The furnace scales with the alchemist's ambition."*
