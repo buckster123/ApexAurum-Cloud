@@ -17,7 +17,7 @@ from app.database import get_db
 from app.models.user import User
 from app.models.billing import CreditTransaction
 from app.auth.deps import get_current_user
-from app.config import get_settings, TIER_LIMITS, CREDIT_PACKS
+from app.config import get_settings, TIER_LIMITS, TIER_HIERARCHY, CREDIT_PACKS
 from app.services.billing import BillingService
 from app.schemas.billing import (
     SubscriptionCheckoutRequest,
@@ -39,7 +39,13 @@ from app.schemas.billing import (
     CouponRedeemRequest,
     CouponRedeemResponse,
     CouponCheckResponse,
+    PackCheckoutRequest,
+    PackCheckoutResponse,
+    FeatureCreditPack,
+    UsageSummaryResponse,
+    UsageResourceDetail,
 )
+from app.services.usage import UsageService, FeatureCreditService, get_current_period
 from app.models.billing import Coupon, CouponRedemption, CreditBalance
 
 logger = logging.getLogger(__name__)
@@ -80,6 +86,7 @@ async def get_billing_status(
         current_period_end=status_data["current_period_end"],
         cancel_at_period_end=status_data["cancel_at_period_end"],
         trial_end=status_data.get("trial_end"),
+        feature_credits=status_data.get("feature_credits"),
         credit_balance_cents=status_data["credit_balance_cents"],
         credit_balance_usd=status_data["credit_balance_usd"],
         features=TierFeatures(**status_data["features"]),
@@ -153,7 +160,7 @@ async def create_subscription_checkout(
 # CREDITS CHECKOUT
 # ═══════════════════════════════════════════════════════════════════════════════
 
-@router.post("/checkout/credits", response_model=CreditsCheckoutResponse)
+@router.post("/checkout/credits", response_model=CreditsCheckoutResponse, deprecated=True)
 async def create_credits_checkout(
     request: CreditsCheckoutRequest,
     user: User = Depends(get_current_user),
@@ -161,6 +168,9 @@ async def create_credits_checkout(
 ):
     """
     Create a Stripe Checkout session for credit purchase.
+
+    DEPRECATED: Use POST /checkout/pack for feature credit packs instead.
+    Kept for backward compatibility with older frontend versions.
 
     Args:
         pack: 'small' ($5/500 credits) or 'large' ($20/2500 credits with 25% bonus)
@@ -208,6 +218,59 @@ async def create_credits_checkout(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to create checkout session"
         )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# FEATURE PACK CHECKOUT
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@router.post("/checkout/pack", response_model=PackCheckoutResponse)
+async def create_pack_checkout(
+    request: PackCheckoutRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Create a Stripe checkout session for a feature credit pack."""
+    if request.pack not in ("spark", "flame", "inferno"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid pack. Must be 'spark', 'flame', or 'inferno'.",
+        )
+
+    if request.pack == "spark" and not request.resource_type:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Spark pack requires resource_type: 'opus_messages', 'suno_generations', or 'training_jobs'.",
+        )
+
+    if request.resource_type and request.resource_type not in ("opus_messages", "suno_generations", "training_jobs"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid resource_type. Must be 'opus_messages', 'suno_generations', or 'training_jobs'.",
+        )
+
+    try:
+        # Build URLs
+        frontend_url = "https://frontend-production-5402.up.railway.app"
+        success_url = request.success_url or f"{frontend_url}/billing?session_id={{CHECKOUT_SESSION_ID}}"
+        cancel_url = request.cancel_url or f"{frontend_url}/billing"
+
+        billing_service = BillingService(db)
+        result = await billing_service.create_pack_checkout(
+            user_id=user.id,
+            pack_id=request.pack,
+            resource_type=request.resource_type,
+            success_url=success_url,
+            cancel_url=cancel_url,
+        )
+
+        return PackCheckoutResponse(**result)
+
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        logger.error(f"Pack checkout error: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to create checkout session.")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -312,6 +375,89 @@ async def get_credit_transactions(
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# USAGE DASHBOARD
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@router.get("/usage", response_model=UsageSummaryResponse)
+async def get_usage_summary(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get comprehensive usage summary with per-resource breakdown."""
+    from app.models.billing import Subscription
+
+    # Get tier
+    result = await db.execute(
+        select(Subscription).where(Subscription.user_id == user.id)
+    )
+    subscription = result.scalar_one_or_none()
+    tier = subscription.tier if subscription else "free_trial"
+    tier_config = TIER_LIMITS.get(tier, TIER_LIMITS["free_trial"])
+
+    # Get usage counters
+    usage_svc = UsageService(db)
+    counters = await usage_svc.get_usage_summary(user.id)
+
+    # Get feature credits
+    credit_svc = FeatureCreditService(db)
+    feature_credits = await credit_svc.get_credit_summary(user.id)
+
+    # Build per-resource details
+    resource_defs = [
+        ("messages_opus", "Opus Messages", "opus_messages_per_month", "opus_messages"),
+        ("council_sessions", "Council Sessions", "council_sessions_per_month", None),
+        ("suno_generations", "Suno Generations", "suno_generations_per_month", "suno_generations"),
+        ("jam_sessions", "Jam Sessions", "jam_sessions_per_month", None),
+        ("messages_haiku", "Haiku Messages", None, None),
+        ("messages_sonnet", "Sonnet Messages", None, None),
+        ("messages_other", "Other Messages", None, None),
+    ]
+
+    resources = []
+    for counter_type, display_name, limit_key, credit_key in resource_defs:
+        current = counters.get(counter_type, 0)
+        tier_limit = tier_config.get(limit_key) if limit_key else None
+        bonus = feature_credits.get(credit_key, 0) if credit_key else 0
+
+        if tier_limit is not None:
+            effective = tier_limit + bonus
+            pct = round((current / effective) * 100, 1) if effective > 0 else 100.0
+            if pct >= 90:
+                color = "red"
+            elif pct >= 60:
+                color = "yellow"
+            else:
+                color = "green"
+        else:
+            effective = None
+            pct = None
+            color = "green"
+
+        resources.append(UsageResourceDetail(
+            counter_type=counter_type,
+            display_name=display_name,
+            current_count=current,
+            tier_limit=tier_limit,
+            feature_credit_bonus=bonus,
+            effective_limit=effective,
+            percentage_used=pct,
+            status=color,
+        ))
+
+    # Total messages
+    total_used = sum(counters.get(k, 0) for k in ["messages_haiku", "messages_sonnet", "messages_opus", "messages_other"])
+    total_limit = tier_config.get("messages_per_month")
+
+    return UsageSummaryResponse(
+        resources=resources,
+        feature_credits=feature_credits,
+        period=get_current_period(),
+        total_messages_used=total_used,
+        total_messages_limit=total_limit,
+    )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # PRICING DISPLAY
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -409,7 +555,46 @@ async def get_pricing():
         ),
     ]
 
-    return PricingResponse(tiers=tiers, credit_packs=credit_packs)
+    feature_packs = [
+        FeatureCreditPack(
+            id="spark",
+            name="Spark",
+            price_usd=5.00,
+            chooseable=True,
+            options={
+                "opus_messages": {"amount": 50, "label": "50 Opus Messages"},
+                "suno_generations": {"amount": 20, "label": "20 Suno Generations"},
+                "training_jobs": {"amount": 2, "label": "2 Training Jobs"},
+            },
+            min_tier="adept",
+        ),
+        FeatureCreditPack(
+            id="flame",
+            name="Flame",
+            price_usd=15.00,
+            chooseable=False,
+            contents={
+                "opus_messages": 150,
+                "suno_generations": 50,
+                "training_jobs": 5,
+            },
+            min_tier="adept",
+        ),
+        FeatureCreditPack(
+            id="inferno",
+            name="Inferno",
+            price_usd=40.00,
+            chooseable=False,
+            contents={
+                "opus_messages": 500,
+                "suno_generations": 200,
+                "training_jobs": 15,
+            },
+            min_tier="adept",
+        ),
+    ]
+
+    return PricingResponse(tiers=tiers, credit_packs=credit_packs, feature_packs=feature_packs)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

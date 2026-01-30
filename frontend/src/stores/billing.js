@@ -25,6 +25,9 @@ export const useBillingStore = defineStore('billing', () => {
     near_limit: false,
   })
 
+  const usageSummary = ref(null)
+  const featureCredits = ref({ opus_messages: 0, suno_generations: 0, training_jobs: 0 })
+
   const pricing = ref(null)
   const transactions = ref([])
   const loading = ref(false)
@@ -73,6 +76,13 @@ export const useBillingStore = defineStore('billing', () => {
   const canUseMultiProvider = computed(() => status.value.features?.multi_provider || false)
   const allowedModels = computed(() => status.value.features?.models || [])
 
+  const canBuyPacks = computed(() => tierLevel.value >= 2)  // Adept+
+
+  const hasFeatureCredits = computed(() => {
+    const fc = featureCredits.value
+    return fc.opus_messages > 0 || fc.suno_generations > 0 || fc.training_jobs > 0
+  })
+
   // Actions
   async function fetchStatus() {
     try {
@@ -80,6 +90,10 @@ export const useBillingStore = defineStore('billing', () => {
       error.value = null
       const response = await api.get('/api/v1/billing/status')
       status.value = response.data
+      // Extract feature credits if present
+      if (response.data.feature_credits) {
+        featureCredits.value = response.data.feature_credits
+      }
     } catch (e) {
       // If billing not configured (404) or not authenticated, use defaults
       if (e.response?.status === 404 || e.response?.status === 401) {
@@ -161,6 +175,39 @@ export const useBillingStore = defineStore('billing', () => {
     } catch (e) {
       error.value = e.response?.data?.detail || 'Failed to open billing portal'
       throw e
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function fetchUsageSummary() {
+    try {
+      const response = await api.get('/api/v1/billing/usage')
+      usageSummary.value = response.data
+      if (response.data.feature_credits) {
+        featureCredits.value = response.data.feature_credits
+      }
+      return response.data
+    } catch (error) {
+      console.error('Failed to fetch usage summary:', error)
+      return null
+    }
+  }
+
+  async function createPackCheckout(packId, resourceType = null) {
+    loading.value = true
+    error.value = null
+    try {
+      const payload = { pack: packId }
+      if (resourceType) payload.resource_type = resourceType
+      const response = await api.post('/api/v1/billing/checkout/pack', payload)
+      if (response.data.checkout_url) {
+        window.location.href = response.data.checkout_url
+      }
+      return response.data
+    } catch (err) {
+      error.value = err.response?.data?.detail || 'Failed to create pack checkout.'
+      throw err
     } finally {
       loading.value = false
     }
@@ -258,6 +305,14 @@ export const useBillingStore = defineStore('billing', () => {
     canUseTools,
     canUseMultiProvider,
     allowedModels,
+
+    // New: feature credits + usage
+    usageSummary,
+    featureCredits,
+    fetchUsageSummary,
+    createPackCheckout,
+    canBuyPacks,
+    hasFeatureCredits,
 
     // Actions
     fetchStatus,

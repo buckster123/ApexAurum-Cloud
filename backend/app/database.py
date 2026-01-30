@@ -579,6 +579,12 @@ async def init_db():
             "UPDATE subscriptions SET tier = 'adept' WHERE tier = 'opus';",
             # Add trial_end column
             "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS trial_end TIMESTAMP WITH TIME ZONE;",
+            # ═══════════════════════════════════════════════════════════════════════
+            # v106: Feature Credit Packs table
+            # ═══════════════════════════════════════════════════════════════════════
+            "CREATE TABLE IF NOT EXISTS feature_credit_balances (id UUID PRIMARY KEY, user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE, pack_id VARCHAR(20) NOT NULL, resource_type VARCHAR(30), opus_messages INTEGER NOT NULL DEFAULT 0, suno_generations INTEGER NOT NULL DEFAULT 0, training_jobs INTEGER NOT NULL DEFAULT 0, purchased_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(), expires_at TIMESTAMP WITH TIME ZONE NOT NULL, is_expired BOOLEAN DEFAULT FALSE, stripe_payment_intent_id VARCHAR(255), created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW());",
+            "CREATE INDEX IF NOT EXISTS idx_feature_credits_user ON feature_credit_balances(user_id);",
+            "CREATE INDEX IF NOT EXISTS idx_feature_credits_active ON feature_credit_balances(user_id, is_expired);",
         ]
 
         from sqlalchemy import text

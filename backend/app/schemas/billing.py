@@ -121,6 +121,9 @@ class BillingStatusResponse(BaseModel):
     cancel_at_period_end: bool = Field(False, description="Will cancel at end of period")
     trial_end: Optional[datetime] = None
 
+    # Feature credits (purchased pack balances)
+    feature_credits: Optional[dict] = Field(None, description="Feature credits: {opus_messages, suno_generations, training_jobs}")
+
     # Credit balance
     credit_balance_cents: int = Field(..., description="Credit balance in cents")
     credit_balance_usd: float = Field(..., description="Credit balance in USD")
@@ -174,7 +177,8 @@ class CreditPack(BaseModel):
 class PricingResponse(BaseModel):
     """All pricing information for display."""
     tiers: List[PricingTier]
-    credit_packs: List[CreditPack]
+    credit_packs: List[CreditPack]  # Legacy, kept for backward compat
+    feature_packs: List["FeatureCreditPack"] = []  # New feature credit packs
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -246,3 +250,60 @@ class CouponCheckResponse(BaseModel):
     tier: Optional[str] = None
     description: Optional[str] = None
     error: Optional[str] = None  # Why it's invalid, if applicable
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# FEATURE PACK SCHEMAS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class PackCheckoutRequest(BaseModel):
+    """Request to purchase a feature credit pack."""
+    pack: str = Field(..., description="Pack ID: 'spark', 'flame', or 'inferno'")
+    resource_type: Optional[str] = Field(None, description="For spark: 'opus_messages', 'suno_generations', or 'training_jobs'")
+    success_url: Optional[str] = Field(None, description="URL to redirect after successful payment")
+    cancel_url: Optional[str] = Field(None, description="URL to redirect if user cancels")
+
+
+class PackCheckoutResponse(BaseModel):
+    """Response with Stripe checkout session URL for pack purchase."""
+    checkout_url: str = Field(..., description="Stripe Checkout URL to redirect user")
+    session_id: str = Field(..., description="Stripe Checkout Session ID")
+
+
+class FeatureCreditPack(BaseModel):
+    """Feature credit pack for pricing display."""
+    id: str = Field(..., description="Pack ID: 'spark', 'flame', 'inferno'")
+    name: str = Field(..., description="Display name")
+    price_usd: float = Field(..., description="Price in USD")
+    chooseable: bool = Field(..., description="Whether user picks one resource (spark) vs gets all (flame/inferno)")
+    options: Optional[dict] = Field(None, description="For chooseable packs: {resource_type: amount}")
+    contents: Optional[dict] = Field(None, description="For bundle packs: {resource_type: amount}")
+    min_tier: str = Field(..., description="Minimum tier required to purchase")
+
+# Resolve forward reference now that FeatureCreditPack is defined
+PricingResponse.model_rebuild()
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# USAGE DASHBOARD SCHEMAS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class UsageResourceDetail(BaseModel):
+    """Per-resource usage detail for the usage dashboard."""
+    counter_type: str = Field(..., description="Counter type identifier")
+    display_name: str = Field(..., description="Human-readable resource name")
+    current_count: int = Field(..., description="Usage count this period")
+    tier_limit: Optional[int] = Field(None, description="Tier allowance (None = unlimited)")
+    feature_credit_bonus: int = Field(0, description="Available feature credits for this resource")
+    effective_limit: Optional[int] = Field(None, description="Tier limit + bonus (None = unlimited)")
+    percentage_used: Optional[float] = Field(None, description="Usage percentage (None if unlimited)")
+    status: str = Field("green", description="Color status: 'green', 'yellow', 'red'")
+
+
+class UsageSummaryResponse(BaseModel):
+    """Complete usage summary for the dashboard."""
+    resources: List[UsageResourceDetail] = Field(..., description="Per-resource usage details")
+    feature_credits: dict = Field(..., description="Available feature credits: {opus_messages, suno_generations, training_jobs}")
+    period: str = Field(..., description="Billing period (YYYY-MM)")
+    total_messages_used: int = Field(..., description="Total messages used this period")
+    total_messages_limit: Optional[int] = Field(None, description="Monthly message limit (None = unlimited)")

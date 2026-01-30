@@ -17,7 +17,7 @@ import stripe
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import get_settings, TIER_LIMITS, CREDIT_PACKS
+from app.config import get_settings, TIER_LIMITS, TIER_HIERARCHY, CREDIT_PACKS
 from app.models.billing import Subscription, CreditBalance, CreditTransaction, WebhookEvent
 from app.models.user import User
 from app.services.pricing import calculate_cost_cents, get_tier_for_model
@@ -136,6 +136,14 @@ class BillingService:
         except Exception:
             usage_counters = {}
 
+        # Feature credits (purchased pack balances)
+        try:
+            from app.services.usage import FeatureCreditService
+            credit_svc = FeatureCreditService(self.db)
+            feature_credits = await credit_svc.get_credit_summary(user_id)
+        except Exception:
+            feature_credits = {"opus_messages": 0, "suno_generations": 0, "training_jobs": 0}
+
         return {
             "tier": subscription.tier,
             "subscription_status": subscription.status,
@@ -165,6 +173,7 @@ class BillingService:
             "at_limit": at_limit,
             "near_limit": near_limit,
             "usage_counters": usage_counters,
+            "feature_credits": feature_credits,
         }
 
     # ═══════════════════════════════════════════════════════════════════════════
@@ -610,6 +619,79 @@ class BillingService:
         except stripe.StripeError as e:
             logger.error(f"Stripe checkout error: {e}")
             raise
+
+    async def create_pack_checkout(
+        self,
+        user_id: UUID,
+        pack_id: str,
+        resource_type: Optional[str],
+        success_url: str,
+        cancel_url: str,
+    ) -> dict:
+        """
+        Create a Stripe Checkout session for a feature credit pack purchase.
+
+        Args:
+            user_id: User making the purchase.
+            pack_id: "spark", "flame", or "inferno"
+            resource_type: For spark: which resource to get. None for bundles.
+            success_url: URL to redirect after payment.
+            cancel_url: URL to redirect on cancel.
+
+        Returns:
+            Dict with checkout_url and session_id.
+        """
+        pack = CREDIT_PACKS.get(pack_id)
+        if not pack:
+            raise ValueError(f"Unknown pack: {pack_id}")
+
+        # Validate tier requirement
+        subscription = await self.get_or_create_subscription(user_id)
+        tier = subscription.tier
+        min_tier = pack.get("min_tier", "adept")
+        if TIER_HIERARCHY.get(tier, 0) < TIER_HIERARCHY.get(min_tier, 2):
+            raise ValueError(f"Feature packs require {min_tier} tier or higher. Current tier: {tier}")
+
+        # Validate resource_type for chooseable packs (spark)
+        if pack.get("chooseable"):
+            if not resource_type or resource_type not in pack.get("options", {}):
+                raise ValueError(f"Spark pack requires resource_type: {list(pack.get('options', {}).keys())}")
+
+        # Get Stripe price ID
+        price_map = {
+            "spark": settings.stripe_price_pack_spark,
+            "flame": settings.stripe_price_pack_flame,
+            "inferno": settings.stripe_price_pack_inferno,
+        }
+        price_id = price_map.get(pack_id)
+        if not price_id:
+            raise ValueError(f"Stripe price not configured for pack: {pack_id}")
+
+        # Ensure valid Stripe customer
+        user = await self.db.get(User, user_id)
+        customer_id = await self._ensure_valid_stripe_customer(subscription, user)
+
+        # Create Stripe checkout session
+        session = stripe.checkout.Session.create(
+            customer=customer_id,
+            mode="payment",
+            line_items=[{"price": price_id, "quantity": 1}],
+            metadata={
+                "user_id": str(user_id),
+                "pack": pack_id,
+                "resource_type": resource_type or "",
+                "type": "feature_pack",
+            },
+            success_url=success_url,
+            cancel_url=cancel_url,
+        )
+
+        logger.info(f"Created pack checkout for user {user_id}: pack={pack_id} resource={resource_type}")
+
+        return {
+            "checkout_url": session.url,
+            "session_id": session.id,
+        }
 
     async def create_portal_session(
         self,

@@ -21,6 +21,7 @@ from app.models.jam import JamSession, JamParticipant, JamTrack, JamMessage
 from app.models.feedback import BugReport
 from app.models.nursery import NurseryDataset, NurseryTrainingJob, NurseryModelRecord, NurseryApprentice
 from app.models.usage import UsageCounter
+from app.models.feature_credit import FeatureCreditBalance
 
 # User references all of the above, so import LAST
 from app.models.user import User
@@ -56,5 +57,6 @@ __all__ = [
     "NurseryModelRecord",
     "NurseryApprentice",
     "UsageCounter",
+    "FeatureCreditBalance",
     # "UserVector",  # Temp disabled
 ]

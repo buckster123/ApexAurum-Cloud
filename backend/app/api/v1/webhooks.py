@@ -18,6 +18,7 @@ from app.database import get_db_context
 from app.config import get_settings, TIER_LIMITS, CREDIT_PACKS
 from app.models.billing import Subscription
 from app.services.billing import BillingService
+from app.services.usage import FeatureCreditService
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -155,24 +156,42 @@ async def handle_checkout_completed(data: dict, billing: BillingService, db: Asy
     user_id = UUID(user_id_str)
 
     if mode == "payment":
-        # One-time payment (credits)
         pack = metadata.get("pack")
-        credits_str = metadata.get("credits")
+        pack_type = metadata.get("type", "")
 
-        if pack and credits_str:
-            credits = int(credits_str)
-            pack_config = CREDIT_PACKS.get(pack, {})
+        # NEW: Feature credit packs (Spark/Flame/Inferno)
+        if pack in ("spark", "flame", "inferno") or pack_type == "feature_pack":
+            resource_type = metadata.get("resource_type") or None
+            if resource_type == "":
+                resource_type = None
 
-            await billing.add_credits(
+            credit_svc = FeatureCreditService(db)
+            await credit_svc.add_pack_credits(
                 user_id=user_id,
-                amount_cents=credits,
-                transaction_type="purchase",
-                description=f"Credit purchase: {pack_config.get('price_usd', 0):.2f} USD for {credits} credits",
+                pack_id=pack,
+                resource_type=resource_type,
                 stripe_payment_intent_id=data.get("payment_intent"),
-                metadata={"pack": pack},
             )
+            await db.commit()
+            logger.info(f"Feature pack credits added for user {user_id}: pack={pack} resource={resource_type}")
 
-            logger.info(f"Added {credits} credits for user {user_id} (pack: {pack})")
+        # LEGACY: Old cents-based credits (small/large packs)
+        elif pack in ("small", "large"):
+            credits_str = metadata.get("credits")
+            if credits_str:
+                credits = int(credits_str)
+                pack_config = CREDIT_PACKS.get(pack, {})
+
+                await billing.add_credits(
+                    user_id=user_id,
+                    amount_cents=credits,
+                    transaction_type="purchase",
+                    description=f"Credit purchase: {pack_config.get('price_usd', 0):.2f} USD for {credits} credits",
+                    stripe_payment_intent_id=data.get("payment_intent"),
+                    metadata={"pack": pack},
+                )
+
+                logger.info(f"Added {credits} credits for user {user_id} (pack: {pack})")
 
     elif mode == "subscription":
         # Subscription checkout - handled by subscription.created event

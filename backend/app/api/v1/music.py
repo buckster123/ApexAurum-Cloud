@@ -194,13 +194,17 @@ async def generate_music(
     await db.commit()
     await db.refresh(task)
 
-    # Increment suno generation counter
+    # Increment suno generation counter and deduct feature credit if over limit
     try:
         from app.services.usage import UsageService
         usage_service = UsageService(db)
         await usage_service.increment_usage(user.id, "suno_generations")
+        if suno_limit is not None and suno_limit > 0:
+            await usage_service.deduct_feature_credit_if_over_limit(
+                user.id, "suno_generations", suno_limit
+            )
     except Exception as e:
-        logger.warning(f"Suno counter increment failed (non-fatal): {e}")
+        logger.warning(f"Suno counter/credit deduction failed (non-fatal): {e}")
 
     if request.stream:
         # SSE streaming response

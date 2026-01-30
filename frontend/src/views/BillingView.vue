@@ -13,6 +13,7 @@ const loadingAction = ref(null)
 const checkoutError = ref(null)
 const couponCode = ref('')
 const couponMessage = ref(null)
+const selectedResource = ref('opus_messages')
 
 // Check for success redirect
 const checkoutSuccess = computed(() => route.query.session_id)
@@ -100,6 +101,33 @@ async function redeemCoupon() {
   }
 }
 
+async function buyPack(packId, resourceType = null) {
+  loadingAction.value = `pack-${packId}`
+  try {
+    await billing.createPackCheckout(packId, resourceType)
+  } catch (e) {
+    console.error('Pack checkout error:', e)
+    checkoutError.value = e.response?.data?.detail || 'Pack checkout failed. Please try again.'
+    setTimeout(() => checkoutError.value = null, 5000)
+  } finally {
+    loadingAction.value = null
+  }
+}
+
+function getBarColor(used, limit) {
+  if (!limit) return 'bg-green-500'
+  const pct = (used / limit) * 100
+  if (pct >= 90) return 'bg-red-500'
+  if (pct >= 60) return 'bg-yellow-500'
+  return 'bg-green-500'
+}
+
+async function fetchUsageIfNeeded() {
+  if (!billing.usageSummary) {
+    await billing.fetchUsageSummary()
+  }
+}
+
 function formatDate(dateStr) {
   if (!dateStr) return '-'
   return new Date(dateStr).toLocaleDateString('en-US', {
@@ -169,10 +197,25 @@ function formatDate(dateStr) {
             <div class="text-xl font-semibold text-gold">Unlimited</div>
           </div>
 
-          <!-- Credits -->
-          <div class="text-center">
+          <!-- Feature Credits -->
+          <div v-if="billing.hasFeatureCredits" class="text-center">
+            <div class="text-sm text-gray-400 mb-1">Feature Credits</div>
+            <div class="text-sm">
+              <span class="text-gold font-semibold">{{ billing.featureCredits.opus_messages }}</span>
+              <span class="text-gray-500 text-xs"> Opus</span>
+              <span class="mx-1 text-gray-600">|</span>
+              <span class="text-gold font-semibold">{{ billing.featureCredits.suno_generations }}</span>
+              <span class="text-gray-500 text-xs"> Suno</span>
+              <span class="mx-1 text-gray-600">|</span>
+              <span class="text-gold font-semibold">{{ billing.featureCredits.training_jobs }}</span>
+              <span class="text-gray-500 text-xs"> Train</span>
+            </div>
+          </div>
+
+          <!-- Legacy Credits -->
+          <div v-if="billing.status.credit_balance_cents > 0" class="text-center">
             <div class="text-sm text-gray-400 mb-1">Credits</div>
-            <div class="text-xl font-semibold">${{ billing.status.credit_balance_usd.toFixed(2) }}</div>
+            <div class="text-sm font-semibold">${{ billing.status.credit_balance_usd.toFixed(2) }}</div>
           </div>
 
           <!-- Manage Button -->
@@ -199,31 +242,31 @@ function formatDate(dateStr) {
         <button
           @click="activeTab = 'plans'"
           :class="[
-            'px-6 py-2 rounded-md transition-colors',
+            'px-4 py-2 rounded-lg text-sm transition-colors',
             activeTab === 'plans' ? 'bg-gold text-black font-medium' : 'text-gray-400 hover:text-white'
           ]"
-        >
-          Subscription Plans
-        </button>
+        >Subscription Plans</button>
         <button
-          @click="activeTab = 'credits'"
+          @click="activeTab = 'packs'; fetchUsageIfNeeded()"
           :class="[
-            'px-6 py-2 rounded-md transition-colors',
-            activeTab === 'credits' ? 'bg-gold text-black font-medium' : 'text-gray-400 hover:text-white'
+            'px-4 py-2 rounded-lg text-sm transition-colors',
+            activeTab === 'packs' ? 'bg-gold text-black font-medium' : 'text-gray-400 hover:text-white'
           ]"
-        >
-          Credit Packs
-        </button>
+        >Feature Packs</button>
         <button
-          v-if="auth.isAuthenticated"
+          @click="activeTab = 'usage'; fetchUsageIfNeeded()"
+          :class="[
+            'px-4 py-2 rounded-lg text-sm transition-colors',
+            activeTab === 'usage' ? 'bg-gold text-black font-medium' : 'text-gray-400 hover:text-white'
+          ]"
+        >Usage</button>
+        <button
           @click="activeTab = 'history'; billing.fetchTransactions()"
           :class="[
-            'px-6 py-2 rounded-md transition-colors',
+            'px-4 py-2 rounded-lg text-sm transition-colors',
             activeTab === 'history' ? 'bg-gold text-black font-medium' : 'text-gray-400 hover:text-white'
           ]"
-        >
-          History
-        </button>
+        >History</button>
       </div>
     </div>
 
@@ -310,48 +353,124 @@ function formatDate(dateStr) {
       </div>
     </div>
 
-    <!-- Credits Tab -->
-    <div v-if="activeTab === 'credits'" class="max-w-2xl mx-auto">
+    <!-- Feature Packs Tab -->
+    <div v-if="activeTab === 'packs'" class="max-w-3xl mx-auto">
       <div class="text-center mb-8">
-        <h2 class="text-2xl font-bold mb-2">Credit Packs</h2>
+        <h2 class="text-2xl font-bold mb-2">Feature Packs</h2>
         <p class="text-gray-400">
-          Credits are used when you exceed your monthly message limit.
-          They never expire and can be used with any model.
+          Purchase additional Opus messages, Suno generations, and training jobs.
+          Credits roll over once (expire at end of next billing period).
         </p>
       </div>
 
-      <div class="grid md:grid-cols-2 gap-6">
-        <div
-          v-for="pack in (billing.pricing?.credit_packs || [])"
-          :key="pack.id"
-          class="bg-surface rounded-xl p-6 border border-gray-700 hover:border-gold/30 transition-all"
-        >
-          <div class="text-center">
-            <h3 class="text-xl font-bold mb-1">{{ pack.name }}</h3>
-            <div class="text-3xl font-bold text-gold mb-2">${{ pack.price_usd }}</div>
-            <div class="text-gray-400 mb-4">
-              {{ pack.credits.toLocaleString() }} credits
-              <span v-if="pack.bonus_credits > 0" class="text-green-400">
-                + {{ pack.bonus_credits.toLocaleString() }} bonus!
-              </span>
-            </div>
+      <!-- Tier Gate -->
+      <div v-if="!billing.canBuyPacks" class="text-center py-8">
+        <p class="text-gray-400 mb-4">Feature Packs are available for Adept members and above.</p>
+        <button @click="activeTab = 'plans'" class="px-6 py-2 bg-gold text-black rounded-lg font-medium hover:bg-gold/90">
+          View Plans
+        </button>
+      </div>
 
+      <div v-else class="space-y-6">
+        <!-- Feature Credits Summary -->
+        <div v-if="billing.hasFeatureCredits" class="bg-surface rounded-xl p-4 border border-gray-700 mb-6">
+          <h3 class="text-sm font-medium text-gray-400 mb-3">Your Feature Credits</h3>
+          <div class="grid grid-cols-3 gap-4 text-center">
+            <div>
+              <div class="text-xl font-bold text-gold">{{ billing.featureCredits.opus_messages }}</div>
+              <div class="text-xs text-gray-400">Opus Messages</div>
+            </div>
+            <div>
+              <div class="text-xl font-bold text-gold">{{ billing.featureCredits.suno_generations }}</div>
+              <div class="text-xs text-gray-400">Suno Generations</div>
+            </div>
+            <div>
+              <div class="text-xl font-bold text-gold">{{ billing.featureCredits.training_jobs }}</div>
+              <div class="text-xs text-gray-400">Training Jobs</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Pack Cards -->
+        <div class="grid md:grid-cols-3 gap-6">
+          <!-- Spark Pack -->
+          <div class="bg-surface rounded-xl p-6 border border-gray-700 hover:border-gold/30 transition-all">
+            <div class="text-center mb-4">
+              <h3 class="text-xl font-bold mb-1">Spark</h3>
+              <div class="text-3xl font-bold text-gold mb-1">$5</div>
+              <p class="text-sm text-gray-400">Choose one resource</p>
+            </div>
+            <div class="space-y-2 mb-4">
+              <label class="flex items-center gap-3 p-2 rounded-lg cursor-pointer border transition-colors"
+                     :class="selectedResource === 'opus_messages' ? 'border-gold/50 bg-gold/10' : 'border-gray-700'">
+                <input type="radio" v-model="selectedResource" value="opus_messages" class="accent-yellow-500" />
+                <span class="text-sm">50 Opus Messages</span>
+              </label>
+              <label class="flex items-center gap-3 p-2 rounded-lg cursor-pointer border transition-colors"
+                     :class="selectedResource === 'suno_generations' ? 'border-gold/50 bg-gold/10' : 'border-gray-700'">
+                <input type="radio" v-model="selectedResource" value="suno_generations" class="accent-yellow-500" />
+                <span class="text-sm">20 Suno Generations</span>
+              </label>
+              <label class="flex items-center gap-3 p-2 rounded-lg cursor-pointer border transition-colors"
+                     :class="selectedResource === 'training_jobs' ? 'border-gold/50 bg-gold/10' : 'border-gray-700'">
+                <input type="radio" v-model="selectedResource" value="training_jobs" class="accent-yellow-500" />
+                <span class="text-sm">2 Training Jobs</span>
+              </label>
+            </div>
             <button
-              @click="buyCredits(pack.id)"
-              :disabled="loadingAction === `credits-${pack.id}`"
+              @click="buyPack('spark', selectedResource)"
+              :disabled="loadingAction === 'pack-spark'"
               class="w-full py-3 bg-gold text-black rounded-lg font-medium hover:bg-gold/90 transition-colors disabled:opacity-50"
             >
-              {{ loadingAction === `credits-${pack.id}` ? 'Processing...' : 'Buy Now' }}
+              {{ loadingAction === 'pack-spark' ? 'Processing...' : 'Buy Spark' }}
+            </button>
+          </div>
+
+          <!-- Flame Pack -->
+          <div class="bg-surface rounded-xl p-6 border border-gold/30 hover:border-gold/50 transition-all">
+            <div class="text-center mb-4">
+              <h3 class="text-xl font-bold mb-1">Flame</h3>
+              <div class="text-3xl font-bold text-gold mb-1">$15</div>
+              <p class="text-sm text-gray-400">All three resources</p>
+            </div>
+            <div class="space-y-2 mb-4 text-sm text-gray-300">
+              <div class="flex justify-between"><span>Opus Messages</span><span class="text-gold font-medium">150</span></div>
+              <div class="flex justify-between"><span>Suno Generations</span><span class="text-gold font-medium">50</span></div>
+              <div class="flex justify-between"><span>Training Jobs</span><span class="text-gold font-medium">5</span></div>
+            </div>
+            <button
+              @click="buyPack('flame')"
+              :disabled="loadingAction === 'pack-flame'"
+              class="w-full py-3 bg-gold text-black rounded-lg font-medium hover:bg-gold/90 transition-colors disabled:opacity-50"
+            >
+              {{ loadingAction === 'pack-flame' ? 'Processing...' : 'Buy Flame' }}
+            </button>
+          </div>
+
+          <!-- Inferno Pack -->
+          <div class="bg-surface rounded-xl p-6 border border-gray-700 hover:border-gold/30 transition-all">
+            <div class="text-center mb-4">
+              <h3 class="text-xl font-bold mb-1">Inferno</h3>
+              <div class="text-3xl font-bold text-gold mb-1">$40</div>
+              <p class="text-sm text-gray-400">All three resources</p>
+            </div>
+            <div class="space-y-2 mb-4 text-sm text-gray-300">
+              <div class="flex justify-between"><span>Opus Messages</span><span class="text-gold font-medium">500</span></div>
+              <div class="flex justify-between"><span>Suno Generations</span><span class="text-gold font-medium">200</span></div>
+              <div class="flex justify-between"><span>Training Jobs</span><span class="text-gold font-medium">15</span></div>
+            </div>
+            <button
+              @click="buyPack('inferno')"
+              :disabled="loadingAction === 'pack-inferno'"
+              class="w-full py-3 bg-gold text-black rounded-lg font-medium hover:bg-gold/90 transition-colors disabled:opacity-50"
+            >
+              {{ loadingAction === 'pack-inferno' ? 'Processing...' : 'Buy Inferno' }}
             </button>
           </div>
         </div>
       </div>
 
-      <div class="mt-8 text-center text-sm text-gray-500">
-        Credits are billed once and never expire. Use them for any model beyond your subscription limit.
-      </div>
-
-      <!-- Coupon Redemption Section -->
+      <!-- Coupon Redemption Section (keep from old code) -->
       <div class="mt-12 max-w-md mx-auto">
         <div class="bg-surface rounded-xl p-6 border border-gray-700">
           <h3 class="text-lg font-semibold mb-4 text-center">Have a Coupon?</h3>
@@ -374,7 +493,6 @@ function formatDate(dateStr) {
             </button>
           </div>
 
-          <!-- Coupon Result Message -->
           <div
             v-if="couponMessage"
             :class="[
@@ -386,6 +504,117 @@ function formatDate(dateStr) {
           >
             {{ couponMessage.text }}
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Usage Tab -->
+    <div v-if="activeTab === 'usage'" class="max-w-3xl mx-auto">
+      <div class="text-center mb-8">
+        <h2 class="text-2xl font-bold mb-2">Usage Dashboard</h2>
+        <p class="text-gray-400">
+          Track your usage across all features this billing period.
+        </p>
+      </div>
+
+      <div v-if="!billing.usageSummary" class="text-center py-8 text-gray-400">
+        Loading usage data...
+      </div>
+
+      <div v-else>
+        <!-- Overall Messages -->
+        <div class="bg-surface rounded-xl p-6 border border-gray-700 mb-6">
+          <div class="flex justify-between items-center mb-2">
+            <h3 class="font-semibold">Total Messages</h3>
+            <span class="text-sm text-gray-400">
+              {{ billing.usageSummary.total_messages_used }}
+              {{ billing.usageSummary.total_messages_limit ? `/ ${billing.usageSummary.total_messages_limit.toLocaleString()}` : '(Unlimited)' }}
+            </span>
+          </div>
+          <div class="w-full h-3 bg-gray-700 rounded-full overflow-hidden">
+            <div
+              v-if="billing.usageSummary.total_messages_limit"
+              class="h-full transition-all duration-500 rounded-full"
+              :class="getBarColor(billing.usageSummary.total_messages_used, billing.usageSummary.total_messages_limit)"
+              :style="{ width: Math.min(100, (billing.usageSummary.total_messages_used / billing.usageSummary.total_messages_limit) * 100) + '%' }"
+            ></div>
+          </div>
+        </div>
+
+        <!-- Per-Resource Breakdown -->
+        <div class="space-y-4">
+          <div
+            v-for="resource in billing.usageSummary.resources"
+            :key="resource.counter_type"
+            class="bg-surface rounded-xl p-4 border border-gray-700"
+          >
+            <div class="flex justify-between items-center mb-2">
+              <span class="font-medium text-sm">{{ resource.display_name }}</span>
+              <span class="text-sm text-gray-400">
+                {{ resource.current_count }}
+                <template v-if="resource.effective_limit !== null">
+                  / {{ resource.effective_limit.toLocaleString() }}
+                  <span v-if="resource.feature_credit_bonus > 0" class="text-gold text-xs">
+                    (+{{ resource.feature_credit_bonus }} credits)
+                  </span>
+                </template>
+                <template v-else>
+                  (Unlimited)
+                </template>
+              </span>
+            </div>
+            <div v-if="resource.effective_limit !== null" class="w-full h-2 bg-gray-700 rounded-full overflow-hidden">
+              <div
+                class="h-full transition-all duration-500 rounded-full"
+                :class="{
+                  'bg-green-500': resource.status === 'green',
+                  'bg-yellow-500': resource.status === 'yellow',
+                  'bg-red-500': resource.status === 'red',
+                }"
+                :style="{ width: Math.min(100, resource.percentage_used || 0) + '%' }"
+              ></div>
+            </div>
+            <div v-if="resource.percentage_used > 80 && resource.effective_limit !== null" class="mt-1 flex justify-between items-center">
+              <span class="text-xs" :class="resource.percentage_used >= 100 ? 'text-red-400' : 'text-amber-400'">
+                {{ resource.percentage_used >= 100 ? 'Limit reached' : 'Approaching limit' }}
+              </span>
+              <button
+                v-if="billing.canBuyPacks"
+                @click="activeTab = 'packs'"
+                class="text-xs text-gold hover:underline"
+              >
+                Buy More
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Feature Credits Remaining -->
+        <div class="mt-8 bg-surface rounded-xl p-6 border border-gray-700">
+          <h3 class="font-semibold mb-4">Feature Credits Remaining</h3>
+          <div class="grid grid-cols-3 gap-4 text-center">
+            <div>
+              <div class="text-2xl font-bold text-gold">{{ billing.featureCredits.opus_messages }}</div>
+              <div class="text-xs text-gray-400">Opus Messages</div>
+            </div>
+            <div>
+              <div class="text-2xl font-bold text-gold">{{ billing.featureCredits.suno_generations }}</div>
+              <div class="text-xs text-gray-400">Suno Generations</div>
+            </div>
+            <div>
+              <div class="text-2xl font-bold text-gold">{{ billing.featureCredits.training_jobs }}</div>
+              <div class="text-xs text-gray-400">Training Jobs</div>
+            </div>
+          </div>
+          <div v-if="billing.canBuyPacks" class="mt-4 text-center">
+            <button @click="activeTab = 'packs'" class="text-sm text-gold hover:underline">
+              Purchase more credits
+            </button>
+          </div>
+        </div>
+
+        <div class="mt-4 text-center text-xs text-gray-500">
+          Period: {{ billing.usageSummary.period }}
         </div>
       </div>
     </div>

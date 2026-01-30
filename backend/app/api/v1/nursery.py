@@ -344,6 +344,14 @@ async def start_training(
     db.add(job)
     await db.flush()
 
+    # Track training job usage
+    try:
+        from app.services.usage import UsageService
+        usage_svc = UsageService(db)
+        await usage_svc.increment_usage(user.id, "nursery_training_jobs")
+    except Exception as e:
+        logger.warning(f"Training job counter failed (non-fatal): {e}")
+
     # Update apprentice status if linked
     if body.apprentice_id:
         ap_result = await db.execute(

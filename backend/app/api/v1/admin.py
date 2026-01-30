@@ -240,6 +240,48 @@ async def update_user_tier(
     return {"status": "updated", "user_id": str(user_id), "tier": request.tier}
 
 
+@router.get("/users/{user_id}/usage")
+async def get_user_usage(
+    user_id: UUID,
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get detailed usage summary for a specific user (admin only)."""
+    from app.services.usage import UsageService, FeatureCreditService, get_current_period
+    from app.config import TIER_LIMITS
+
+    # Get user's tier
+    result = await db.execute(
+        select(Subscription).where(Subscription.user_id == user_id)
+    )
+    subscription = result.scalar_one_or_none()
+    tier = subscription.tier if subscription else "free_trial"
+    tier_config = TIER_LIMITS.get(tier, TIER_LIMITS["free_trial"])
+
+    # Get usage counters
+    usage_svc = UsageService(db)
+    counters = await usage_svc.get_usage_summary(user_id)
+
+    # Get feature credits
+    credit_svc = FeatureCreditService(db)
+    feature_credits = await credit_svc.get_credit_summary(user_id)
+
+    return {
+        "user_id": str(user_id),
+        "tier": tier,
+        "period": get_current_period(),
+        "counters": counters,
+        "feature_credits": feature_credits,
+        "tier_limits": {
+            "messages_per_month": tier_config.get("messages_per_month"),
+            "opus_messages_per_month": tier_config.get("opus_messages_per_month"),
+            "council_sessions_per_month": tier_config.get("council_sessions_per_month"),
+            "suno_generations_per_month": tier_config.get("suno_generations_per_month"),
+            "jam_sessions_per_month": tier_config.get("jam_sessions_per_month"),
+        },
+    }
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # Stats
 # ═══════════════════════════════════════════════════════════════════════════════

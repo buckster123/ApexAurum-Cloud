@@ -65,6 +65,11 @@ class Settings(BaseSettings):
     stripe_price_credits_500: Optional[str] = None  # $5 for 500 credits
     stripe_price_credits_2500: Optional[str] = None  # $20 for 2500 credits
 
+    # Feature pack prices (one-time payments)
+    stripe_price_pack_spark: Optional[str] = None
+    stripe_price_pack_flame: Optional[str] = None
+    stripe_price_pack_inferno: Optional[str] = None
+
     # Embedding config (for vector search)
     # Providers: "local" (FastEmbed), "openai", or "voyage"
     embedding_provider: str = "local"  # Default to local for privacy
@@ -262,16 +267,39 @@ TIER_LIMITS = {
 # Tier hierarchy for >= comparisons
 TIER_HIERARCHY = {"free_trial": 0, "seeker": 1, "adept": 2, "opus": 3, "azothic": 4}
 
-# Credit packs available for purchase
+# Feature credit packs (replaces old cents-based credit system)
 CREDIT_PACKS = {
-    "small": {
+    "spark": {
+        "name": "Spark",
         "price_usd": 5.00,
-        "credits": 500,
-        "bonus": 0,
+        "chooseable": True,
+        "options": {
+            "opus_messages": 50,
+            "suno_generations": 20,
+            "training_jobs": 2,
+        },
+        "min_tier": "adept",
     },
-    "large": {
-        "price_usd": 20.00,
-        "credits": 2000,
-        "bonus": 500,  # 25% bonus = 2500 total
+    "flame": {
+        "name": "Flame",
+        "price_usd": 15.00,
+        "chooseable": False,
+        "contents": {
+            "opus_messages": 150,
+            "suno_generations": 50,
+            "training_jobs": 5,
+        },
+        "min_tier": "adept",
+    },
+    "inferno": {
+        "name": "Inferno",
+        "price_usd": 40.00,
+        "chooseable": False,
+        "contents": {
+            "opus_messages": 500,
+            "suno_generations": 200,
+            "training_jobs": 15,
+        },
+        "min_tier": "adept",
     },
 }

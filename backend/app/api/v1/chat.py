@@ -1189,6 +1189,21 @@ Work together to create something beautiful!
                         )
                         await db.commit()
                         logger.debug(f"Recorded streaming usage: {total_input_tokens}in/{total_output_tokens}out tokens")
+
+                        # Deduct feature credit if over tier limit (Opus messages)
+                        if "opus" in model.lower():
+                            try:
+                                from app.services.usage import UsageService
+                                usage_svc = UsageService(db)
+                                await usage_svc.increment_usage(user.id, "messages_opus")
+                                opus_limit = tier_config.get("opus_messages_per_month", 0)
+                                if opus_limit is not None and opus_limit > 0:
+                                    await usage_svc.deduct_feature_credit_if_over_limit(
+                                        user.id, "messages_opus", opus_limit
+                                    )
+                                await db.commit()
+                            except Exception as e:
+                                logger.warning(f"Opus feature credit deduction failed (non-fatal): {e}")
                     except Exception as e:
                         logger.error(f"Failed to record streaming usage: {e}")
 
@@ -1353,6 +1368,21 @@ Work together to create something beautiful!
                     message_id=assistant_msg_id,
                 )
                 await db.commit()
+
+                # Deduct feature credit if over tier limit (Opus messages)
+                if "opus" in model.lower():
+                    try:
+                        from app.services.usage import UsageService
+                        usage_svc = UsageService(db)
+                        await usage_svc.increment_usage(user.id, "messages_opus")
+                        opus_limit = tier_config.get("opus_messages_per_month", 0)
+                        if opus_limit is not None and opus_limit > 0:
+                            await usage_svc.deduct_feature_credit_if_over_limit(
+                                user.id, "messages_opus", opus_limit
+                            )
+                        await db.commit()
+                    except Exception as e:
+                        logger.warning(f"Opus feature credit deduction failed (non-fatal): {e}")
 
             # Store chat exchange as neural memories (for Neo-Cortex visualization)
             if assistant_content and len(assistant_content) > 10:
