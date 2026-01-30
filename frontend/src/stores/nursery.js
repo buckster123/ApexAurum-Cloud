@@ -253,7 +253,7 @@ export const useNurseryStore = defineStore('nursery', () => {
 
   async function checkTogetherAccess() {
     try {
-      const response = await api.get('/api/v1/api-key/status')
+      const response = await api.get('/api/v1/user/api-key/status')
       const providers = response.data.providers || response.data || {}
       const together = providers.together || providers['together'] || {}
       hasTogetherAccess.value = !!(together.configured || together.has_platform_key || together.has_platform_grant)
