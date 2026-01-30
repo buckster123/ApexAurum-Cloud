@@ -569,11 +569,9 @@ async def init_db():
                 CONSTRAINT uq_usage_counter_user_type_period UNIQUE (user_id, counter_type, period)
             );
             """,
-            """
-            CREATE INDEX IF NOT EXISTS idx_usage_counters_user_id ON usage_counters(user_id);
-            CREATE INDEX IF NOT EXISTS idx_usage_counters_user_period ON usage_counters(user_id, period);
-            CREATE INDEX IF NOT EXISTS idx_usage_counters_user_type ON usage_counters(user_id, counter_type);
-            """,
+            "CREATE INDEX IF NOT EXISTS idx_usage_counters_user_id ON usage_counters(user_id);",
+            "CREATE INDEX IF NOT EXISTS idx_usage_counters_user_period ON usage_counters(user_id, period);",
+            "CREATE INDEX IF NOT EXISTS idx_usage_counters_user_type ON usage_counters(user_id, counter_type);",
         ]
 
         from sqlalchemy import text
