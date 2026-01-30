@@ -84,7 +84,7 @@ let wsAuthFailed = false
 
 function connectWebSocket() {
   // Don't connect without auth token - backend requires it (closes with 1008)
-  const token = localStorage.getItem('access_token')
+  const token = localStorage.getItem('accessToken')
   if (!token || token === 'undefined' || token === 'null') {
     status.connection = 'no-auth'
     return
