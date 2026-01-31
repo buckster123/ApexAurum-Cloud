@@ -433,9 +433,11 @@ export function useVillage() {
     ws.onclose = (event) => {
       status.connection = 'disconnected'
 
-      // 1008 = Policy Violation (auth failure), 1006 = Abnormal (403 rejection)
-      if (event.code === 1008) {
-        console.log('Village WebSocket auth rejected, not retrying')
+      // 1008 = Policy Violation (auth failure from backend)
+      // 1006 = Abnormal closure (happens when HTTP upgrade is rejected with 403)
+      const currentToken = localStorage.getItem('accessToken')
+      if (event.code === 1008 || (event.code === 1006 && (!currentToken || isTokenExpired(currentToken)))) {
+        console.log(`Village WebSocket auth rejected (code ${event.code}), not retrying`)
         wsAuthFailed = true
         status.connection = 'no-auth'
         return

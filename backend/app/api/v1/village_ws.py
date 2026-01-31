@@ -63,6 +63,10 @@ async def village_websocket(websocket: WebSocket):
     """
     user = await authenticate_ws(websocket)
     if not user:
+        # Accept first so the client receives the 1008 close code.
+        # Without accept(), Starlette sends 403 HTTP and the browser
+        # sees close code 1006, bypassing frontend auth-failure detection.
+        await websocket.accept()
         await websocket.close(code=1008, reason="Unauthorized")
         return
 
