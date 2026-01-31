@@ -18,7 +18,7 @@ const council = useCouncilStore()
 // UI State
 const showNewSession = ref(false)
 const sidebarCollapsed = ref(false)
-const autoRoundsToRun = ref(10)  // Rounds to run in auto mode
+const autoRoundsToRun = ref(3)  // Rounds to run in auto mode
 const showAddAgentDropdown = ref(false)
 
 // Computed
@@ -68,6 +68,7 @@ onUnmounted(() => {
 async function handleCreateSession() {
   const session = await council.createSession()
   if (session) {
+    autoRoundsToRun.value = council.newSessionRounds
     showNewSession.value = false
     router.push(`/council/${session.id}`)
   }
@@ -293,7 +294,7 @@ function getStateClass(state) {
     <!-- Main Content -->
     <main class="flex-1 flex flex-col overflow-hidden">
       <!-- New Session Form -->
-      <div v-if="!hasSession" class="flex-1 flex items-center justify-center p-8">
+      <div v-if="!hasSession" class="flex-1 flex items-start justify-center overflow-y-auto p-8 pt-6">
         <div class="w-full max-w-2xl">
           <div class="text-center mb-8">
             <h1 class="text-3xl font-serif font-bold text-gold mb-2">The Council Convenes</h1>
@@ -389,23 +390,34 @@ function getStateClass(state) {
               </div>
             </div>
 
-            <!-- Max Rounds -->
+            <!-- Rounds -->
             <div>
               <label class="block text-sm font-medium text-gray-300 mb-2">
-                Maximum Rounds: {{ council.newSessionMaxRounds }}
+                Rounds
               </label>
-              <input
-                type="range"
-                v-model.number="council.newSessionMaxRounds"
-                min="1"
-                max="200"
-                class="w-full accent-gold"
-              />
-              <div class="flex justify-between text-xs text-gray-500 mt-1">
-                <span>1</span>
-                <span>100</span>
-                <span>200</span>
+              <div class="flex items-center gap-2">
+                <input
+                  type="number"
+                  v-model.number="council.newSessionRounds"
+                  min="1"
+                  max="200"
+                  class="w-20 px-3 py-2 bg-apex-dark border border-apex-border rounded-lg text-white text-center focus:outline-none focus:border-gold"
+                />
+                <button
+                  v-for="n in [3, 5, 10, 25]"
+                  :key="n"
+                  @click="council.newSessionRounds = n"
+                  :class="[
+                    'px-3 py-2 rounded-lg text-sm transition-all',
+                    council.newSessionRounds === n
+                      ? 'bg-gold/20 text-gold border border-gold/50'
+                      : 'bg-apex-dark text-gray-400 border border-apex-border hover:border-gray-600'
+                  ]"
+                >
+                  {{ n }}
+                </button>
               </div>
+              <p class="text-xs text-gray-500 mt-1">You can always run more rounds after.</p>
             </div>
 
             <!-- Error Display -->

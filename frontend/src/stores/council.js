@@ -74,7 +74,8 @@ export const useCouncilStore = defineStore('council', () => {
   // Form state for creating new sessions
   const newSessionTopic = ref('')
   const newSessionAgents = ref(['AZOTH', 'VAJRA', 'ELYSIAN'])
-  const newSessionMaxRounds = ref(10)
+  const newSessionRounds = ref(3)      // Per-batch round count (user-facing)
+  const newSessionMaxRounds = ref(200)  // Session ceiling (hidden from user)
   const newSessionModel = ref('claude-haiku-4-5-20251001')
 
   // Auto-deliberation state
@@ -764,6 +765,7 @@ export const useCouncilStore = defineStore('council', () => {
     // Form state
     newSessionTopic,
     newSessionAgents,
+    newSessionRounds,
     newSessionMaxRounds,
     newSessionModel,
     // Auto-deliberation state
