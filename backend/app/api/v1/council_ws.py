@@ -341,6 +341,7 @@ async def run_streaming_deliberation(
                             agent_village_memories[agent.agent_id] = ""
                     except Exception as e:
                         logger.warning(f"Failed to get village memories for {agent.agent_id}: {e}")
+                        await db.rollback()  # Unpoison transaction after SQL failure
                         agent_village_memories[agent.agent_id] = ""
 
                 # Token callback -- sends each token to the WebSocket
@@ -448,6 +449,8 @@ async def run_streaming_deliberation(
                 except Exception as commit_err:
                     logger.error(f"Council WS round {round_number} commit failed: {commit_err}")
                     await db.rollback()
+                    # Refresh session after rollback to avoid MissingGreenlet on expired attrs
+                    await db.refresh(session)
                     await send_event(websocket, {
                         "type": "error",
                         "message": f"Failed to save round {round_number} data",

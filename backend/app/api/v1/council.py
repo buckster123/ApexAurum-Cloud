@@ -606,6 +606,7 @@ async def execute_round(
                 agent_village_memories[agent.agent_id] = ""
         except Exception as e:
             logger.warning(f"Failed to get village memories for {agent.agent_id}: {e}")
+            await db.rollback()  # Unpoison transaction after SQL failure
             agent_village_memories[agent.agent_id] = ""
 
     # Execute all agents in parallel (prompts pre-loaded, no DB contention)
@@ -1051,6 +1052,7 @@ async def auto_deliberate(
                         agent_village_memories[agent.agent_id] = ""
                 except Exception as e:
                     logger.warning(f"Failed to get village memories for {agent.agent_id}: {e}")
+                    await db.rollback()  # Unpoison transaction after SQL failure
                     agent_village_memories[agent.agent_id] = ""
 
             # Execute all agents in parallel (prompts pre-loaded, no DB contention)

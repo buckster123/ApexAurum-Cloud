@@ -236,13 +236,13 @@ class NeuralMemoryService:
                         result = await self.db.execute(
                             text("""
                                 SELECT id, content, agent_id, created_at, message_type,
-                                       1 - (embedding <=> :topic_embedding::vector) as similarity
+                                       1 - (embedding <=> CAST(:topic_embedding AS vector)) as similarity
                                 FROM user_vectors
                                 WHERE user_id = :user_id
                                   AND visibility = 'village'
                                   AND collection = :collection
                                   AND embedding IS NOT NULL
-                                ORDER BY embedding <=> :topic_embedding::vector
+                                ORDER BY embedding <=> CAST(:topic_embedding AS vector)
                                 LIMIT :limit
                             """),
                             {
