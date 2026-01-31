@@ -1,7 +1,7 @@
 # ApexAurum-Cloud Handover Document
 
 **Date:** 2026-01-31
-**Build:** v115-beta-hardening
+**Build:** v116-council-polish
 **Status:** BETA LIVE - 5+ testers active, platform stable under real traffic
 
 ---
@@ -28,6 +28,31 @@ ApexAurum Cloud is fully functional, polished, and **ready for beta testing**:
 - **Centralized Error Tracking** - GDPR-compliant, admin dashboard, export, auto-purge
 
 **Pricing:** Seeker $10 | Adept $30 | Opus $100 | Azothic $300
+
+---
+
+## Session 38 Accomplishments
+
+### Council Polish + Bug Fixes (v116)
+
+**Bugs fixed:**
+- **Council hanging after round 1** - `db.refresh(session)` at start of each loop iteration expired eagerly-loaded relationships (`session.rounds`, `round_rec.messages`). Round 2+ triggered async lazy loading → `MissingGreenlet`. Replaced with full `select` + `selectinload` query in both WS and SSE paths. (`council_ws.py`, `council.py`)
+- **Village WS expired-token retry storm** - `websocket.close(code=1008)` called before `websocket.accept()` caused Starlette to send HTTP 403 instead. Browser saw close code 1006, bypassing auth-failure detection → infinite retry loop. Fixed: accept before closing so 1008 reaches client. Frontend also now treats 1006 as auth failure when token is expired.
+
+**Council UX improvements:**
+- **Post-batch continuation** - Sessions now use `max_rounds=200` as ceiling (hidden from user). Auto batches finish with `state="running"` not `"complete"`, so +1 Round, Auto, and Butt-in controls remain active after a batch.
+- **Default rounds to 3** - Changed from 10 to 3 (setup screen and viewer).
+- **Settings carry-over** - Round count set in setup screen initializes the viewer's auto-rounds input.
+- **Rounds UI** - Replaced max_rounds slider with number input + preset buttons (3, 5, 10, 25). "You can always run more rounds after" hint.
+- **Setup screen scroll** - Form now scrolls on smaller viewports instead of overflowing off-screen.
+
+**Council new features:**
+- **Custom agents** - Users can add custom agent seats (up to 8 total) with name + persona. Uses existing `persona_override` column on `SessionAgent`. Backend accepts custom agents in session creation and mid-session add. Custom agents get stable hash-based colors.
+- **Flexible agent grid** - Response cards use `auto-fit` grid (`minmax(260px, 1fr)`) instead of fixed 3-column. 4+ agents display properly, scales to any count.
+
+**Commits:** `25aab3d`, `8a42d85`, `75dc994`, `47f17a8`
+
+**Status at session end:** Council fully functional with multi-round continuation, custom agents, and flexible layout. Village WS retry storm resolved. Platform stable under live traffic.
 
 ---
 
