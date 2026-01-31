@@ -46,7 +46,7 @@ watch(pacMode, (active) => {
         auth.isAuthenticated ? 'pt-16' : '',
         hasActivePlayer ? 'pb-20' : ''
       ]"
-      class="relative z-10"
+      class="relative"
     >
       <RouterView />
     </main>
@@ -58,7 +58,7 @@ watch(pacMode, (active) => {
     <ToastContainer />
 
     <!-- Global Beta Footer -->
-    <footer class="relative z-10 border-t border-apex-border bg-apex-darker/80 py-3 px-4 text-center">
+    <footer class="relative border-t border-apex-border bg-apex-darker/80 py-3 px-4 text-center">
       <div class="max-w-4xl mx-auto flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-6 text-xs text-gray-500">
         <span class="px-2 py-0.5 bg-amber-500/10 text-amber-400 rounded text-[10px] font-semibold uppercase tracking-wider">Beta</span>
         <span>&copy; 2026 ApexAurum</span>
