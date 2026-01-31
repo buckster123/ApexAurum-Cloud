@@ -81,6 +81,15 @@ watch(viewMode, (mode) => {
 // WebSocket connection with backoff
 let wsRetryDelay = 3000
 let wsAuthFailed = false
+let wsFailCount = 0
+const WS_MAX_RETRIES = 5
+
+function isTokenExpired(token) {
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]))
+    return payload.exp && payload.exp < Date.now() / 1000
+  } catch { return false }
+}
 
 function connectWebSocket() {
   // Don't connect without auth token - backend requires it (closes with 1008)
@@ -92,6 +101,22 @@ function connectWebSocket() {
 
   // Don't retry if auth was explicitly rejected
   if (wsAuthFailed) return
+
+  // Stop retrying with expired token - user needs to re-login
+  if (isTokenExpired(token)) {
+    console.log('Village: WebSocket token expired, not retrying')
+    wsAuthFailed = true
+    status.connection = 'no-auth'
+    return
+  }
+
+  // Stop after too many consecutive failures
+  if (wsFailCount >= WS_MAX_RETRIES) {
+    console.log(`Village: WebSocket gave up after ${WS_MAX_RETRIES} failures`)
+    wsAuthFailed = true
+    status.connection = 'failed'
+    return
+  }
 
   let apiUrl = import.meta.env.VITE_API_URL || ''
   const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
@@ -117,6 +142,7 @@ function connectWebSocket() {
     console.log('Village: WebSocket connected')
     status.connection = 'connected'
     wsRetryDelay = 3000 // Reset backoff on success
+    wsFailCount = 0
     playTone(880, 0.05, 'sine', 0.1)
   }
 
@@ -131,7 +157,8 @@ function connectWebSocket() {
       return
     }
 
-    console.log(`Village: WebSocket disconnected (code ${event.code}), retrying in ${wsRetryDelay / 1000}s`)
+    wsFailCount++
+    console.log(`Village: WebSocket disconnected (code ${event.code}), attempt ${wsFailCount}/${WS_MAX_RETRIES}, retrying in ${wsRetryDelay / 1000}s`)
     setTimeout(connectWebSocket, wsRetryDelay)
     wsRetryDelay = Math.min(wsRetryDelay * 1.5, 30000) // Backoff, cap at 30s
   }

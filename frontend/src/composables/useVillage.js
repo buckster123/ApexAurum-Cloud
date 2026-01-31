@@ -367,6 +367,15 @@ export function useVillage() {
 
   let wsRetryDelay = 3000
   let wsAuthFailed = false
+  let wsFailCount = 0
+  const WS_MAX_RETRIES = 5
+
+  function isTokenExpired(token) {
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]))
+      return payload.exp && payload.exp < Date.now() / 1000
+    } catch { return false }
+  }
 
   function connectWebSocket() {
     // Don't connect without auth token - backend requires it (closes with 1008)
@@ -377,6 +386,22 @@ export function useVillage() {
     }
 
     if (wsAuthFailed) return
+
+    // Stop retrying with expired token - user needs to re-login
+    if (isTokenExpired(token)) {
+      console.log('Village WebSocket token expired, not retrying')
+      wsAuthFailed = true
+      status.connection = 'no-auth'
+      return
+    }
+
+    // Stop after too many consecutive failures
+    if (wsFailCount >= WS_MAX_RETRIES) {
+      console.log(`Village WebSocket gave up after ${WS_MAX_RETRIES} failures`)
+      wsAuthFailed = true
+      status.connection = 'failed'
+      return
+    }
 
     let apiUrl = import.meta.env.VITE_API_URL || ''
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
@@ -402,11 +427,13 @@ export function useVillage() {
       console.log('Village WebSocket connected')
       status.connection = 'connected'
       wsRetryDelay = 3000
+      wsFailCount = 0
     }
 
     ws.onclose = (event) => {
       status.connection = 'disconnected'
 
+      // 1008 = Policy Violation (auth failure), 1006 = Abnormal (403 rejection)
       if (event.code === 1008) {
         console.log('Village WebSocket auth rejected, not retrying')
         wsAuthFailed = true
@@ -414,7 +441,8 @@ export function useVillage() {
         return
       }
 
-      console.log(`Village WebSocket disconnected (code ${event.code}), retrying in ${wsRetryDelay / 1000}s`)
+      wsFailCount++
+      console.log(`Village WebSocket disconnected (code ${event.code}), attempt ${wsFailCount}/${WS_MAX_RETRIES}, retrying in ${wsRetryDelay / 1000}s`)
       setTimeout(() => connectWebSocket(), wsRetryDelay)
       wsRetryDelay = Math.min(wsRetryDelay * 1.5, 30000)
     }
