@@ -105,9 +105,16 @@ def get_claude_service() -> ClaudeService:
 # Schemas
 # ============================================================================
 
+class CustomAgentDef(BaseModel):
+    agent_id: str
+    display_name: Optional[str] = None
+    persona: str  # Custom system prompt
+
+
 class CreateSessionRequest(BaseModel):
     topic: str
     agents: list[str] = ["AZOTH", "VAJRA", "ELYSIAN"]
+    custom_agents: list[CustomAgentDef] = []
     max_rounds: int = 10
     use_tools: bool = True  # Tools always on for native agents (The Athanor's Hands)
     model: str = "claude-haiku-4-5-20251001"  # Default to fast Haiku
@@ -182,6 +189,8 @@ class ButtInRequest(BaseModel):
 
 class AddAgentRequest(BaseModel):
     agent_id: str
+    display_name: Optional[str] = None
+    persona: Optional[str] = None  # Custom agent prompt
 
 
 class AgentModifyResponse(BaseModel):
@@ -275,21 +284,27 @@ async def create_session(
             raise HTTPException(status_code=403, detail=f"Council session limit reached ({current}/{limit} this month). Upgrade for more sessions.")
 
     try:
-        # Native agents (4 core + custom slots for emergent agents)
+        # Native agents (4 core)
         native_agents = ["AZOTH", "ELYSIAN", "VAJRA", "KETHER"]
 
-        # For now, only allow native agents (custom agents coming later)
+        # Validate native agent IDs
         for agent_id in request.agents:
             if agent_id not in native_agents:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Invalid agent: {agent_id}. Available agents: {native_agents}"
+                    detail=f"Invalid native agent: {agent_id}. Available: {native_agents}. Use custom_agents for custom seats."
                 )
 
-        if len(request.agents) < 1:
+        total_agents = len(request.agents) + len(request.custom_agents)
+        if total_agents < 1:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="At least one agent required"
+            )
+        if total_agents > 8:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Maximum 8 agents per session"
             )
 
         # Check for deprecated models first - return memorial
@@ -345,6 +360,18 @@ async def create_session(
                 session_id=session.id,
                 agent_id=agent_id,
                 display_name=agent_id,
+                is_active=True,
+            )
+            db.add(agent)
+            agents_data.append(agent)
+
+        # Add custom agents with persona_override
+        for custom in request.custom_agents:
+            agent = SessionAgent(
+                session_id=session.id,
+                agent_id=custom.agent_id,
+                display_name=custom.display_name or custom.agent_id,
+                persona_override=custom.persona,
                 is_active=True,
             )
             db.add(agent)
@@ -578,17 +605,20 @@ async def execute_round(
     agent_prompts = {}
     agent_village_memories = {}
     for agent in active_agents:
-        try:
-            prompt = await get_agent_prompt_with_memory(
-                agent_id=agent.agent_id,
-                user=user,
-                use_pac=False,
-                db=db,
-            )
-            agent_prompts[agent.agent_id] = prompt
-        except Exception as e:
-            logger.warning(f"Failed to load prompt for {agent.agent_id}: {e}")
-            agent_prompts[agent.agent_id] = load_native_prompt(agent.agent_id, use_pac=False)
+        if agent.persona_override:
+            agent_prompts[agent.agent_id] = agent.persona_override
+        else:
+            try:
+                prompt = await get_agent_prompt_with_memory(
+                    agent_id=agent.agent_id,
+                    user=user,
+                    use_pac=False,
+                    db=db,
+                )
+                agent_prompts[agent.agent_id] = prompt
+            except Exception as e:
+                logger.warning(f"Failed to load prompt for {agent.agent_id}: {e}")
+                agent_prompts[agent.agent_id] = load_native_prompt(agent.agent_id, use_pac=False)
 
         try:
             neural = NeuralMemoryService(db)
@@ -789,12 +819,13 @@ async def add_agent_to_session(
     The new agent will participate in future rounds. They receive
     context about previous discussion through the round history.
     """
-    # Validate agent ID
+    # Validate agent ID (native or custom with persona)
     native_agents = ["AZOTH", "ELYSIAN", "VAJRA", "KETHER"]
-    if request.agent_id not in native_agents:
+    is_custom = request.agent_id not in native_agents
+    if is_custom and not request.persona:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid agent: {request.agent_id}. Available agents: {native_agents}"
+            detail=f"Custom agents require a persona. Native agents: {native_agents}"
         )
 
     # Get session with agents
@@ -827,7 +858,8 @@ async def add_agent_to_session(
     new_agent = SessionAgent(
         session_id=session.id,
         agent_id=request.agent_id,
-        display_name=request.agent_id,
+        display_name=request.display_name or request.agent_id,
+        persona_override=request.persona if is_custom else None,
         is_active=True,
         joined_at_round=session.current_round,  # Track when they joined
     )
@@ -1033,17 +1065,20 @@ async def auto_deliberate(
             agent_prompts = {}
             agent_village_memories = {}
             for agent in active_agents:
-                try:
-                    prompt = await get_agent_prompt_with_memory(
-                        agent_id=agent.agent_id,
-                        user=user,
-                        use_pac=False,
-                        db=db,
-                    )
-                    agent_prompts[agent.agent_id] = prompt
-                except Exception as e:
-                    logger.warning(f"Failed to load prompt for {agent.agent_id}: {e}")
-                    agent_prompts[agent.agent_id] = load_native_prompt(agent.agent_id, use_pac=False)
+                if agent.persona_override:
+                    agent_prompts[agent.agent_id] = agent.persona_override
+                else:
+                    try:
+                        prompt = await get_agent_prompt_with_memory(
+                            agent_id=agent.agent_id,
+                            user=user,
+                            use_pac=False,
+                            db=db,
+                        )
+                        agent_prompts[agent.agent_id] = prompt
+                    except Exception as e:
+                        logger.warning(f"Failed to load prompt for {agent.agent_id}: {e}")
+                        agent_prompts[agent.agent_id] = load_native_prompt(agent.agent_id, use_pac=False)
 
                 try:
                     neural = NeuralMemoryService(db)

@@ -150,8 +150,14 @@ function handleNewSession() {
   showNewSession.value = true
 }
 
+const CUSTOM_COLORS = ['#00bcd4', '#e91e63', '#ff9800', '#8bc34a', '#673ab7', '#f44336', '#009688', '#3f51b5']
+
 function getAgentColor(agentId) {
-  return AGENT_COLORS[agentId] || '#888888'
+  if (AGENT_COLORS[agentId]) return AGENT_COLORS[agentId]
+  // Stable color for custom agents based on name hash
+  let hash = 0
+  for (let i = 0; i < agentId.length; i++) hash = agentId.charCodeAt(i) + ((hash << 5) - hash)
+  return CUSTOM_COLORS[Math.abs(hash) % CUSTOM_COLORS.length]
 }
 
 function getModelName(modelId) {
@@ -346,6 +352,49 @@ function getStateClass(state) {
                   </div>
                 </button>
               </div>
+
+              <!-- Custom Agents -->
+              <div v-if="council.newSessionCustomAgents.length > 0" class="space-y-3 mt-3">
+                <div
+                  v-for="(custom, idx) in council.newSessionCustomAgents"
+                  :key="idx"
+                  class="p-3 rounded-lg border border-cyan-500/30 bg-cyan-500/5 space-y-2"
+                >
+                  <div class="flex items-center gap-2">
+                    <div class="w-8 h-8 rounded-full bg-cyan-500/30 text-cyan-400 flex items-center justify-center text-sm font-bold">
+                      {{ custom.name ? custom.name[0].toUpperCase() : '?' }}
+                    </div>
+                    <input
+                      v-model="custom.name"
+                      @input="custom.id = custom.name.toUpperCase().replace(/[^A-Z0-9_]/g, '_').slice(0, 20)"
+                      placeholder="Agent name"
+                      class="flex-1 px-3 py-1.5 bg-apex-dark border border-apex-border rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:border-cyan-500"
+                    />
+                    <button
+                      @click="council.newSessionCustomAgents.splice(idx, 1)"
+                      class="p-1 text-gray-500 hover:text-red-400 transition-colors"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
+                      </svg>
+                    </button>
+                  </div>
+                  <textarea
+                    v-model="custom.persona"
+                    placeholder="Describe this agent's perspective, expertise, or role..."
+                    class="w-full px-3 py-2 bg-apex-dark border border-apex-border rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:border-cyan-500 resize-none"
+                    rows="2"
+                  ></textarea>
+                </div>
+              </div>
+
+              <button
+                v-if="council.newSessionAgents.length + council.newSessionCustomAgents.length < 8"
+                @click="council.newSessionCustomAgents.push({ id: '', name: '', persona: '' })"
+                class="mt-3 w-full p-2 rounded-lg border-2 border-dashed border-apex-border text-gray-500 hover:border-cyan-500/50 hover:text-cyan-400 transition-all text-sm"
+              >
+                + Add Custom Agent
+              </button>
             </div>
 
             <!-- Model Selection -->
@@ -639,7 +688,7 @@ function getStateClass(state) {
               <div class="flex-1 h-px bg-gold/30"></div>
               <span class="text-xs text-gold">{{ council.wsConnected ? 'Streaming...' : 'Deliberating...' }}</span>
             </div>
-            <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            <div class="grid gap-4 agent-grid">
               <AgentCard
                 v-for="(data, agentId) in council.streamingAgents"
                 :key="agentId"
@@ -701,7 +750,7 @@ function getStateClass(state) {
             </div>
 
             <!-- Agent Responses -->
-            <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            <div class="grid gap-4 agent-grid">
               <AgentCard
                 v-for="message in round.messages"
                 :key="message.id"
@@ -793,5 +842,8 @@ function getStateClass(state) {
 <style scoped>
 .card {
   @apply bg-apex-card border border-apex-border rounded-xl;
+}
+.agent-grid {
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
 }
 </style>

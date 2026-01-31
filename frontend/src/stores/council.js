@@ -77,6 +77,7 @@ export const useCouncilStore = defineStore('council', () => {
   const newSessionRounds = ref(3)      // Per-batch round count (user-facing)
   const newSessionMaxRounds = ref(200)  // Session ceiling (hidden from user)
   const newSessionModel = ref('claude-haiku-4-5-20251001')
+  const newSessionCustomAgents = ref([])  // [{id, name, persona}]
 
   // Auto-deliberation state
   const isAutoDeliberating = ref(false)
@@ -169,6 +170,11 @@ export const useCouncilStore = defineStore('council', () => {
       const response = await api.post('/api/v1/council/sessions', {
         topic: newSessionTopic.value.trim(),
         agents: newSessionAgents.value,
+        custom_agents: newSessionCustomAgents.value.map(a => ({
+          agent_id: a.id,
+          display_name: a.name,
+          persona: a.persona,
+        })),
         max_rounds: newSessionMaxRounds.value,
         model: newSessionModel.value,
         use_tools: true,  // Tools always on for native agents
@@ -181,6 +187,7 @@ export const useCouncilStore = defineStore('council', () => {
 
       // Clear form
       newSessionTopic.value = ''
+      newSessionCustomAgents.value = []
 
       return session
     } catch (e) {
@@ -768,6 +775,7 @@ export const useCouncilStore = defineStore('council', () => {
     newSessionRounds,
     newSessionMaxRounds,
     newSessionModel,
+    newSessionCustomAgents,
     // Auto-deliberation state
     isAutoDeliberating,
     streamingRound,

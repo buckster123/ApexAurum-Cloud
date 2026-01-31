@@ -322,17 +322,20 @@ async def run_streaming_deliberation(
                 agent_prompts = {}
                 agent_village_memories = {}
                 for agent in active_agents:
-                    try:
-                        prompt = await get_agent_prompt_with_memory(
-                            agent_id=agent.agent_id,
-                            user=user,
-                            use_pac=False,
-                            db=db,
-                        )
-                        agent_prompts[agent.agent_id] = prompt
-                    except Exception as e:
-                        logger.warning(f"Failed to load prompt for {agent.agent_id}: {e}")
-                        agent_prompts[agent.agent_id] = load_native_prompt(agent.agent_id, use_pac=False)
+                    if agent.persona_override:
+                        agent_prompts[agent.agent_id] = agent.persona_override
+                    else:
+                        try:
+                            prompt = await get_agent_prompt_with_memory(
+                                agent_id=agent.agent_id,
+                                user=user,
+                                use_pac=False,
+                                db=db,
+                            )
+                            agent_prompts[agent.agent_id] = prompt
+                        except Exception as e:
+                            logger.warning(f"Failed to load prompt for {agent.agent_id}: {e}")
+                            agent_prompts[agent.agent_id] = load_native_prompt(agent.agent_id, use_pac=False)
 
                     try:
                         neural = NeuralMemoryService(db)
