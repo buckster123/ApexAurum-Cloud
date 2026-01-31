@@ -1,8 +1,8 @@
 # ApexAurum-Cloud Handover Document
 
 **Date:** 2026-01-31
-**Build:** v114-beta-bugfixes
-**Status:** BETA LIVE - First testers active, critical bugs fixed
+**Build:** v115-beta-hardening
+**Status:** BETA LIVE - 5+ testers active, platform stable under real traffic
 
 ---
 
@@ -28,6 +28,29 @@ ApexAurum Cloud is fully functional, polished, and **ready for beta testing**:
 - **Centralized Error Tracking** - GDPR-compliant, admin dashboard, export, auto-purge
 
 **Pricing:** Seeker $10 | Adept $30 | Opus $100 | Azothic $300
+
+---
+
+## Session 37 Accomplishments
+
+### Beta Hardening (v115) - Multi-User Live Traffic
+
+5 beta testers actively using the platform with grants on all models/endpoints. Handled sustained traffic with zero downtime.
+
+**Bug reports from users:**
+- **AZOTH calling everyone "André"** - `human_kin: "André"` hardcoded in AZOTH prompt. Removed it, added dynamic user context injection (`## Current User` block with display_name) to `get_agent_prompt_with_memory` in chat.py. All agents now address users by their actual name.
+- **Council Auto mode silent failure** - `council_ws.py` WebSocket path was missed in Session 36's concurrent DB fix. Pre-loaded prompts/village memories sequentially, added rollback recovery, added top-level try/except to guarantee `end` event is always sent.
+
+**Infrastructure fixes:**
+- **Footer z-index overlapping modals** - `<main class="relative z-10">` created a stacking context trapping all modals (z-50) inside it. Footer at same z-10 painted on top. Fixed by moving AlchemicalParticles to `z-index: -1` and removing z-10 from both `<main>` and `<footer>`.
+- **Village WS infinite reconnect loop** - HTTP 403 during WS upgrade gives close code 1006, not 1008, so auth-failure check never triggered. Added JWT expiry check before each reconnect, max 5 consecutive failures then stop. Prevents log flooding when token expires.
+- **Neural memory semantic search SQL error** - `:topic_embedding::vector` in raw SQL broke asyncpg parameter binding (`:` conflicts between named param and PostgreSQL cast). Changed to `CAST(:topic_embedding AS vector)`. Added `db.rollback()` in village memory exception handlers to unpoison transactions. Added `db.refresh(session)` after rollback to prevent `MissingGreenlet` on expired ORM attributes.
+
+**Commits:** `02ee126`, `8cae87f`, `5633777`, `0118f74`
+
+**Status at session end:** Platform running stable under real multi-user traffic. No errors in dashboard. Launch posts spreading, traffic increasing.
+
+**Ready for next session:** Continue beta monitoring, instant fixes for community reports. UI z-index fix deployed. All known bugs resolved.
 
 ---
 
