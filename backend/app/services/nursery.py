@@ -89,7 +89,7 @@ class NurseryService:
                 f.write(line)
                 size_bytes += len(line.encode("utf-8"))
 
-        storage_path = f"vault/users/{user_id}/nursery/datasets/{dataset_id}.jsonl"
+        storage_path = str(file_path)
 
         async with async_session() as db:
             user_uuid = UUID(user_id) if isinstance(user_id, str) else user_id
@@ -294,7 +294,7 @@ class NurseryService:
                 tool_names=extracted_tools,
                 num_examples=len(examples),
                 size_bytes=size_bytes,
-                storage_path=f"vault/users/{user_id}/nursery/datasets/{dataset_id}.jsonl",
+                storage_path=str(file_path),
                 agent_id=agent_id,
             )
             db.add(dataset)
@@ -325,7 +325,7 @@ class NurseryService:
             "num_examples": len(examples),
             "size_bytes": size_bytes,
             "tools_extracted": tool_counts,
-            "storage_path": f"vault/users/{user_id}/nursery/datasets/{dataset_id}.jsonl",
+            "storage_path": str(file_path),
         }
 
     @staticmethod

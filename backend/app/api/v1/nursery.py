@@ -309,19 +309,33 @@ async def start_training(
     )
 
     # Upload dataset to Together
-    storage_path = dataset.get("storage_path", "")
-    file_id = await CloudTrainerService.upload_dataset(storage_path, api_key)
+    # Reconstruct absolute file path (DB storage_path has a stale relative prefix)
+    from pathlib import Path
+    from app.config import get_settings
+    settings = get_settings()
+    file_path = str(
+        Path(settings.vault_path) / "users" / str(user.id)
+        / "nursery" / "datasets" / f"{body.dataset_id}.jsonl"
+    )
+    try:
+        upload_result = await CloudTrainerService.upload_dataset(file_path, api_key)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    file_id = upload_result["file_id"]
 
     # Create training job on Together
-    job_info = await CloudTrainerService.create_training_job(
-        file_id=file_id,
-        base_model=body.base_model,
-        api_key=api_key,
-        n_epochs=body.n_epochs,
-        learning_rate=body.learning_rate,
-        lora=body.lora,
-        suffix=body.suffix,
-    )
+    try:
+        job_info = await CloudTrainerService.create_training_job(
+            file_id=file_id,
+            base_model=body.base_model,
+            api_key=api_key,
+            n_epochs=body.n_epochs,
+            learning_rate=body.learning_rate,
+            lora=body.lora,
+            suffix=body.suffix,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
     # Save job to DB
     config = {
