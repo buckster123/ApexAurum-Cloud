@@ -272,8 +272,17 @@ async def run_streaming_deliberation(
 
         try:
             while rounds_executed < num_rounds and session.current_round < session.max_rounds:
-                # Check for pause/stop
-                await db.refresh(session)
+                # Reload with eager loading (refresh() only loads scalar columns,
+                # leaving relationships expired → MissingGreenlet on lazy load)
+                result = await db.execute(
+                    select(DeliberationSession)
+                    .where(DeliberationSession.id == session_id)
+                    .options(
+                        selectinload(DeliberationSession.agents),
+                        selectinload(DeliberationSession.rounds).selectinload(DeliberationRound.messages),
+                    )
+                )
+                session = result.scalar_one()
                 if session.state == "paused":
                     await send_event(websocket, {"type": "paused", "round_number": session.current_round})
                     break

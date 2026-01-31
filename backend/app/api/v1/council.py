@@ -981,8 +981,17 @@ async def auto_deliberate(
         total_session_output = 0
 
         while rounds_executed < num_rounds and session.current_round < session.max_rounds:
-            # Refresh session state to check for pause/stop
-            await db.refresh(session)
+            # Reload with eager loading (refresh() only loads scalar columns,
+            # leaving relationships expired → MissingGreenlet on lazy load)
+            result = await db.execute(
+                select(DeliberationSession)
+                .where(DeliberationSession.id == session_id)
+                .options(
+                    selectinload(DeliberationSession.agents),
+                    selectinload(DeliberationSession.rounds).selectinload(DeliberationRound.messages),
+                )
+            )
+            session = result.scalar_one()
 
             # Check if paused or stopped
             if session.state == "paused":
