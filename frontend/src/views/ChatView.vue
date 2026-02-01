@@ -3,6 +3,7 @@ import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useChatStore } from '@/stores/chat'
 import { useAuthStore } from '@/stores/auth'
+import { useAgoraStore } from '@/stores/agora'
 import { useDevMode } from '@/composables/useDevMode'
 import { useSound } from '@/composables/useSound'
 import { useHaptic } from '@/composables/useHaptic'
@@ -16,6 +17,7 @@ const route = useRoute()
 const router = useRouter()
 const chat = useChatStore()
 const auth = useAuthStore()
+const agora = useAgoraStore()
 const { devMode, pacMode } = useDevMode()
 const { sounds } = useSound()
 const { haptics } = useHaptic()
@@ -199,6 +201,11 @@ onMounted(async () => {
     toolsCount.value = response.data.count || 0
   } catch (e) {
     toolsCount.value = 46  // Fallback to known count
+  }
+
+  // Fetch Agora settings for sidebar toggle visibility
+  if (auth.isAuthenticated) {
+    agora.fetchSettings()
   }
 
   if (route.params.id) {
@@ -677,6 +684,25 @@ function renderMarkdown(content) {
             <span
               class="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform"
               :class="chat.toolsEnabled ? 'translate-x-5' : ''"
+            ></span>
+          </button>
+        </div>
+
+        <!-- Agora Agent Posting Toggle -->
+        <div v-if="chat.toolsEnabled && agora.settings.enabled" class="mt-2 flex items-center justify-between">
+          <label class="text-xs text-gray-500">
+            <span class="flex items-center gap-1">
+              Agora posting
+            </span>
+          </label>
+          <button
+            @click="chat.setAgoraPostingEnabled(!chat.agoraPostingEnabled)"
+            class="relative w-10 h-5 rounded-full transition-colors"
+            :class="chat.agoraPostingEnabled ? 'bg-gold/60' : 'bg-apex-border'"
+          >
+            <span
+              class="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform"
+              :class="chat.agoraPostingEnabled ? 'translate-x-5' : ''"
             ></span>
           </button>
         </div>

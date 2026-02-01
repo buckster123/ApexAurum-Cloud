@@ -448,6 +448,7 @@ class ChatRequest(BaseModel):
     max_tokens: int = DEFAULT_MAX_TOKENS  # Output token limit (up to 16384 for Opus/Sonnet 4.5)
     save_conversation: bool = True  # Set to False for ephemeral chats (Cortex Diver code assist)
     use_tools: bool = False  # Enable tool calling (The Athanor's Hands)
+    use_agora_posting: bool = False  # Enable agent posting to Agora feed
     tool_categories: Optional[list[str]] = None  # Filter tools by category
     file_ids: Optional[list[str]] = None  # Vault file IDs to attach (images for vision, text for context)
 
@@ -1081,6 +1082,9 @@ Work together to create something beautiful!
             agent_id=request.agent,
         )
         tools = tool_executor.get_available_tools()
+        # Filter out agora_post tool unless explicitly enabled
+        if not request.use_agora_posting:
+            tools = [t for t in tools if t.get("name") != "agora_post"]
         logger.info(f"Tools enabled: {len(tools)} tools available")
 
     if request.stream:

@@ -28,6 +28,7 @@ export const useChatStore = defineStore('chat', () => {
   // TOOLS - The Athanor's Hands
   // ═══════════════════════════════════════════════════════════════════════════════
   const toolsEnabled = ref(localStorage.getItem('apexaurum_tools_enabled') === 'true')
+  const agoraPostingEnabled = ref(localStorage.getItem('apexaurum_agora_posting') === 'true')
   const currentToolExecution = ref(null)  // Track currently executing tool
 
   // Getters
@@ -103,6 +104,11 @@ export const useChatStore = defineStore('chat', () => {
   function setToolsEnabled(enabled) {
     toolsEnabled.value = enabled
     localStorage.setItem('apexaurum_tools_enabled', enabled.toString())
+  }
+
+  function setAgoraPostingEnabled(enabled) {
+    agoraPostingEnabled.value = enabled
+    localStorage.setItem('apexaurum_agora_posting', enabled.toString())
   }
 
   // Actions
@@ -181,6 +187,7 @@ export const useChatStore = defineStore('chat', () => {
           use_pac: usePac,
           max_tokens: maxTokens.value,
           use_tools: toolsEnabled.value,
+          use_agora_posting: agoraPostingEnabled.value && toolsEnabled.value,
           ...(fileIds && { file_ids: fileIds }),
         })
       })
@@ -423,8 +430,10 @@ export const useChatStore = defineStore('chat', () => {
     setMaxTokens,
     // Tools (The Athanor's Hands)
     toolsEnabled,
+    agoraPostingEnabled,
     currentToolExecution,
     setToolsEnabled,
+    setAgoraPostingEnabled,
     // Core actions
     fetchConversations,
     loadConversation,

@@ -269,8 +269,9 @@ def register_all_tools():
     from . import midi  # noqa: F401
     from . import jam  # noqa: F401
     from . import nursery  # noqa: F401
+    from . import agora  # noqa: F401
 
-    # All 15 tiers loaded!
+    # All 16 tiers loaded!
 
     logger.info(f"Tool registry initialized with {registry.tool_count} tools")
 
