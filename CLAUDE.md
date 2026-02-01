@@ -10,14 +10,16 @@ ApexAurum Cloud is a production AI chat interface deployed on Railway. FastAPI b
 
 ## Workflow
 
-**Commit, push, done.** Railway auto-deploys both backend and frontend on push to `main`.
+**Commit, push, done.** Railway auto-deploys both backend and frontend on push to `main`. Every push triggers a build, so bundle related changes (including HANDOVER.md updates) into the same commit to avoid redundant deploys.
 
 ```bash
-# Standard workflow
-git add <files> && git commit -m "message" && git push origin main
+# Standard workflow — include HANDOVER.md in the same commit as code changes
+git add <code files> HANDOVER.md && git commit -m "message" && git push origin main
 # Then verify:
 curl -s https://backend-production-507c.up.railway.app/health | python3 -m json.tool
 ```
+
+**Session wrap-up rule:** Always update HANDOVER.md as part of the final code commit, never as a separate commit. This avoids triggering an extra Railway build for a docs-only change.
 
 ```bash
 # Manual deploy (only if auto-deploy fails or for special ops)
@@ -125,7 +127,7 @@ Backend uses platform Anthropic key if user doesn't have BYOK set. BYOK is optio
 
 - `README.md` - Public-facing project overview
 - `ENCYCLOPEDIA.md` - Complete technical and lore reference
-- `HANDOVER.md` - Session-to-session deployment state (read this first!)
+- `HANDOVER.md` - Session-to-session deployment state (read this first!). Always commit alongside code changes, never as a standalone push (avoids redundant Railway builds).
 - `CLAUDE.md` - This file (Claude Code guidance)
 - `archive/` - Internal planning docs, session notes, and logs (gitignored, local only)
 
