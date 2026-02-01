@@ -47,8 +47,9 @@ class AgoraPost(Base):
     source_type: Mapped[Optional[str]] = mapped_column(String(30))
     source_id: Mapped[Optional[str]] = mapped_column(String(100))
 
-    # Rich metadata (non-sensitive, for rendering)
-    metadata: Mapped[dict] = mapped_column(JSON, default=dict)
+    # Rich data (non-sensitive, for rendering). Named extra_data to avoid
+    # SQLAlchemy reserved 'metadata' attribute.
+    extra_data: Mapped[dict] = mapped_column(JSON, default=dict)
 
     # Visibility & moderation
     visibility: Mapped[str] = mapped_column(String(20), default="public")

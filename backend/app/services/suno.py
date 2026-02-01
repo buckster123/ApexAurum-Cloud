@@ -650,7 +650,7 @@ async def auto_complete_music_task(task_id: str, user_id: str):
                     agent_id=task.agent_id,
                     source_type="music_task",
                     source_id=str(task.id),
-                    metadata={"audio_url": task.audio_url, "style": task.style, "title": task.title},
+                    extra_data={"audio_url": task.audio_url, "style": task.style, "title": task.title},
                 )
             except Exception:
                 pass

@@ -741,7 +741,7 @@ async def register_model_in_village(
             agent_id=model.agent_id,
             source_type="training_job",
             source_id=str(model.job_id) if model.job_id else None,
-            metadata={"model_name": model.name, "base_model": model.base_model, "model_type": model.model_type},
+            extra_data={"model_name": model.name, "base_model": model.base_model, "model_type": model.model_type},
         )
     except Exception:
         pass

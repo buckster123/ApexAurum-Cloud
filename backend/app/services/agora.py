@@ -104,7 +104,7 @@ async def create_auto_post(
     agent_id: Optional[str] = None,
     source_type: Optional[str] = None,
     source_id: Optional[str] = None,
-    metadata: Optional[dict] = None,
+    extra_data: Optional[dict] = None,
 ) -> Optional[AgoraPost]:
     """
     Create an auto-post if the user has opted in for this category.
@@ -139,7 +139,7 @@ async def create_auto_post(
                 agent_id=agent_id,
                 source_type=source_type,
                 source_id=str(source_id) if source_id else None,
-                metadata=metadata or {},
+                extra_data=extra_data or {},
                 is_auto=True,
             )
             db.add(post)

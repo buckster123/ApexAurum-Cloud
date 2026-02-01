@@ -244,9 +244,9 @@ onMounted(() => {
           <p class="text-gray-300 whitespace-pre-wrap leading-relaxed">{{ post.body }}</p>
 
           <!-- Audio Player (music_creation) -->
-          <div v-if="post.content_type === 'music_creation' && post.metadata?.audio_url" class="mt-3">
+          <div v-if="post.content_type === 'music_creation' && post.extra_data?.audio_url" class="mt-3">
             <audio
-              :src="post.metadata.audio_url"
+              :src="post.extra_data.audio_url"
               controls
               class="w-full h-10 rounded-lg"
             ></audio>

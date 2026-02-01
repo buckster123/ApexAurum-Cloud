@@ -642,7 +642,7 @@ END $$;
                 agent_id VARCHAR(50),
                 source_type VARCHAR(30),
                 source_id VARCHAR(100),
-                metadata JSONB DEFAULT '{}'::jsonb,
+                extra_data JSONB DEFAULT '{}'::jsonb,
                 visibility VARCHAR(20) DEFAULT 'public',
                 is_auto BOOLEAN DEFAULT FALSE,
                 is_pinned BOOLEAN DEFAULT FALSE,

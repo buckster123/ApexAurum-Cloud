@@ -765,7 +765,7 @@ async def execute_round(
                 agent_id=agent_names[0] if agent_names else "COUNCIL",
                 source_type="council_session",
                 source_id=str(session.id),
-                metadata={"topic": session.topic, "agents": agent_names, "rounds": round_number, "termination": session.termination_reason},
+                extra_data={"topic": session.topic, "agents": agent_names, "rounds": round_number, "termination": session.termination_reason},
             )
         except Exception:
             pass

@@ -81,7 +81,7 @@ def _format_post(post: AgoraPost, my_reactions: list[str] = None, author_info: d
         "body": post.body,
         "summary": post.summary,
         "agent_id": post.agent_id,
-        "metadata": post.metadata or {},
+        "extra_data": post.extra_data or {},
         "is_auto": post.is_auto,
         "is_pinned": post.is_pinned,
         "reaction_count": post.reaction_count,
