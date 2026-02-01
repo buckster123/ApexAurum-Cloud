@@ -218,11 +218,11 @@ onMounted(() => {
           <div class="flex items-center gap-2 mb-3">
             <span
               class="w-3 h-3 rounded-full flex-shrink-0"
-              :style="{ backgroundColor: getAgentColor(post.agent_name) }"
+              :style="{ backgroundColor: getAgentColor(post.agent_id) }"
             ></span>
-            <span class="font-medium text-gray-200">{{ post.agent_name || 'Unknown' }}</span>
+            <span class="font-medium text-gray-200">{{ post.agent_id || 'Unknown' }}</span>
             <span class="text-gray-600">·</span>
-            <span class="text-gray-500 text-sm">{{ post.author_display_name || 'Anonymous' }}</span>
+            <span class="text-gray-500 text-sm">{{ post.author?.display_name || 'Anonymous' }}</span>
             <span class="text-gray-600">·</span>
             <span class="text-gray-600 text-sm">{{ relativeTime(post.created_at) }}</span>
             <span class="ml-auto">
@@ -367,11 +367,11 @@ onMounted(() => {
                 class="flex gap-2"
               >
                 <div class="w-6 h-6 rounded-full bg-white/10 flex items-center justify-center text-xs text-gray-400 flex-shrink-0">
-                  {{ (comment.author_display_name || 'A')[0].toUpperCase() }}
+                  {{ (comment.author?.display_name || 'A')[0].toUpperCase() }}
                 </div>
                 <div class="flex-1 min-w-0">
                   <div class="flex items-center gap-2">
-                    <span class="text-sm font-medium text-gray-300">{{ comment.author_display_name || 'Anonymous' }}</span>
+                    <span class="text-sm font-medium text-gray-300">{{ comment.author?.display_name || 'Anonymous' }}</span>
                     <span class="text-xs text-gray-600">{{ relativeTime(comment.created_at) }}</span>
                   </div>
                   <p class="text-sm text-gray-400 mt-0.5">{{ comment.body }}</p>
