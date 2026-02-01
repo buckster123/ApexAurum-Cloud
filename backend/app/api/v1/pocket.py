@@ -9,11 +9,12 @@ Device auth via long-lived apex_dev_ tokens.
 import logging
 import random
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.device_deps import get_device_and_user
@@ -315,11 +316,15 @@ async def pocket_sync(
 
     await db.flush()
 
+    # Piggyback memories on sync response
+    memories = await _fetch_memories(db, user.id, limit=3)
+
     return {
         "success": True,
         "synced_at": time.time(),
         "village_acknowledged": True,
         "message": f"Soul synced. E={req.E:.1f}",
+        "memories": memories,
     }
 
 
@@ -338,3 +343,97 @@ async def pocket_agents(
         ],
         "default": "AZOTH",
     }
+
+
+# =============================================================================
+# MEMORY BRIDGE
+# =============================================================================
+
+def _relative_time(dt: datetime) -> str:
+    """Format a datetime as relative time for OLED display."""
+    now = datetime.utcnow()
+    delta = now - dt
+    if delta < timedelta(hours=1):
+        return "just now"
+    elif delta < timedelta(days=1):
+        hours = int(delta.total_seconds() / 3600)
+        return f"{hours}h ago"
+    elif delta < timedelta(days=7):
+        days = delta.days
+        return f"{days}d ago"
+    elif delta < timedelta(days=30):
+        weeks = delta.days // 7
+        return f"{weeks}w ago"
+    else:
+        return "long ago"
+
+
+async def _fetch_memories(db: AsyncSession, user_id, limit: int = 3) -> list:
+    """Fetch recent important memories for a device user.
+
+    Tries agent_memories first (structured facts), falls back to
+    user_vectors (cortex memories). Returns OLED-friendly snippets.
+    """
+    memories = []
+
+    # 1. Try agent_memories (structured, reliable)
+    try:
+        result = await db.execute(
+            text("""
+                SELECT value, memory_type, agent_id, created_at
+                FROM agent_memories
+                WHERE user_id = :uid
+                ORDER BY confidence DESC, last_accessed DESC NULLS LAST, access_count DESC
+                LIMIT :lim
+            """),
+            {"uid": str(user_id), "lim": limit},
+        )
+        for row in result.fetchall():
+            content = row[0][:80] if row[0] else ""
+            memories.append({
+                "content": content,
+                "type": row[1] or "fact",
+                "agent": row[2] or "AZOTH",
+                "age": _relative_time(row[3]) if row[3] else "recently",
+            })
+    except Exception as e:
+        logger.debug(f"agent_memories query failed (table may not exist): {e}")
+
+    # 2. If not enough, supplement from user_vectors (cortex)
+    if len(memories) < limit:
+        remaining = limit - len(memories)
+        try:
+            result = await db.execute(
+                text("""
+                    SELECT content, message_type, agent_id, created_at
+                    FROM user_vectors
+                    WHERE user_id = :uid
+                      AND layer IN ('long_term', 'cortex')
+                    ORDER BY attention_weight DESC NULLS LAST, created_at DESC
+                    LIMIT :lim
+                """),
+                {"uid": str(user_id), "lim": remaining},
+            )
+            for row in result.fetchall():
+                content = row[0][:80] if row[0] else ""
+                memories.append({
+                    "content": content,
+                    "type": row[1] or "observation",
+                    "agent": row[2] or "AZOTH",
+                    "age": _relative_time(row[3]) if row[3] else "recently",
+                })
+        except Exception as e:
+            logger.debug(f"user_vectors query failed (table may not exist): {e}")
+
+    return memories
+
+
+@router.get("/memories")
+async def pocket_memories(
+    device_and_user: tuple = Depends(get_device_and_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Return recent important memories for the device's user."""
+    device, user = device_and_user
+    memories = await _fetch_memories(db, user.id, limit=3)
+    return {"memories": memories, "count": len(memories)}
