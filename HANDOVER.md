@@ -1,7 +1,7 @@
 # ApexAurum-Cloud Handover Document
 
 **Date:** 2026-02-01
-**Build:** v117-agora
+**Build:** v118-agora-complete
 **Status:** BETA LIVE - 5+ testers active, platform stable under real traffic
 
 ---
@@ -22,12 +22,43 @@ ApexAurum Cloud is fully functional, polished, and **ready for beta testing**:
 - **Pause/Resume/Stop** - Full control over auto-mode
 - **Graceful sessions** - Long wanders with friendly expiry handling
 - **Coupon System** - Promo codes for credits/tier upgrades
-- **Admin Panel** - Full dashboard with Users, Stats, Reports, Usage, Grants, Errors
+- **Admin Panel** - Full dashboard with Users, Stats, Reports, Usage, Grants, Errors, Agora moderation
 - **Suno Music Generation** - AI music creation with SSE streaming!
 - **ApexPocket Cloud Firmware** - ESP32-S3 connects to Cloud via HTTPS!
 - **Centralized Error Tracking** - GDPR-compliant, admin dashboard, export, auto-purge
 
 **Pricing:** Seeker $10 | Adept $30 | Opus $100 | Azothic $300
+
+---
+
+## Session 40 Accomplishments
+
+### Agora Phases 2-3 + Agent Posting Tool + Pocket Memory Bridge (v118)
+
+**Agora Phase 2 - Settings UI + Tool Showcase:**
+- **Settings card** in SettingsView with master enable toggle, per-category checkboxes (music/council/training/tools), display name privacy toggle
+- **Tool showcase auto-posts** hooked into `ToolRegistry.execute()` — 8 showcase tools (music_generate, web_search, execute_python, agent_spawn, etc.) auto-post results when user opts in
+
+**Agora Phase 3 - Rich Content + Admin Moderation:**
+- **Rich content embeds** per post type: music (player + style tag), council (agent color badges + round count), training (model/base/type stat grid), tool showcase (tool name + category badge)
+- **Admin panel "Agora" tab** with stats cards (total/flagged/hidden/comments), filterable post table, inline moderation actions (hide/restore/delete/pin/unpin)
+- **Admin API**: `GET /admin/agora/stats`, `GET /admin/agora/posts` (filter by flagged/hidden/all), `PATCH /admin/agora/posts/{id}` (moderation actions)
+
+**Agent Posting Tool (`agora_post`):**
+- New tool in `backend/app/tools/agora.py` — agents can autonomously post thoughts/observations/discoveries to the Agora during chat
+- **Rate limited**: 3 posts per hour per user (friendly error when exceeded)
+- **Sidebar toggle**: "Agora posting" appears in ChatView sidebar only when tools AND Agora are enabled
+- **Conditional availability**: `use_agora_posting` field in ChatRequest, tool filtered from Claude's tool list when toggle is off
+- Posts as `content_type=agent_thought`, `source_type=agent_tool`, content sanitized
+
+**Pocket Memory Bridge** (from ESP32 session):
+- `GET /pocket/memories` — returns up to 3 recent important memories (agent_memories by confidence, supplemented by cortex user_vectors)
+- `POST /pocket/sync` now piggybacks memories in response so device doesn't need separate request
+- Both queries wrapped in try/except (tables may not exist yet)
+
+**Commits:** `51f5c42` Phase 2, `48c19ca` pocket memory bridge, `663f757` Phase 3, `0eb5cca` agent posting tool
+
+**Status at session end:** All 3 Agora phases complete. 69 tools registered (was 68). Admin panel has 8 tabs. Agent posting tool live with rate limiting. Platform healthy.
 
 ---
 
