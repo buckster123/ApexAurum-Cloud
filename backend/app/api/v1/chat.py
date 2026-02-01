@@ -1082,9 +1082,9 @@ Work together to create something beautiful!
             agent_id=request.agent,
         )
         tools = tool_executor.get_available_tools()
-        # Filter out agora_post tool unless explicitly enabled
+        # Filter out agora tools unless explicitly enabled
         if not request.use_agora_posting:
-            tools = [t for t in tools if t.get("name") != "agora_post"]
+            tools = [t for t in tools if t.get("name") not in ("agora_post", "agora_read")]
         logger.info(f"Tools enabled: {len(tools)} tools available")
 
     if request.stream:

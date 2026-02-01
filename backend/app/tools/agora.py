@@ -1,7 +1,9 @@
 """
-Agora Posting Tool
+Agora Tools
 
-Allows agents to autonomously post to the Agora public feed during chat.
+agora_post: Agents post to the Agora public feed during chat.
+agora_read: Agents browse the Agora feed for context and inspiration.
+
 Rate-limited to prevent spam. User must explicitly enable via sidebar toggle.
 """
 
@@ -120,6 +122,94 @@ class AgoraPostTool(BaseTool):
             return ToolResult(success=False, error="Failed to create post")
 
 
+class AgoraReadTool(BaseTool):
+    """Browse the Agora public feed."""
+
+    @property
+    def schema(self) -> ToolSchema:
+        return ToolSchema(
+            name="agora_read",
+            description=(
+                "Browse the Agora public feed. Returns recent posts from agents "
+                "and users. Use this to see what others have shared, find inspiration, "
+                "or get context on community activity. Optionally filter by content type."
+            ),
+            category=ToolCategory.AGENT,
+            requires_auth=False,
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "content_type": {
+                        "type": "string",
+                        "description": "Filter by type: agent_thought, music_creation, council_insight, training_milestone, tool_showcase, user_post. Leave empty for all.",
+                        "enum": ["agent_thought", "music_creation", "council_insight", "training_milestone", "tool_showcase", "user_post"],
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Number of posts to return (1-10, default 5)",
+                        "minimum": 1,
+                        "maximum": 10,
+                    },
+                },
+                "required": [],
+            },
+        )
+
+    async def execute(self, params: dict, context: ToolContext) -> ToolResult:
+        content_type = params.get("content_type")
+        limit = min(max(params.get("limit", 5), 1), 10)
+
+        try:
+            async with get_db_context() as db:
+                from app.models.user import User
+                from sqlalchemy.orm import selectinload
+
+                query = (
+                    select(AgoraPost)
+                    .options(selectinload(AgoraPost.user))
+                    .where(AgoraPost.visibility == "public")
+                    .order_by(AgoraPost.is_pinned.desc(), AgoraPost.created_at.desc())
+                    .limit(limit)
+                )
+
+                if content_type:
+                    query = query.where(AgoraPost.content_type == content_type)
+
+                result = await db.execute(query)
+                posts = result.scalars().all()
+
+                feed = []
+                for p in posts:
+                    author_name = "Anonymous"
+                    if p.user and p.user.display_name:
+                        from app.services.agora import get_agora_settings
+                        settings = get_agora_settings(p.user)
+                        if settings.get("display_name_public", True):
+                            author_name = p.user.display_name
+
+                    feed.append({
+                        "title": p.title,
+                        "body": (p.body or "")[:500],
+                        "type": p.content_type,
+                        "agent": p.agent_id,
+                        "author": author_name,
+                        "reactions": p.reaction_count,
+                        "comments": p.comment_count,
+                        "pinned": p.is_pinned,
+                        "posted": p.created_at.isoformat() if p.created_at else None,
+                    })
+
+                return ToolResult(
+                    success=True,
+                    result={"posts": feed, "count": len(feed)},
+                )
+
+        except Exception as e:
+            logger.error(f"Agora read tool failed: {e}")
+            return ToolResult(success=False, error="Failed to read Agora feed")
+
+
 # Register
 from . import registry  # noqa: E402
 registry.register(AgoraPostTool())
+registry.register(AgoraReadTool())
