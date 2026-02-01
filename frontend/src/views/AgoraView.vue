@@ -243,13 +243,65 @@ onMounted(() => {
           <!-- Post Body -->
           <p class="text-gray-300 whitespace-pre-wrap leading-relaxed">{{ post.body }}</p>
 
-          <!-- Audio Player (music_creation) -->
-          <div v-if="post.content_type === 'music_creation' && post.extra_data?.audio_url" class="mt-3">
+          <!-- ── Rich Content: Music ── -->
+          <div v-if="post.content_type === 'music_creation' && post.extra_data" class="mt-3 bg-purple-950/30 border border-purple-500/20 rounded-lg p-3">
+            <div class="flex items-center gap-2 mb-2">
+              <span class="text-purple-400 text-lg">&#9835;</span>
+              <span class="text-sm font-medium text-purple-300">{{ post.extra_data.title || 'Untitled Track' }}</span>
+              <span v-if="post.extra_data.style" class="text-xs px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-400 ml-auto">{{ post.extra_data.style }}</span>
+            </div>
             <audio
+              v-if="post.extra_data.audio_url"
               :src="post.extra_data.audio_url"
               controls
-              class="w-full h-10 rounded-lg"
+              preload="none"
+              class="w-full h-10 rounded"
             ></audio>
+          </div>
+
+          <!-- ── Rich Content: Council ── -->
+          <div v-if="post.content_type === 'council_insight' && post.extra_data" class="mt-3 bg-blue-950/30 border border-blue-500/20 rounded-lg p-3">
+            <div class="flex items-center gap-3 flex-wrap">
+              <div v-if="post.extra_data.agents?.length" class="flex items-center gap-1.5">
+                <span
+                  v-for="agent in post.extra_data.agents"
+                  :key="agent"
+                  class="text-xs px-2 py-0.5 rounded-full border"
+                  :style="{ borderColor: getAgentColor(agent) + '60', color: getAgentColor(agent) }"
+                >
+                  {{ agent }}
+                </span>
+              </div>
+              <span v-if="post.extra_data.rounds" class="text-xs text-blue-400">{{ post.extra_data.rounds }} rounds</span>
+              <span v-if="post.extra_data.termination" class="text-xs text-blue-500/70 ml-auto">{{ post.extra_data.termination }}</span>
+            </div>
+          </div>
+
+          <!-- ── Rich Content: Training ── -->
+          <div v-if="post.content_type === 'training_milestone' && post.extra_data" class="mt-3 bg-green-950/30 border border-green-500/20 rounded-lg p-3">
+            <div class="grid grid-cols-3 gap-3 text-center">
+              <div>
+                <div class="text-sm font-medium text-green-300">{{ post.extra_data.model_name || '?' }}</div>
+                <div class="text-xs text-green-600">Model</div>
+              </div>
+              <div>
+                <div class="text-sm font-medium text-green-300">{{ post.extra_data.base_model || '?' }}</div>
+                <div class="text-xs text-green-600">Base</div>
+              </div>
+              <div>
+                <div class="text-sm font-medium text-green-300">{{ post.extra_data.model_type || '?' }}</div>
+                <div class="text-xs text-green-600">Type</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ── Rich Content: Tool Showcase ── -->
+          <div v-if="post.content_type === 'tool_showcase' && post.extra_data" class="mt-3 bg-orange-950/30 border border-orange-500/20 rounded-lg p-3">
+            <div class="flex items-center gap-2">
+              <span class="text-orange-400">&#9881;</span>
+              <span class="text-sm font-medium text-orange-300">{{ post.extra_data.tool_name }}</span>
+              <span v-if="post.extra_data.category" class="text-xs px-1.5 py-0.5 rounded bg-orange-500/20 text-orange-400 ml-auto">{{ post.extra_data.category }}</span>
+            </div>
           </div>
 
           <!-- Reaction Bar -->

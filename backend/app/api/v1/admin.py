@@ -21,6 +21,7 @@ from app.models.user import User
 from app.models.billing import Subscription, CreditBalance, Coupon
 from app.models.feedback import BugReport
 from app.models.conversation import Conversation, Message
+from app.models.agora import AgoraPost, AgoraComment
 from app.auth.deps import get_current_user
 from app.services.llm_provider import get_available_providers, PROVIDER_MODELS
 
@@ -986,3 +987,124 @@ async def revoke_user_grant(
         await db.commit()
 
     return {"status": "ok", "user_id": str(user_id), "provider": provider, "revoked": True}
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Agora Moderation
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@router.get("/agora/stats")
+async def get_agora_stats(
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get Agora post statistics."""
+    total = (await db.execute(
+        select(func.count()).select_from(AgoraPost)
+    )).scalar() or 0
+
+    flagged = (await db.execute(
+        select(func.count()).select_from(AgoraPost).where(AgoraPost.flag_count > 0)
+    )).scalar() or 0
+
+    hidden = (await db.execute(
+        select(func.count()).select_from(AgoraPost).where(AgoraPost.visibility == "hidden")
+    )).scalar() or 0
+
+    comments = (await db.execute(
+        select(func.count()).select_from(AgoraComment)
+    )).scalar() or 0
+
+    return {
+        "total_posts": total,
+        "flagged_posts": flagged,
+        "hidden_posts": hidden,
+        "total_comments": comments,
+    }
+
+
+@router.get("/agora/posts")
+async def list_agora_posts(
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+    filter: Optional[str] = Query(None, description="flagged, hidden, all"),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+):
+    """List Agora posts for moderation."""
+    from sqlalchemy.orm import selectinload
+
+    query = select(AgoraPost).options(
+        selectinload(AgoraPost.user)
+    ).order_by(AgoraPost.created_at.desc())
+
+    if filter == "flagged":
+        query = query.where(AgoraPost.flag_count > 0, AgoraPost.visibility == "public")
+    elif filter == "hidden":
+        query = query.where(AgoraPost.visibility == "hidden")
+    else:
+        query = query.where(AgoraPost.visibility != "deleted")
+
+    total_q = select(func.count()).select_from(query.subquery())
+    total = (await db.execute(total_q)).scalar() or 0
+
+    result = await db.execute(query.offset(offset).limit(limit))
+    posts = result.scalars().all()
+
+    return {
+        "posts": [
+            {
+                "id": str(p.id),
+                "content_type": p.content_type,
+                "title": p.title,
+                "body": (p.body or "")[:300],
+                "agent_id": p.agent_id,
+                "visibility": p.visibility,
+                "is_auto": p.is_auto,
+                "is_pinned": p.is_pinned,
+                "flag_count": p.flag_count,
+                "reaction_count": p.reaction_count,
+                "comment_count": p.comment_count,
+                "user_email": p.user.email if p.user else None,
+                "created_at": p.created_at.isoformat() if p.created_at else None,
+            }
+            for p in posts
+        ],
+        "total": total,
+    }
+
+
+class AgoraModAction(BaseModel):
+    action: str = Field(description="hide, restore, delete, pin, unpin")
+
+
+@router.patch("/agora/posts/{post_id}")
+async def moderate_agora_post(
+    post_id: UUID,
+    body: AgoraModAction,
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Moderate an Agora post."""
+    result = await db.execute(select(AgoraPost).where(AgoraPost.id == post_id))
+    post = result.scalar_one_or_none()
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found")
+
+    if body.action == "hide":
+        post.visibility = "hidden"
+    elif body.action == "restore":
+        post.visibility = "public"
+        post.flag_count = 0
+    elif body.action == "delete":
+        post.visibility = "deleted"
+    elif body.action == "pin":
+        post.is_pinned = True
+    elif body.action == "unpin":
+        post.is_pinned = False
+    else:
+        raise HTTPException(status_code=400, detail=f"Unknown action: {body.action}")
+
+    await db.commit()
+
+    return {"status": "ok", "post_id": str(post_id), "action": body.action, "visibility": post.visibility}

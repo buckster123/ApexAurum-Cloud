@@ -86,6 +86,7 @@
           <button onclick="showTab('usage')" data-tab="usage" class="tab-btn px-4 py-3 text-sm font-medium border-b-2 border-transparent hover:border-gold/50 transition-colors">Usage</button>
           <button onclick="showTab('grants')" data-tab="grants" class="tab-btn px-4 py-3 text-sm font-medium border-b-2 border-transparent hover:border-gold/50 transition-colors">Grants</button>
           <button onclick="showTab('errors')" data-tab="errors" class="tab-btn px-4 py-3 text-sm font-medium border-b-2 border-transparent hover:border-gold/50 transition-colors">Errors</button>
+          <button onclick="showTab('agora')" data-tab="agora" class="tab-btn px-4 py-3 text-sm font-medium border-b-2 border-transparent hover:border-gold/50 transition-colors">Agora</button>
         </div>
       </div>
 
@@ -561,6 +562,59 @@
             </div>
           </div>
         </div>
+        <!-- Agora Tab -->
+        <div id="tab-agora" class="tab-content hidden">
+          <!-- Stats -->
+          <div class="grid md:grid-cols-4 gap-4 mb-6">
+            <div class="card text-center">
+              <div id="agora-stat-total" class="text-2xl font-bold text-gold">-</div>
+              <div class="text-sm text-gray-400">Total Posts</div>
+            </div>
+            <div class="card text-center">
+              <div id="agora-stat-flagged" class="text-2xl font-bold text-orange-400">-</div>
+              <div class="text-sm text-gray-400">Flagged</div>
+            </div>
+            <div class="card text-center">
+              <div id="agora-stat-hidden" class="text-2xl font-bold text-red-400">-</div>
+              <div class="text-sm text-gray-400">Hidden</div>
+            </div>
+            <div class="card text-center">
+              <div id="agora-stat-comments" class="text-2xl font-bold text-blue-400">-</div>
+              <div class="text-sm text-gray-400">Comments</div>
+            </div>
+          </div>
+
+          <!-- Filter -->
+          <div class="card">
+            <div class="flex items-center justify-between mb-4">
+              <h3 class="text-lg font-semibold">Posts</h3>
+              <select id="agora-filter" onchange="loadAgoraPosts()" class="input w-40">
+                <option value="all">All Active</option>
+                <option value="flagged">Flagged</option>
+                <option value="hidden">Hidden</option>
+              </select>
+            </div>
+
+            <div id="agora-loading" class="text-center py-8 text-gray-500">Loading posts...</div>
+            <div id="agora-empty" class="text-center py-8 text-gray-500 hidden">No posts found</div>
+
+            <table id="agora-table" class="w-full text-sm hidden">
+              <thead>
+                <tr class="text-left text-gray-400 border-b border-apex-border">
+                  <th class="pb-3 pr-3">Type</th>
+                  <th class="pb-3 pr-3">Content</th>
+                  <th class="pb-3 pr-3">Agent</th>
+                  <th class="pb-3 pr-3">User</th>
+                  <th class="pb-3 pr-3">Flags</th>
+                  <th class="pb-3 pr-3">Status</th>
+                  <th class="pb-3">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="agora-body" class="divide-y divide-apex-border"></tbody>
+            </table>
+          </div>
+        </div>
+
       </main>
     </div>
   </div>
@@ -679,6 +733,7 @@
       if (tab === 'usage') loadUsage();
       if (tab === 'grants') loadGrants();
       if (tab === 'errors') { loadErrorSettings(); loadErrors(); }
+      if (tab === 'agora') { loadAgoraStats(); loadAgoraPosts(); }
     }
 
     // Coupons
@@ -1833,6 +1888,124 @@
         loadErrors();
       } catch (err) {
         alert('Purge failed: ' + err.message);
+      }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Agora Moderation
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    async function loadAgoraStats() {
+      try {
+        const res = await fetch(`${API_BASE}/api/v1/admin/agora/stats`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        document.getElementById('agora-stat-total').textContent = data.total_posts;
+        document.getElementById('agora-stat-flagged').textContent = data.flagged_posts;
+        document.getElementById('agora-stat-hidden').textContent = data.hidden_posts;
+        document.getElementById('agora-stat-comments').textContent = data.total_comments;
+      } catch (err) {
+        console.error('Failed to load agora stats:', err);
+      }
+    }
+
+    async function loadAgoraPosts() {
+      const loading = document.getElementById('agora-loading');
+      const empty = document.getElementById('agora-empty');
+      const table = document.getElementById('agora-table');
+      const tbody = document.getElementById('agora-body');
+      const filter = document.getElementById('agora-filter').value;
+
+      loading.classList.remove('hidden');
+      empty.classList.add('hidden');
+      table.classList.add('hidden');
+
+      try {
+        const res = await fetch(`${API_BASE}/api/v1/admin/agora/posts?filter=${filter}&limit=50`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!res.ok) throw new Error('Failed to load');
+        const data = await res.json();
+
+        loading.classList.add('hidden');
+
+        if (!data.posts || data.posts.length === 0) {
+          empty.classList.remove('hidden');
+          return;
+        }
+
+        table.classList.remove('hidden');
+        tbody.innerHTML = data.posts.map(p => {
+          const typeBadge = {
+            music_creation: 'bg-purple-500/20 text-purple-400',
+            council_insight: 'bg-blue-500/20 text-blue-400',
+            training_milestone: 'bg-green-500/20 text-green-400',
+            tool_showcase: 'bg-orange-500/20 text-orange-400',
+            user_post: 'bg-gray-500/20 text-gray-400',
+          }[p.content_type] || 'bg-gray-500/20 text-gray-400';
+
+          const visBadge = p.visibility === 'hidden'
+            ? '<span class="px-2 py-0.5 rounded text-xs bg-red-500/20 text-red-400">Hidden</span>'
+            : p.is_pinned
+              ? '<span class="px-2 py-0.5 rounded text-xs bg-gold/20 text-gold">Pinned</span>'
+              : '<span class="px-2 py-0.5 rounded text-xs bg-green-500/20 text-green-400">Public</span>';
+
+          const flagBadge = p.flag_count > 0
+            ? `<span class="px-2 py-0.5 rounded text-xs bg-orange-500/20 text-orange-400">${p.flag_count}</span>`
+            : '<span class="text-gray-600">0</span>';
+
+          const content = (p.title || p.body || '').slice(0, 60) + ((p.title || p.body || '').length > 60 ? '...' : '');
+          const created = p.created_at ? new Date(p.created_at).toLocaleString() : '-';
+
+          let actions = '';
+          if (p.visibility === 'public') {
+            actions += `<button onclick="agoraAction('${p.id}','hide')" class="text-xs px-2 py-1 rounded bg-red-500/20 text-red-400 hover:bg-red-500/30">Hide</button> `;
+            if (!p.is_pinned) {
+              actions += `<button onclick="agoraAction('${p.id}','pin')" class="text-xs px-2 py-1 rounded bg-gold/20 text-gold hover:bg-gold/30">Pin</button> `;
+            } else {
+              actions += `<button onclick="agoraAction('${p.id}','unpin')" class="text-xs px-2 py-1 rounded bg-gray-500/20 text-gray-400 hover:bg-gray-500/30">Unpin</button> `;
+            }
+          } else if (p.visibility === 'hidden') {
+            actions += `<button onclick="agoraAction('${p.id}','restore')" class="text-xs px-2 py-1 rounded bg-green-500/20 text-green-400 hover:bg-green-500/30">Restore</button> `;
+          }
+          actions += `<button onclick="agoraAction('${p.id}','delete')" class="text-xs px-2 py-1 rounded bg-red-500/20 text-red-300 hover:bg-red-500/30">Delete</button>`;
+
+          return `<tr class="text-gray-300">
+            <td class="py-3 pr-3"><span class="px-2 py-0.5 rounded text-xs ${typeBadge}">${p.content_type.replace('_',' ')}</span></td>
+            <td class="py-3 pr-3 max-w-xs truncate" title="${content}">${content}</td>
+            <td class="py-3 pr-3">${p.agent_id || '-'}</td>
+            <td class="py-3 pr-3 text-xs text-gray-400">${p.user_email || '-'}</td>
+            <td class="py-3 pr-3">${flagBadge}</td>
+            <td class="py-3 pr-3">${visBadge}</td>
+            <td class="py-3 whitespace-nowrap">${actions}</td>
+          </tr>`;
+        }).join('');
+      } catch (err) {
+        loading.classList.add('hidden');
+        empty.textContent = 'Failed to load posts';
+        empty.classList.remove('hidden');
+      }
+    }
+
+    async function agoraAction(postId, action) {
+      if (action === 'delete' && !confirm('Permanently delete this post?')) return;
+
+      try {
+        const res = await fetch(`${API_BASE}/api/v1/admin/agora/posts/${postId}`, {
+          method: 'PATCH',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ action }),
+        });
+        if (!res.ok) throw new Error('Action failed');
+        loadAgoraPosts();
+        loadAgoraStats();
+      } catch (err) {
+        alert('Failed: ' + err.message);
       }
     }
   </script>
