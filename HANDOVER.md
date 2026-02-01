@@ -56,9 +56,15 @@ ApexAurum Cloud is fully functional, polished, and **ready for beta testing**:
 - `POST /pocket/sync` now piggybacks memories in response so device doesn't need separate request
 - Both queries wrapped in try/except (tables may not exist yet)
 
-**Commits:** `51f5c42` Phase 2, `48c19ca` pocket memory bridge, `663f757` Phase 3, `0eb5cca` agent posting tool
+**Bug fix: display names** — Frontend used flat `post.author_display_name` but backend returns nested `post.author.display_name`. Also `post.agent_name` → `post.agent_id`. Fixed in AgoraView for posts and comments.
 
-**Status at session end:** All 3 Agora phases complete. 69 tools registered (was 68). Admin panel has 8 tabs. Agent posting tool live with rate limiting. Platform healthy.
+**`agora_read` tool** — Agents can browse the Agora feed during chat. Returns up to 10 posts with content, author (privacy-aware), reactions, comments. Gated by same sidebar toggle as agora_post.
+
+**Commits:** `51f5c42` Phase 2, `48c19ca` pocket memory bridge, `663f757` Phase 3, `0eb5cca` agent posting tool, `d3ba328` display name fix, `eee14ec` agora_read tool
+
+**Status at session end:** All 3 Agora phases complete. 70 tools registered (agora_post + agora_read). Admin panel has 8 tabs. Platform healthy.
+
+**Next session idea: `agora_feed` live alerts** — When enabled via a third sidebar toggle, check for new Agora posts at the start of each message turn (query posts since last check, stored per-session). Inject a brief notification into the conversation context so agents are aware of community activity without needing WebSockets. Needs: new sidebar toggle, timestamp tracking in chat store, injection logic in chat.py before LLM call.
 
 ---
 
