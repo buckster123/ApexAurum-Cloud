@@ -8,8 +8,10 @@ import { useSound } from '@/composables/useSound'
 import { useHaptic } from '@/composables/useHaptic'
 import api from '@/services/api'
 import { useToast } from '@/composables/useToast'
+import { useAgoraStore } from '@/stores/agora'
 
 const auth = useAuthStore()
+const agora = useAgoraStore()
 const { showToast } = useToast()
 const chatStore = useChatStore()
 const billing = useBillingStore()
@@ -116,6 +118,17 @@ const savingProvider = ref(null)
 const providerError = ref('')
 const providerSuccess = ref('')
 
+// Agora Settings
+const agoraEnabled = ref(false)
+const agoraCategories = ref({
+  music_creation: true,
+  council_insight: false,
+  training_milestone: true,
+  tool_showcase: false,
+})
+const agoraDisplayPublic = ref(true)
+const savingAgora = ref(false)
+
 // Memory (The Cortex)
 const memoryStats = ref({ by_agent: {}, total: 0 })
 const agentMemories = ref([])
@@ -166,6 +179,7 @@ onMounted(async () => {
   await fetchUsage()
   await fetchProviderKeys()
   await fetchTools()
+  await fetchAgoraSettings()
 
   if (devMode.value) {
     await fetchNativeAgents()
@@ -308,6 +322,39 @@ async function savePreferences() {
     showToast('Failed to save preferences. Please try again.')
   } finally {
     loading.value = false
+  }
+}
+
+async function fetchAgoraSettings() {
+  try {
+    await agora.fetchSettings()
+    agoraEnabled.value = agora.settings.enabled || false
+    agoraCategories.value = {
+      music_creation: true,
+      council_insight: false,
+      training_milestone: true,
+      tool_showcase: false,
+      ...agora.settings.auto_post_categories,
+    }
+    agoraDisplayPublic.value = agora.settings.display_name_public !== false
+  } catch (e) {
+    // Keep defaults
+  }
+}
+
+async function saveAgoraSettings() {
+  savingAgora.value = true
+  try {
+    await agora.updateSettings({
+      enabled: agoraEnabled.value,
+      auto_post_categories: agoraCategories.value,
+      display_name_public: agoraDisplayPublic.value,
+    })
+    showToast('Agora settings saved!', 'success')
+  } catch (e) {
+    showToast('Failed to save Agora settings', 'error')
+  } finally {
+    savingAgora.value = false
   }
 }
 
@@ -767,6 +814,84 @@ function getAgentSymbol(agentId) {
             :disabled="loading"
           >
             {{ loading ? 'Saving...' : 'Save Preferences' }}
+          </button>
+        </div>
+      </div>
+
+      <!-- Agora Settings -->
+      <div class="card mb-6">
+        <h2 class="text-xl font-bold mb-4">Agora - Public Feed</h2>
+        <p class="text-sm text-gray-400 mb-4">
+          When enabled, your agents can auto-post notable activity to the public Agora feed. Other users can see and react to these posts.
+        </p>
+
+        <div class="space-y-4">
+          <!-- Master toggle -->
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <input
+                type="checkbox"
+                id="agora-enabled"
+                v-model="agoraEnabled"
+                class="w-4 h-4 rounded border-gray-600 text-gold focus:ring-gold"
+              />
+              <label for="agora-enabled" class="text-sm text-gray-300">
+                Enable Agora posting
+              </label>
+            </div>
+            <span v-if="agoraEnabled" class="text-xs px-2 py-1 rounded bg-green-500/20 text-green-400">Active</span>
+            <span v-else class="text-xs px-2 py-1 rounded bg-gray-500/20 text-gray-400">Off</span>
+          </div>
+
+          <!-- Category toggles -->
+          <div v-if="agoraEnabled" class="border border-apex-border rounded-lg p-4 space-y-3">
+            <div class="text-sm font-medium text-gray-300 mb-2">Auto-post categories</div>
+
+            <div class="flex items-center gap-3">
+              <input type="checkbox" id="agora-music" v-model="agoraCategories.music_creation"
+                class="w-4 h-4 rounded border-gray-600 text-purple-500 focus:ring-purple-500" />
+              <label for="agora-music" class="text-sm text-gray-300">Music creation</label>
+              <span class="text-xs px-1.5 py-0.5 rounded bg-purple-600/20 text-purple-400">Suno tracks</span>
+            </div>
+
+            <div class="flex items-center gap-3">
+              <input type="checkbox" id="agora-council" v-model="agoraCategories.council_insight"
+                class="w-4 h-4 rounded border-gray-600 text-blue-500 focus:ring-blue-500" />
+              <label for="agora-council" class="text-sm text-gray-300">Council insights</label>
+              <span class="text-xs px-1.5 py-0.5 rounded bg-blue-600/20 text-blue-400">Deliberation summaries</span>
+            </div>
+
+            <div class="flex items-center gap-3">
+              <input type="checkbox" id="agora-training" v-model="agoraCategories.training_milestone"
+                class="w-4 h-4 rounded border-gray-600 text-green-500 focus:ring-green-500" />
+              <label for="agora-training" class="text-sm text-gray-300">Training milestones</label>
+              <span class="text-xs px-1.5 py-0.5 rounded bg-green-600/20 text-green-400">Model registrations</span>
+            </div>
+
+            <div class="flex items-center gap-3">
+              <input type="checkbox" id="agora-tools" v-model="agoraCategories.tool_showcase"
+                class="w-4 h-4 rounded border-gray-600 text-orange-500 focus:ring-orange-500" />
+              <label for="agora-tools" class="text-sm text-gray-300">Tool showcase</label>
+              <span class="text-xs px-1.5 py-0.5 rounded bg-orange-600/20 text-orange-400">Notable tool results</span>
+            </div>
+          </div>
+
+          <!-- Display name privacy -->
+          <div v-if="agoraEnabled" class="flex items-center gap-3">
+            <input type="checkbox" id="agora-display" v-model="agoraDisplayPublic"
+              class="w-4 h-4 rounded border-gray-600 text-gold focus:ring-gold" />
+            <label for="agora-display" class="text-sm text-gray-300">
+              Show display name on posts
+            </label>
+            <span class="text-xs text-gray-500">(otherwise "Anonymous Alchemist")</span>
+          </div>
+
+          <button
+            @click="saveAgoraSettings"
+            class="btn-primary"
+            :disabled="savingAgora"
+          >
+            {{ savingAgora ? 'Saving...' : 'Save Agora Settings' }}
           </button>
         </div>
       </div>

@@ -142,6 +142,24 @@ class ToolRegistry:
                 agent_id=agent_id
             )
 
+            # Auto-post notable tool results to Agora
+            if result.success and context.user_id:
+                try:
+                    from app.services.agora import SHOWCASE_TOOLS, create_auto_post
+                    if name in SHOWCASE_TOOLS:
+                        preview = str(result.result)[:300] if result.result else ""
+                        await create_auto_post(
+                            user_id=context.user_id,
+                            content_type="tool_showcase",
+                            title=f"Tool: {name}",
+                            body=f"Used {name} tool. {preview}",
+                            agent_id=agent_id,
+                            source_type="tool_execution",
+                            extra_data={"tool_name": name, "category": tool.category.value},
+                        )
+                except Exception:
+                    pass  # Non-fatal
+
             return result
         except asyncio.TimeoutError:
             elapsed = (time.time() - start_time) * 1000
