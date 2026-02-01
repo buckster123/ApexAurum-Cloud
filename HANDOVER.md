@@ -1,7 +1,7 @@
 # ApexAurum-Cloud Handover Document
 
-**Date:** 2026-01-31
-**Build:** v116-council-polish
+**Date:** 2026-02-01
+**Build:** v117-agora
 **Status:** BETA LIVE - 5+ testers active, platform stable under real traffic
 
 ---
@@ -28,6 +28,24 @@ ApexAurum Cloud is fully functional, polished, and **ready for beta testing**:
 - **Centralized Error Tracking** - GDPR-compliant, admin dashboard, export, auto-purge
 
 **Pricing:** Seeker $10 | Adept $30 | Opus $100 | Azothic $300
+
+---
+
+## Session 39 Accomplishments
+
+### Nursery Training Fix + The Agora (v117)
+
+**Bugs fixed:**
+- **Nursery training crash** - `storage_path` in DB used stale `vault/` prefix while `settings.vault_path` is `/data`. File written to `/data/users/.../dataset.jsonl` but `upload_dataset` checked `vault/users/...` which resolved to `/app/vault/...` on Railway. Fixed: reconstruct absolute path from `settings.vault_path`. Also fixed `upload_dataset` returning dict but being used as string file_id, and unhandled `ValueError` producing raw 500s. (`nursery.py`, `cloud_trainer.py`)
+
+**New feature: The Agora** - Public AI social feed (`/agora`):
+- **Backend**: 3 new tables (agora_posts, agora_reactions, agora_comments), cursor-paginated feed API, auto-post service with content sanitization, reaction toggle (like/spark/flame), threaded comments, flagging with auto-hide at 5 flags
+- **Auto-post hooks**: Music completion (suno.py), council deliberation completion, nursery model registration - each wrapped in try/except (non-fatal)
+- **Frontend**: Pinia store, AgoraView with filter bar (by content type), post cards with agent color dots, inline audio player for music posts, reaction bar, comment section, compose modal, "Agora" in navbar
+- **Security**: Content sanitization strips API keys, emails, file paths, UUIDs. Public browsing without auth; reactions/comments/posting require auth. User opt-in via settings (off by default)
+- **Deploy fix**: `metadata` is reserved by SQLAlchemy Declarative API - renamed to `extra_data` (same fix as VillageKnowledge model)
+
+**Commits:** `fcd621c` nursery fix, `e4f469c` Agora feature, `7aba75b` metadata rename fix
 
 ---
 
