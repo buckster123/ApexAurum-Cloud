@@ -730,6 +730,21 @@ async def register_model_in_village(
     if model.village_posted:
         return {"success": True, "message": "Model already registered in the Village.", "already_posted": True}
     model.village_posted = True
+    # Agora auto-post (non-fatal)
+    try:
+        from app.services.agora import create_auto_post
+        await create_auto_post(
+            user_id=user.id,
+            content_type="training_milestone",
+            title=f"Model trained: {model.name}",
+            body=f"Trained a {model.model_type} model based on {model.base_model}. Capabilities: {', '.join(model.capabilities or ['general'])}.",
+            agent_id=model.agent_id,
+            source_type="training_job",
+            source_id=str(model.job_id) if model.job_id else None,
+            metadata={"model_name": model.name, "base_model": model.base_model, "model_type": model.model_type},
+        )
+    except Exception:
+        pass
     # Store in neural memory
     neural = NeuralMemoryService(db)
     capabilities_str = ", ".join(model.capabilities or []) or "general"

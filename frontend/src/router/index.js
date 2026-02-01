@@ -35,6 +35,12 @@ const router = createRouter({
       meta: { requiresAuth: true }  // Saved conversations still require auth
     },
     {
+      path: '/agora',
+      name: 'agora',
+      component: () => import('@/views/AgoraView.vue'),
+      meta: { requiresAuth: false }
+    },
+    {
       path: '/agents',
       name: 'agents',
       component: () => import('@/views/AgentsView.vue'),

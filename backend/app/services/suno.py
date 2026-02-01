@@ -639,6 +639,22 @@ async def auto_complete_music_task(task_id: str, user_id: str):
             except Exception as ws_err:
                 logger.warning(f"Auto-complete: WebSocket broadcast failed (non-fatal): {ws_err}")
 
+            # Agora auto-post (non-fatal)
+            try:
+                from app.services.agora import create_auto_post
+                await create_auto_post(
+                    user_id=task.user_id,
+                    content_type="music_creation",
+                    title=f"New track: {task.title or 'Untitled'}",
+                    body=f"Created a new {task.style or 'AI'} track: {task.title or 'Untitled'}",
+                    agent_id=task.agent_id,
+                    source_type="music_task",
+                    source_id=str(task.id),
+                    metadata={"audio_url": task.audio_url, "style": task.style, "title": task.title},
+                )
+            except Exception:
+                pass
+
             logger.info(f"Auto-complete DONE: task {task_id} - '{task.title}' ({len(tracks)} tracks)")
 
     except Exception as e:

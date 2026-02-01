@@ -38,6 +38,13 @@ function closeMobileMenu() {
           Chat
         </router-link>
         <router-link
+          to="/agora"
+          class="text-gray-400 hover:text-white transition-colors"
+          active-class="text-gold"
+        >
+          Agora
+        </router-link>
+        <router-link
           to="/council"
           class="text-gray-400 hover:text-white transition-colors"
           active-class="text-gold"
@@ -187,6 +194,13 @@ function closeMobileMenu() {
           class="px-4 py-3 rounded-lg text-gray-300 hover:bg-white/5 hover:text-gold transition-colors"
         >
           💬 Chat
+        </router-link>
+        <router-link
+          to="/agora"
+          @click="closeMobileMenu"
+          class="px-4 py-3 rounded-lg text-gray-300 hover:bg-white/5 hover:text-gold transition-colors"
+        >
+          Agora
         </router-link>
         <router-link
           to="/council"

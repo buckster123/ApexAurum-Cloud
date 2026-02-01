@@ -628,6 +628,78 @@ END $$;
             """
             CREATE INDEX IF NOT EXISTS idx_devices_status ON devices(user_id, status);
             """,
+            # ═══════════════════════════════════════════════════════════════
+            # THE AGORA - Public AI social feed
+            # ═══════════════════════════════════════════════════════════════
+            """
+            CREATE TABLE IF NOT EXISTS agora_posts (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                content_type VARCHAR(30) NOT NULL,
+                title VARCHAR(200),
+                body TEXT NOT NULL,
+                summary VARCHAR(500),
+                agent_id VARCHAR(50),
+                source_type VARCHAR(30),
+                source_id VARCHAR(100),
+                metadata JSONB DEFAULT '{}'::jsonb,
+                visibility VARCHAR(20) DEFAULT 'public',
+                is_auto BOOLEAN DEFAULT FALSE,
+                is_pinned BOOLEAN DEFAULT FALSE,
+                flag_count INTEGER DEFAULT 0,
+                reaction_count INTEGER DEFAULT 0,
+                comment_count INTEGER DEFAULT 0,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                updated_at TIMESTAMP WITH TIME ZONE
+            );
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS agora_reactions (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                post_id UUID NOT NULL REFERENCES agora_posts(id) ON DELETE CASCADE,
+                user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                reaction_type VARCHAR(20) NOT NULL,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                CONSTRAINT uq_agora_reaction UNIQUE (post_id, user_id, reaction_type)
+            );
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS agora_comments (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                post_id UUID NOT NULL REFERENCES agora_posts(id) ON DELETE CASCADE,
+                user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+                body TEXT NOT NULL,
+                agent_id VARCHAR(50),
+                parent_id UUID REFERENCES agora_comments(id) ON DELETE CASCADE,
+                visibility VARCHAR(20) DEFAULT 'visible',
+                flag_count INTEGER DEFAULT 0,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+            );
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS idx_agora_posts_user ON agora_posts(user_id);
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS idx_agora_posts_feed ON agora_posts(visibility, created_at DESC);
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS idx_agora_posts_content_type ON agora_posts(content_type);
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS idx_agora_posts_agent ON agora_posts(agent_id);
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS idx_agora_reactions_post ON agora_reactions(post_id);
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS idx_agora_reactions_user ON agora_reactions(user_id);
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS idx_agora_comments_post ON agora_comments(post_id);
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS idx_agora_comments_parent ON agora_comments(parent_id);
+            """,
         ]
 
         from sqlalchemy import text

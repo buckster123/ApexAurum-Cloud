@@ -752,6 +752,24 @@ async def execute_round(
     except Exception as e:
         logger.warning(f"Failed to store council memories: {e}")
 
+    # Agora auto-post on session completion (non-fatal)
+    if new_state == "complete":
+        try:
+            from app.services.agora import create_auto_post
+            agent_names = [a.agent_id for a in session.agents if a.is_active] if session.agents else []
+            await create_auto_post(
+                user_id=user.id,
+                content_type="council_insight",
+                title=f"Council deliberation: {session.topic[:100]}",
+                body=f"The council reached {session.termination_reason or 'conclusion'} after {round_number} rounds on: {session.topic}",
+                agent_id=agent_names[0] if agent_names else "COUNCIL",
+                source_type="council_session",
+                source_id=str(session.id),
+                metadata={"topic": session.topic, "agents": agent_names, "rounds": round_number, "termination": session.termination_reason},
+            )
+        except Exception:
+            pass
+
     return ExecuteRoundResponse(
         round_number=round_number,
         messages=[

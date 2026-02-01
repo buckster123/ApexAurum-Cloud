@@ -352,6 +352,7 @@ async def health_check():
             "apexpocket-cloud-api",
             "device-management",
             "error-tracking",
+            "agora-social-feed",
         ],
     }
 
