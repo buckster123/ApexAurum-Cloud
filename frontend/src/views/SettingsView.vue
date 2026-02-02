@@ -16,22 +16,6 @@ const { showToast } = useToast()
 const chatStore = useChatStore()
 const billing = useBillingStore()
 
-// Token slider max based on selected model and dev mode
-const sliderMax = computed(() => {
-  const currentModel = chatStore.availableModels.find(m => m.id === chatStore.selectedModel)
-  const modelMax = currentModel?.max_tokens || 8192
-  // Dev mode: full model limit (up to 64K for Anthropic)
-  // Normal mode: capped at 32K for usability
-  const uiCap = devMode.value ? 65536 : 32768
-  return Math.min(modelMax, uiCap)
-})
-
-watch(sliderMax, (newMax) => {
-  if (chatStore.maxTokens > newMax) {
-    chatStore.setMaxTokens(newMax)
-  }
-})
-
 // Tools (The Athanor's Hands)
 const toolsEnabled = ref(chatStore.toolsEnabled)
 const availableTools = ref([])
@@ -78,6 +62,21 @@ const categoryLabels = {
   browser: '🖥️ Browser',
 }
 const { devMode, pacMode, handleTap, tapCount, alchemyLayer, layerName, tierRestrictionMessage, enableDevMode } = useDevMode()
+
+// Token slider max based on selected model and dev mode (must be after useDevMode)
+const sliderMax = computed(() => {
+  const currentModel = chatStore.availableModels.find(m => m.id === chatStore.selectedModel)
+  const modelMax = currentModel?.max_tokens || 8192
+  const uiCap = devMode.value ? 65536 : 32768
+  return Math.min(modelMax, uiCap)
+})
+
+watch(sliderMax, (newMax) => {
+  if (chatStore.maxTokens > newMax) {
+    chatStore.setMaxTokens(newMax)
+  }
+})
+
 const { soundEnabled, toggleSound, sounds } = useSound()
 const { hapticEnabled, setEnabled: setHapticEnabled, haptics, isSupported: hapticSupported } = useHaptic()
 
