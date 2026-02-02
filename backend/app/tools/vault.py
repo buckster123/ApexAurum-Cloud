@@ -724,6 +724,318 @@ Searches text files only (code, documents, data).""",
 
 
 # =============================================================================
+# VAULT EDIT (Surgical Line Editing)
+# =============================================================================
+
+class VaultEditTool(BaseTool):
+    """Edit a range of lines in a vault file."""
+
+    @property
+    def schema(self) -> ToolSchema:
+        return ToolSchema(
+            name="vault_edit",
+            description="""Edit a range of lines in a text file.
+
+Replaces lines start_line through end_line (inclusive, 1-indexed) with new_content.
+Use to:
+- Fix a bug in specific lines
+- Replace a function or block of code
+- Update a section of a document
+
+Reads file first with vault_read to identify line numbers, then edits surgically.
+Respects user's storage quota. Only works on text files.""",
+            category=ToolCategory.FILES,
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "file_id": {
+                        "type": "string",
+                        "description": "File UUID to edit",
+                    },
+                    "start_line": {
+                        "type": "integer",
+                        "description": "First line to replace (1-indexed, inclusive)",
+                    },
+                    "end_line": {
+                        "type": "integer",
+                        "description": "Last line to replace (1-indexed, inclusive)",
+                    },
+                    "new_content": {
+                        "type": "string",
+                        "description": "Replacement content (replaces the specified line range)",
+                    },
+                },
+                "required": ["file_id", "start_line", "end_line", "new_content"],
+            },
+            requires_auth=True,
+            requires_confirmation=True,
+        )
+
+    async def execute(self, params: dict, context: ToolContext) -> ToolResult:
+        if not context.user_id:
+            return ToolResult(success=False, error="Authentication required to edit vault files")
+
+        file_id = params.get("file_id")
+        start_line = params.get("start_line")
+        end_line = params.get("end_line")
+        new_content = params.get("new_content", "")
+
+        if not file_id:
+            return ToolResult(success=False, error="file_id is required")
+        if start_line is None or end_line is None:
+            return ToolResult(success=False, error="start_line and end_line are required")
+        if start_line < 1:
+            return ToolResult(success=False, error="start_line must be >= 1")
+        if end_line < start_line:
+            return ToolResult(success=False, error="end_line must be >= start_line")
+
+        try:
+            from app.models.file import File
+            from app.models.user import User
+            from app.database import async_session
+            from app.config import get_settings
+            from pathlib import Path
+            from datetime import datetime
+            import hashlib
+
+            settings = get_settings()
+
+            async with async_session() as db:
+                user_uuid = UUID(context.user_id) if isinstance(context.user_id, str) else context.user_id
+                file_uuid = UUID(file_id)
+
+                file_result = await db.execute(
+                    select(File).where(File.id == file_uuid, File.user_id == user_uuid)
+                )
+                file = file_result.scalar_one_or_none()
+                if not file:
+                    return ToolResult(success=False, error=f"File not found: {file_id}")
+                if file.file_type not in ("document", "code", "data"):
+                    return ToolResult(success=False, error="Cannot edit binary files")
+
+                file_path = Path(file.storage_path)
+                if not file_path.exists():
+                    return ToolResult(success=False, error="File not found on disk")
+
+                lines = file_path.read_text(encoding="utf-8", errors="replace").splitlines(keepends=True)
+                total_lines = len(lines)
+
+                if start_line > total_lines:
+                    return ToolResult(success=False, error=f"start_line {start_line} exceeds file length ({total_lines} lines)")
+                if end_line > total_lines:
+                    end_line = total_lines
+
+                # Replace lines
+                new_lines = new_content.splitlines(keepends=True)
+                if new_lines and not new_lines[-1].endswith('\n'):
+                    new_lines[-1] += '\n'
+
+                edited_lines = lines[:start_line - 1] + new_lines + lines[end_line:]
+                new_full_content = ''.join(edited_lines)
+
+                # Quota check
+                new_bytes = len(new_full_content.encode("utf-8"))
+                old_bytes = file.size_bytes
+                size_delta = new_bytes - old_bytes
+
+                if size_delta > 0:
+                    user_result = await db.execute(select(User).where(User.id == user_uuid))
+                    user = user_result.scalar_one_or_none()
+                    if user:
+                        user_settings = user.settings or {}
+                        used = user_settings.get("storage_used_bytes", 0)
+                        quota = user_settings.get("storage_quota_bytes", settings.default_quota_bytes)
+                        if used + size_delta > quota:
+                            return ToolResult(success=False, error="Storage quota exceeded")
+
+                file_path.write_text(new_full_content, encoding="utf-8")
+
+                checksum = hashlib.sha256(new_full_content.encode("utf-8")).hexdigest()
+                file.size_bytes = new_bytes
+                file.checksum = checksum
+                file.updated_at = datetime.utcnow()
+
+                if size_delta != 0:
+                    user_result = await db.execute(select(User).where(User.id == user_uuid))
+                    user = user_result.scalar_one_or_none()
+                    if user:
+                        user_settings = user.settings or {}
+                        user_settings["storage_used_bytes"] = user_settings.get("storage_used_bytes", 0) + size_delta
+                        user.settings = user_settings
+
+                await db.commit()
+
+                return ToolResult(
+                    success=True,
+                    result={
+                        "action": "edited",
+                        "file_id": str(file.id),
+                        "filename": file.name,
+                        "lines_replaced": f"{start_line}-{end_line}",
+                        "original_line_count": total_lines,
+                        "new_line_count": len(edited_lines),
+                        "size": new_bytes,
+                        "size_human": _format_size(new_bytes),
+                    },
+                )
+
+        except Exception as e:
+            logger.exception("Vault edit error")
+            return ToolResult(success=False, error=f"Edit failed: {str(e)}")
+
+
+# =============================================================================
+# VAULT INSERT (Line Insertion)
+# =============================================================================
+
+class VaultInsertTool(BaseTool):
+    """Insert lines at a position in a vault file."""
+
+    @property
+    def schema(self) -> ToolSchema:
+        return ToolSchema(
+            name="vault_insert",
+            description="""Insert content at a specific line position in a text file.
+
+Inserts new content after the specified line number (0 = insert at beginning).
+Use to:
+- Add imports at the top of a file
+- Insert new functions or methods
+- Add configuration entries
+
+Respects user's storage quota. Only works on text files.""",
+            category=ToolCategory.FILES,
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "file_id": {
+                        "type": "string",
+                        "description": "File UUID to insert into",
+                    },
+                    "after_line": {
+                        "type": "integer",
+                        "description": "Insert after this line (0 = beginning, 1-indexed)",
+                    },
+                    "content": {
+                        "type": "string",
+                        "description": "Content to insert",
+                    },
+                },
+                "required": ["file_id", "after_line", "content"],
+            },
+            requires_auth=True,
+            requires_confirmation=True,
+        )
+
+    async def execute(self, params: dict, context: ToolContext) -> ToolResult:
+        if not context.user_id:
+            return ToolResult(success=False, error="Authentication required to insert into vault files")
+
+        file_id = params.get("file_id")
+        after_line = params.get("after_line")
+        content = params.get("content", "")
+
+        if not file_id:
+            return ToolResult(success=False, error="file_id is required")
+        if after_line is None:
+            return ToolResult(success=False, error="after_line is required")
+        if after_line < 0:
+            return ToolResult(success=False, error="after_line must be >= 0")
+
+        try:
+            from app.models.file import File
+            from app.models.user import User
+            from app.database import async_session
+            from app.config import get_settings
+            from pathlib import Path
+            from datetime import datetime
+            import hashlib
+
+            settings = get_settings()
+
+            async with async_session() as db:
+                user_uuid = UUID(context.user_id) if isinstance(context.user_id, str) else context.user_id
+                file_uuid = UUID(file_id)
+
+                file_result = await db.execute(
+                    select(File).where(File.id == file_uuid, File.user_id == user_uuid)
+                )
+                file = file_result.scalar_one_or_none()
+                if not file:
+                    return ToolResult(success=False, error=f"File not found: {file_id}")
+                if file.file_type not in ("document", "code", "data"):
+                    return ToolResult(success=False, error="Cannot insert into binary files")
+
+                file_path = Path(file.storage_path)
+                if not file_path.exists():
+                    return ToolResult(success=False, error="File not found on disk")
+
+                lines = file_path.read_text(encoding="utf-8", errors="replace").splitlines(keepends=True)
+                total_lines = len(lines)
+
+                if after_line > total_lines:
+                    return ToolResult(success=False, error=f"after_line {after_line} exceeds file length ({total_lines} lines)")
+
+                # Insert content
+                new_lines = content.splitlines(keepends=True)
+                if new_lines and not new_lines[-1].endswith('\n'):
+                    new_lines[-1] += '\n'
+
+                result_lines = lines[:after_line] + new_lines + lines[after_line:]
+                new_full_content = ''.join(result_lines)
+
+                # Quota check
+                new_bytes = len(new_full_content.encode("utf-8"))
+                old_bytes = file.size_bytes
+                size_delta = new_bytes - old_bytes
+
+                if size_delta > 0:
+                    user_result = await db.execute(select(User).where(User.id == user_uuid))
+                    user = user_result.scalar_one_or_none()
+                    if user:
+                        user_settings = user.settings or {}
+                        used = user_settings.get("storage_used_bytes", 0)
+                        quota = user_settings.get("storage_quota_bytes", settings.default_quota_bytes)
+                        if used + size_delta > quota:
+                            return ToolResult(success=False, error="Storage quota exceeded")
+
+                file_path.write_text(new_full_content, encoding="utf-8")
+
+                checksum = hashlib.sha256(new_full_content.encode("utf-8")).hexdigest()
+                file.size_bytes = new_bytes
+                file.checksum = checksum
+                file.updated_at = datetime.utcnow()
+
+                if size_delta != 0:
+                    user_result = await db.execute(select(User).where(User.id == user_uuid))
+                    user = user_result.scalar_one_or_none()
+                    if user:
+                        user_settings = user.settings or {}
+                        user_settings["storage_used_bytes"] = user_settings.get("storage_used_bytes", 0) + size_delta
+                        user.settings = user_settings
+
+                await db.commit()
+
+                return ToolResult(
+                    success=True,
+                    result={
+                        "action": "inserted",
+                        "file_id": str(file.id),
+                        "filename": file.name,
+                        "inserted_after_line": after_line,
+                        "lines_inserted": len(new_lines),
+                        "new_line_count": len(result_lines),
+                        "size": new_bytes,
+                        "size_human": _format_size(new_bytes),
+                    },
+                )
+
+        except Exception as e:
+            logger.exception("Vault insert error")
+            return ToolResult(success=False, error=f"Insert failed: {str(e)}")
+
+
+# =============================================================================
 # REGISTER TOOLS
 # =============================================================================
 
@@ -733,3 +1045,5 @@ registry.register(VaultReadTool())
 registry.register(VaultInfoTool())
 registry.register(VaultWriteTool())
 registry.register(VaultSearchTool())
+registry.register(VaultEditTool())
+registry.register(VaultInsertTool())
