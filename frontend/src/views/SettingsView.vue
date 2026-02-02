@@ -16,10 +16,14 @@ const { showToast } = useToast()
 const chatStore = useChatStore()
 const billing = useBillingStore()
 
-// Token slider max based on selected model
+// Token slider max based on selected model and dev mode
 const sliderMax = computed(() => {
   const currentModel = chatStore.availableModels.find(m => m.id === chatStore.selectedModel)
-  return currentModel?.max_tokens || 8192
+  const modelMax = currentModel?.max_tokens || 8192
+  // Dev mode: full model limit (up to 64K for Anthropic)
+  // Normal mode: capped at 32K for usability
+  const uiCap = devMode.value ? 65536 : 32768
+  return Math.min(modelMax, uiCap)
 })
 
 watch(sliderMax, (newMax) => {
@@ -1750,12 +1754,13 @@ function getAgentSymbol(agentId) {
             @input="chatStore.setMaxTokens(parseInt($event.target.value))"
             :min="1024"
             :max="sliderMax"
-            :step="1024"
+            :step="2048"
             class="w-full"
           />
           <div class="flex justify-between text-xs text-gray-500 mt-1">
             <span>1K</span>
-            <span v-if="sliderMax > 8192">8K</span>
+            <span>8K</span>
+            <span v-if="sliderMax > 16384">16K</span>
             <span>{{ Math.round(sliderMax / 1024) }}K</span>
           </div>
           <p class="text-xs text-gray-600 mt-1">
