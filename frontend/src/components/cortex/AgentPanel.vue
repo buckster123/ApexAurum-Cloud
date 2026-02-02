@@ -12,7 +12,10 @@
 
 import { ref, computed, watch, nextTick, onMounted } from 'vue'
 import { useSound } from '@/composables/useSound'
+import { useChatStore } from '@/stores/chat'
 import api from '@/services/api'
+
+const chatStore = useChatStore()
 
 const props = defineProps({
   selection: {
@@ -51,6 +54,27 @@ const projectContext = ref(null)
 const loadingContext = ref(false)
 const relevantFiles = ref([])
 const showQuickActions = ref(true)
+
+// Model & Agent selection
+const selectedModel = ref(chatStore.selectedModel)
+const selectedAgent = ref('AZOTH')
+const customAgents = ref([])
+
+const systemAgents = ['AZOTH', 'ELYSIAN', 'VAJRA', 'KETHER']
+
+async function fetchCustomAgents() {
+  try {
+    const response = await api.get('/api/v1/agents/')
+    customAgents.value = (response.data || []).filter(a => !systemAgents.includes(a.name))
+  } catch (e) {
+    // Custom agents not available - that's fine
+  }
+}
+
+onMounted(async () => {
+  await chatStore.fetchModels()
+  await fetchCustomAgents()
+})
 
 // Sounds
 const agentSounds = {
@@ -237,10 +261,12 @@ async function sendMessage() {
       },
       body: JSON.stringify({
         message: contextMessage,
-        agent: 'AZOTH',  // Use Azoth for code assistance
+        agent: selectedAgent.value,
+        model: selectedModel.value,
         stream: true,
-        max_tokens: 4096,
+        max_tokens: chatStore.maxTokens,
         // Don't save to conversation history - ephemeral code chat
+        // Note: message still counts toward billing quota (checked pre-flight in chat.py)
         save_conversation: false,
       }),
     })
@@ -399,6 +425,33 @@ watch(() => props.selection, (newSelection) => {
           </svg>
         </button>
       </div>
+    </div>
+
+    <!-- Model & Agent Selectors -->
+    <div class="px-3 py-2 border-b border-apex-border flex items-center gap-2">
+      <select
+        v-model="selectedAgent"
+        class="bg-apex-dark border border-apex-border rounded px-2 py-1 text-xs text-gray-300 flex-1 min-w-0"
+        title="Select agent"
+      >
+        <option v-for="agent in systemAgents" :key="agent" :value="agent">{{ agent }}</option>
+        <option
+          v-for="agent in customAgents"
+          :key="agent.id"
+          :value="agent.name"
+        >{{ agent.name }} (Custom)</option>
+      </select>
+      <select
+        v-model="selectedModel"
+        class="bg-apex-dark border border-apex-border rounded px-2 py-1 text-xs text-gray-300 flex-1 min-w-0"
+        title="Select model"
+      >
+        <option
+          v-for="model in chatStore.availableModels"
+          :key="model.id"
+          :value="model.id"
+        >{{ model.name }}</option>
+      </select>
     </div>
 
     <!-- Project context status -->
