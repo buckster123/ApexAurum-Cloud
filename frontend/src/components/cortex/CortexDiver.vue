@@ -10,6 +10,7 @@ import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useFilesStore } from '@/stores/files'
 import { useCortexStore } from '@/stores/cortex'
 import { useSound } from '@/composables/useSound'
+import api from '@/services/api'
 import FileTabs from './FileTabs.vue'
 import MonacoEditor from './MonacoEditor.vue'
 import AgentPanel from './AgentPanel.vue'
@@ -60,6 +61,46 @@ const cortexSounds = {
   save: () => playTone(880, 0.1, 'sine', 0.2),
   error: () => playTone(220, 0.15, 'sawtooth', 0.15),
 }
+
+// Auto-refresh
+const autoRefreshEnabled = ref(false)
+let autoRefreshTimer = null
+const AUTO_REFRESH_MS = 4000
+
+function startAutoRefresh() {
+  stopAutoRefresh()
+  autoRefreshTimer = setInterval(async () => {
+    const tabId = cortex.activeTabId
+    if (!tabId) return
+    const tab = cortex.openTabs.find(t => t.id === tabId)
+    if (!tab || tab.isDirty) return // Don't overwrite unsaved changes
+
+    try {
+      const response = await api.get(`/api/v1/files/${tabId}/content`)
+      const newContent = response.data.content
+      const currentContent = cortex.fileContents[tabId]
+
+      if (newContent !== currentContent) {
+        cortex.fileContents[tabId] = newContent
+        cortex.originalContents[tabId] = newContent
+      }
+    } catch (e) {
+      // Silently ignore poll errors
+    }
+  }, AUTO_REFRESH_MS)
+}
+
+function stopAutoRefresh() {
+  if (autoRefreshTimer) {
+    clearInterval(autoRefreshTimer)
+    autoRefreshTimer = null
+  }
+}
+
+watch(autoRefreshEnabled, (enabled) => {
+  if (enabled) startAutoRefresh()
+  else stopAutoRefresh()
+})
 
 // File operations
 async function openFile(file) {
@@ -268,6 +309,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.removeEventListener('keydown', handleKeyboard)
+  stopAutoRefresh()
 })
 
 // Load initial directory
@@ -286,6 +328,24 @@ watch(() => props.folderId, async (folderId) => {
       </div>
 
       <div class="flex items-center gap-4">
+        <!-- Auto-refresh toggle -->
+        <label
+          class="flex items-center gap-1.5 text-xs cursor-pointer select-none"
+          :class="autoRefreshEnabled ? 'text-green-400' : 'text-gray-500'"
+        >
+          <span
+            class="w-7 h-4 rounded-full transition-colors relative inline-block"
+            :class="autoRefreshEnabled ? 'bg-green-600' : 'bg-gray-700'"
+            @click="autoRefreshEnabled = !autoRefreshEnabled"
+          >
+            <span
+              class="absolute top-0.5 left-0.5 w-3 h-3 rounded-full bg-white transition-transform"
+              :class="autoRefreshEnabled ? 'translate-x-3' : ''"
+            ></span>
+          </span>
+          Auto-refresh
+        </label>
+
         <!-- Status message -->
         <span v-if="statusMessage" class="text-sm text-amber-400">{{ statusMessage }}</span>
 
