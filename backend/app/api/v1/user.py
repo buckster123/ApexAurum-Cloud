@@ -109,6 +109,8 @@ async def update_profile(
         current_settings.update(request.settings)
         user.settings = current_settings
 
+    await db.commit()
+
     return UserProfileResponse(
         id=str(user.id),
         email=user.email,
@@ -200,6 +202,8 @@ async def update_preferences(
     current_settings = user.settings or {}
     current_settings.update(preferences)
     user.settings = current_settings
+
+    await db.commit()
 
     return {"message": "Preferences updated"}
 
