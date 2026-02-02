@@ -66,7 +66,7 @@ const { devMode, pacMode, handleTap, tapCount, alchemyLayer, layerName, tierRest
 // Token slider max based on selected model and dev mode (must be after useDevMode)
 const sliderMax = computed(() => {
   const currentModel = chatStore.availableModels.find(m => m.id === chatStore.selectedModel)
-  const modelMax = currentModel?.max_tokens || 8192
+  const modelMax = currentModel?.max_output_tokens || currentModel?.max_tokens || 8192
   const uiCap = devMode.value ? 65536 : 32768
   return Math.min(modelMax, uiCap)
 })
