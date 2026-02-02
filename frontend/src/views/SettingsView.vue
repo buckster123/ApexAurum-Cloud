@@ -74,6 +74,8 @@ const sliderMax = computed(() => {
 watch(sliderMax, (newMax) => {
   if (chatStore.maxTokens > newMax) {
     chatStore.setMaxTokens(newMax)
+  } else if (chatStore.maxTokens < 2048) {
+    chatStore.setMaxTokens(2048)
   }
 })
 
@@ -1751,15 +1753,14 @@ function getAgentSymbol(agentId) {
             type="range"
             :value="chatStore.maxTokens"
             @input="chatStore.setMaxTokens(parseInt($event.target.value))"
-            :min="1024"
+            :min="2048"
             :max="sliderMax"
             :step="2048"
             class="w-full"
           />
           <div class="flex justify-between text-xs text-gray-500 mt-1">
-            <span>1K</span>
-            <span>8K</span>
-            <span v-if="sliderMax > 16384">16K</span>
+            <span>2K</span>
+            <span>{{ Math.round(sliderMax / 2048) > 4 ? '16K' : '' }}</span>
             <span>{{ Math.round(sliderMax / 1024) }}K</span>
           </div>
           <p class="text-xs text-gray-600 mt-1">
