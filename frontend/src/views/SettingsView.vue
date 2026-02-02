@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useChatStore } from '@/stores/chat'
 import { useBillingStore } from '@/stores/billing'
@@ -15,6 +15,18 @@ const agora = useAgoraStore()
 const { showToast } = useToast()
 const chatStore = useChatStore()
 const billing = useBillingStore()
+
+// Token slider max based on selected model
+const sliderMax = computed(() => {
+  const currentModel = chatStore.availableModels.find(m => m.id === chatStore.selectedModel)
+  return currentModel?.max_tokens || 8192
+})
+
+watch(sliderMax, (newMax) => {
+  if (chatStore.maxTokens > newMax) {
+    chatStore.setMaxTokens(newMax)
+  }
+})
 
 // Tools (The Athanor's Hands)
 const toolsEnabled = ref(chatStore.toolsEnabled)
@@ -180,6 +192,7 @@ onMounted(async () => {
   await fetchProviderKeys()
   await fetchTools()
   await fetchAgoraSettings()
+  await chatStore.fetchModels() // For token slider model-aware max
 
   if (devMode.value) {
     await fetchNativeAgents()
@@ -1377,28 +1390,6 @@ function getAgentSymbol(agentId) {
 
           <div>
             <label class="block text-sm text-gray-400 mb-2">
-              Max Tokens: {{ preferences.max_tokens.toLocaleString() }}
-              <span class="text-xs text-gray-500 ml-2">
-                ({{ preferences.max_tokens >= 16384 ? 'Maximum' : preferences.max_tokens >= 8192 ? 'High' : 'Normal' }})
-              </span>
-            </label>
-            <input
-              type="range"
-              v-model.number="preferences.max_tokens"
-              min="1024"
-              max="16384"
-              step="1024"
-              class="w-full"
-            />
-            <div class="flex justify-between text-xs text-gray-500 mt-1">
-              <span>1K</span>
-              <span>8K</span>
-              <span>16K</span>
-            </div>
-          </div>
-
-          <div>
-            <label class="block text-sm text-gray-400 mb-2">
               Temperature: {{ preferences.temperature }}
             </label>
             <input
@@ -1741,6 +1732,39 @@ function getAgentSymbol(agentId) {
         </div>
       </div>
     </template>
+
+    <!-- Response Preferences (shown to all users) -->
+    <div v-if="activeTab === 'profile' || !devMode" class="card mb-6">
+      <h2 class="text-xl font-bold mb-4">Response Preferences</h2>
+      <div class="space-y-4">
+        <div>
+          <label class="block text-sm text-gray-400 mb-2">
+            Max Response Length: {{ chatStore.maxTokens.toLocaleString() }} tokens
+            <span class="text-xs text-gray-500 ml-2">
+              ({{ chatStore.maxTokens >= sliderMax ? 'Maximum' : chatStore.maxTokens >= 8192 ? 'High' : 'Normal' }})
+            </span>
+          </label>
+          <input
+            type="range"
+            :value="chatStore.maxTokens"
+            @input="chatStore.setMaxTokens(parseInt($event.target.value))"
+            :min="1024"
+            :max="sliderMax"
+            :step="1024"
+            class="w-full"
+          />
+          <div class="flex justify-between text-xs text-gray-500 mt-1">
+            <span>1K</span>
+            <span v-if="sliderMax > 8192">8K</span>
+            <span>{{ Math.round(sliderMax / 1024) }}K</span>
+          </div>
+          <p class="text-xs text-gray-600 mt-1">
+            Controls maximum response length. Higher values allow longer answers but use more of your quota.
+            Current model limit: {{ Math.round(sliderMax / 1024) }}K tokens.
+          </p>
+        </div>
+      </div>
+    </div>
 
     <!-- Danger Zone (shown in both modes) -->
     <div v-if="activeTab === 'profile' || !devMode" class="card mt-6 border-red-500/30">
