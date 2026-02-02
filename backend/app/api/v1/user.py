@@ -108,6 +108,7 @@ async def update_profile(
         current_settings = user.settings or {}
         current_settings.update(request.settings)
         user.settings = current_settings
+        flag_modified(user, "settings")
 
     await db.commit()
 
@@ -202,6 +203,7 @@ async def update_preferences(
     current_settings = user.settings or {}
     current_settings.update(preferences)
     user.settings = current_settings
+    flag_modified(user, "settings")
 
     await db.commit()
 

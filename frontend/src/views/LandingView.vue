@@ -147,7 +147,7 @@ function formatType(type) {
           </div>
           <div class="text-center">
             <div class="text-4xl mb-4">&#128295;</div>
-            <h3 class="font-bold text-lg mb-2">68 Tools</h3>
+            <h3 class="font-bold text-lg mb-2">72 Tools</h3>
             <p class="text-sm text-gray-400">File management, code execution, browser automation, web search, MIDI composition, model training, and more. Agents use them autonomously.</p>
           </div>
           <div class="text-center">
@@ -222,7 +222,7 @@ function formatType(type) {
             <ul class="space-y-2 text-sm text-gray-400 mb-6">
               <li>&#10003; 200 messages / month</li>
               <li>&#10003; Haiku + Sonnet models</li>
-              <li>&#10003; 68 tools</li>
+              <li>&#10003; 72 tools</li>
               <li>&#10003; 3 Council sessions / month</li>
               <li>&#10003; 10 Suno generations / month</li>
             </ul>

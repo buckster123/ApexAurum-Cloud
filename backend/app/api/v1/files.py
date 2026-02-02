@@ -845,7 +845,39 @@ async def get_file_content(
         "mime_type": file.mime_type,
         "size_bytes": file.size_bytes,
         "content": content,
+        "checksum": file.checksum,
         "language": get_monaco_language(file.name),
+    }
+
+
+@router.get("/{file_id}/checksum")
+async def get_file_checksum(
+    file_id: UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Lightweight checksum check for auto-refresh polling.
+
+    Returns only the file checksum and updated_at timestamp,
+    avoiding full content transfer on every poll cycle.
+    """
+    result = await db.execute(
+        select(File.checksum, File.updated_at, File.size_bytes)
+        .where(File.id == file_id)
+        .where(File.user_id == user.id)
+    )
+    row = result.one_or_none()
+    if not row:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="File not found"
+        )
+
+    return {
+        "checksum": row[0],
+        "updated_at": row[1].isoformat() if row[1] else None,
+        "size_bytes": row[2],
     }
 
 

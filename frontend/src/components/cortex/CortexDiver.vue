@@ -62,10 +62,11 @@ const cortexSounds = {
   error: () => playTone(220, 0.15, 'sawtooth', 0.15),
 }
 
-// Auto-refresh
+// Auto-refresh with checksum-based change detection
 const autoRefreshEnabled = ref(false)
 let autoRefreshTimer = null
 const AUTO_REFRESH_MS = 4000
+const fileChecksums = {}  // { tabId: lastKnownChecksum }
 
 function startAutoRefresh() {
   stopAutoRefresh()
@@ -76,6 +77,15 @@ function startAutoRefresh() {
     if (!tab || tab.isDirty) return // Don't overwrite unsaved changes
 
     try {
+      // Step 1: Lightweight checksum check (no content transfer)
+      const checksumResp = await api.get(`/api/v1/files/${tabId}/checksum`)
+      const newChecksum = checksumResp.data.checksum
+      const lastChecksum = fileChecksums[tabId]
+
+      // Skip full fetch if checksum unchanged
+      if (newChecksum && lastChecksum && newChecksum === lastChecksum) return
+
+      // Step 2: Checksum changed — fetch full content
       const response = await api.get(`/api/v1/files/${tabId}/content`)
       const newContent = response.data.content
       const currentContent = cortex.fileContents[tabId]
@@ -84,6 +94,8 @@ function startAutoRefresh() {
         cortex.fileContents[tabId] = newContent
         cortex.originalContents[tabId] = newContent
       }
+      // Track checksum for next poll
+      if (newChecksum) fileChecksums[tabId] = newChecksum
     } catch (e) {
       // Silently ignore poll errors
     }
