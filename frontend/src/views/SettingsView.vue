@@ -187,12 +187,12 @@ const canUseDevMode = computed(() => billing.tierLevel >= 3)
 onMounted(async () => {
   displayName.value = auth.user?.display_name || ''
   await billing.fetchStatus() // Fetch tier info first
+  await chatStore.fetchModels() // Models needed early for token slider max
   await fetchPreferences()
   await fetchUsage()
   await fetchProviderKeys()
   await fetchTools()
   await fetchAgoraSettings()
-  await chatStore.fetchModels() // For token slider model-aware max
 
   if (devMode.value) {
     await fetchNativeAgents()

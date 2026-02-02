@@ -60,12 +60,13 @@ export function useDevMode() {
   function enableDevMode(skipTierCheck = false) {
     // Check tier restriction (Adept only) unless explicitly skipped
     if (!skipTierCheck) {
-      // Dynamically import billing store to check tier
-      import('@/stores/billing').then(({ useBillingStore }) => {
+      // Dynamically import billing store to check tier (refresh first for admin changes)
+      import('@/stores/billing').then(async ({ useBillingStore }) => {
         const billing = useBillingStore()
-        if (!billing.isOpus) {
-          // Show restriction message
-          tierRestrictionMessage.value = 'Dev Mode requires Adept tier. Upgrade to unlock!'
+        await billing.fetchStatus()
+        if (billing.tierLevel < 2) {
+          // Show restriction message (Adept = level 2, Opus = 3, Azothic = 4)
+          tierRestrictionMessage.value = 'Dev Mode requires Adept tier or higher. Upgrade to unlock!'
           console.log('%c🔒 Dev Mode requires Adept tier', 'color: #FFD700; font-size: 14px;')
           console.log('%cUpgrade to Adept to unlock developer features.', 'color: #888; font-style: italic;')
 
