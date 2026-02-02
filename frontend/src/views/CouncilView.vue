@@ -88,6 +88,16 @@ async function handleDeleteSession(sessionId) {
 }
 
 async function handleExecuteRound() {
+  // Auto-submit any pending inject message before executing the round
+  if (council.pendingButtIn.trim()) {
+    if (council.wsConnected) {
+      council.submitStreamingButtIn()
+    } else {
+      await council.submitButtIn()
+    }
+    // Brief wait for DB commit before triggering round
+    await new Promise(r => setTimeout(r, 100))
+  }
   await council.executeRound()
 }
 

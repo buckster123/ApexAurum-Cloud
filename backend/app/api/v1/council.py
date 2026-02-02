@@ -586,16 +586,23 @@ async def execute_round(
 
     # Create new round
     round_number = session.current_round + 1
+
+    # Check for pending human message (butt-in)
+    human_message = session.pending_human_message
+    if human_message:
+        session.pending_human_message = None  # Clear after consuming
+
     round_record = DeliberationRound(
         session_id=session.id,
         round_number=round_number,
+        human_message=human_message,
         started_at=datetime.utcnow(),
     )
     db.add(round_record)
     await db.flush()  # Get round ID
 
-    # Build context from previous rounds
-    context = build_round_context(session, round_number)
+    # Build context from previous rounds (includes human message if present)
+    context = build_round_context(session, round_number, human_message)
 
     # Get active agents
     active_agents = [a for a in session.agents if a.is_active]
