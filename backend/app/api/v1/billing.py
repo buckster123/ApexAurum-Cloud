@@ -109,7 +109,7 @@ async def create_subscription_checkout(
     Create a Stripe Checkout session for subscription upgrade.
 
     Args:
-        tier: 'pro' or 'opus'
+        tier: 'seeker', 'adept', 'opus', or 'azothic'
 
     Returns:
         checkout_url: Redirect user to this URL to complete payment
@@ -836,8 +836,9 @@ async def create_coupon(
 
     # Validate tier for tier_upgrade
     if request.coupon_type == "tier_upgrade":
-        if not request.tier or request.tier not in ["pro", "opus"]:
-            raise HTTPException(status_code=400, detail="tier_upgrade coupons require tier: 'pro' or 'opus'")
+        valid_tiers = ["free_trial", "seeker", "adept", "opus", "azothic"]
+        if not request.tier or request.tier not in valid_tiers:
+            raise HTTPException(status_code=400, detail=f"tier_upgrade coupons require tier: one of {valid_tiers}")
 
     # Create coupon
     coupon = Coupon(

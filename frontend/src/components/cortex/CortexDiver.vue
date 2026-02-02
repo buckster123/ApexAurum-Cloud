@@ -281,8 +281,8 @@ watch(() => props.folderId, async (folderId) => {
     <!-- Header -->
     <div class="flex items-center justify-between px-4 py-2 bg-apex-darker border-b border-apex-border">
       <div class="flex items-center gap-3">
-        <span class="text-gold font-bold">CORTEX DIVER</span>
-        <span class="text-gray-500 text-sm">// Deep Code Immersion</span>
+        <span class="text-gold font-bold">APEX CODE LAB</span>
+        <span class="text-gray-500 text-sm">// Integrated Development Environment</span>
       </div>
 
       <div class="flex items-center gap-4">

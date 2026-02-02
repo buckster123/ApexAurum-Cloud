@@ -932,9 +932,6 @@
         adept: 'bg-blue-500/20 text-blue-400',
         opus: 'bg-yellow-500/20 text-yellow-400',
         azothic: 'bg-purple-500/20 text-purple-400',
-        // Legacy fallbacks
-        free: 'bg-gray-500/20 text-gray-400',
-        pro: 'bg-green-500/20 text-green-400',
       };
 
       const tierNames = {
@@ -943,16 +940,13 @@
         adept: 'Adept',
         opus: 'Opus',
         azothic: 'Azothic',
-        // Legacy
-        free: 'Free Trial',
-        pro: 'Seeker',
       };
 
       tbody.innerHTML = list.map(u => `
         <tr class="hover:bg-apex-dark/50">
           <td class="py-3">${u.email}</td>
           <td class="py-3">
-            <span class="px-2 py-1 text-xs rounded ${tierColors[u.tier] || tierColors.free}">
+            <span class="px-2 py-1 text-xs rounded ${tierColors[u.tier] || tierColors.free_trial}">
               ${tierNames[u.tier] || 'Seeker'}
             </span>
           </td>

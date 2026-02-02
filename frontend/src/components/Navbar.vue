@@ -63,7 +63,7 @@ function closeMobileMenu() {
           class="text-gray-400 hover:text-white transition-colors"
           active-class="text-gold"
         >
-          GUI
+          Village-GUI
         </router-link>
         <router-link
           to="/neural"
@@ -105,7 +105,7 @@ function closeMobileMenu() {
           class="text-gray-400 hover:text-white transition-colors"
           active-class="text-gold"
         >
-          Files
+          File Vault
         </router-link>
         <router-link
           to="/devices"
@@ -221,7 +221,7 @@ function closeMobileMenu() {
           @click="closeMobileMenu"
           class="px-4 py-3 rounded-lg text-gray-300 hover:bg-white/5 hover:text-gold transition-colors"
         >
-          👁️ GUI
+          👁️ Village-GUI
         </router-link>
         <router-link
           to="/neural"
@@ -263,7 +263,7 @@ function closeMobileMenu() {
           @click="closeMobileMenu"
           class="px-4 py-3 rounded-lg text-gray-300 hover:bg-white/5 hover:text-gold transition-colors"
         >
-          📁 Files
+          📁 File Vault
         </router-link>
         <router-link
           to="/devices"
