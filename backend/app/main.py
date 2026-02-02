@@ -288,15 +288,16 @@ async def admin_panel():
 @app.get("/health", tags=["Health"])
 async def health_check():
     """Health check endpoint for load balancers and deployment verification."""
+    from app.tools import registry
     return {
         "status": "healthy",
         "version": "0.1.0",
-        "build": "v113-error-tracking",
+        "build": "v119-ux-polish",
         "agents": {
             "native": 5,
             "pac": 4,
         },
-        "tools": 68,  # 15 Tiers! Village Band + Nursery Apprentice Protocol!
+        "tools": registry.tool_count,
         "features": [
             "streaming",
             "pac-mode",
