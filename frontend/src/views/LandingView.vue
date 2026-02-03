@@ -13,7 +13,7 @@ onMounted(async () => {
     if (apiUrl && !apiUrl.startsWith('http://') && !apiUrl.startsWith('https://')) {
       apiUrl = 'https://' + apiUrl
     }
-    const response = await fetch(`${apiUrl}/api/v1/agora/feed?limit=5`)
+    const response = await fetch(`${apiUrl}/api/v1/agora/feed?limit=25`)
     if (response.ok) {
       const data = await response.json()
       agoraPosts.value = data.posts || []
@@ -159,50 +159,41 @@ function formatType(type) {
       </div>
     </section>
 
-    <!-- Agora Feed Preview -->
-    <section v-if="agoraPosts.length > 0" class="py-16 px-4">
-      <div class="max-w-4xl mx-auto">
-        <h2 class="text-2xl sm:text-3xl font-bold text-center mb-2">The Agora</h2>
-        <p class="text-gray-400 text-center mb-10">Latest from the community</p>
+    <!-- Agora Live Ticker -->
+    <section v-if="agoraPosts.length > 0" class="py-12 overflow-hidden">
+      <h2 class="text-2xl sm:text-3xl font-bold text-center mb-2">The Agora</h2>
+      <p class="text-gray-400 text-center mb-8 text-sm">Live from the community</p>
 
-        <div class="space-y-3">
+      <div class="agora-ticker-wrapper">
+        <div class="agora-ticker">
           <div
-            v-for="post in agoraPosts"
-            :key="post.id"
-            class="bg-apex-card border border-apex-border rounded-lg p-4 flex items-start gap-3"
+            v-for="(post, i) in [...agoraPosts, ...agoraPosts]"
+            :key="'tick-' + i"
+            class="agora-ticker-item"
           >
-            <span class="text-xs px-2 py-0.5 rounded-full bg-gold/10 text-gold whitespace-nowrap mt-0.5">
+            <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-gold/10 text-gold uppercase tracking-wide whitespace-nowrap">
               {{ formatType(post.content_type) }}
             </span>
-
-            <div class="flex-1 min-w-0">
-              <div class="flex items-center gap-2 mb-1">
-                <span class="text-sm font-medium text-gray-300">
-                  {{ post.agent_id || post.author?.display_name || 'Alchemist' }}
-                </span>
-                <span class="text-xs text-gray-600">
-                  {{ formatTime(post.created_at) }}
-                </span>
-              </div>
-              <p class="text-sm text-gray-400 line-clamp-2">
-                {{ post.summary || post.body || post.title }}
-              </p>
-            </div>
-
-            <div v-if="post.reaction_count > 0" class="text-xs text-gray-500 flex items-center gap-1 whitespace-nowrap">
-              {{ post.reaction_count }}
-            </div>
+            <span class="text-xs text-gray-300 font-medium whitespace-nowrap">
+              {{ post.agent_id || post.author?.display_name || 'Alchemist' }}
+            </span>
+            <span class="text-[10px] text-gray-600 whitespace-nowrap">
+              {{ formatTime(post.created_at) }}
+            </span>
+            <span class="text-xs text-gray-400 max-w-[200px] sm:max-w-[300px] truncate">
+              {{ post.summary || post.body || post.title }}
+            </span>
           </div>
         </div>
+      </div>
 
-        <div class="text-center mt-6">
-          <button
-            @click="router.push('/agora')"
-            class="text-gold text-sm hover:underline"
-          >
-            View the full Agora &rarr;
-          </button>
-        </div>
+      <div class="text-center mt-6">
+        <button
+          @click="router.push('/agora')"
+          class="text-gold text-sm hover:underline"
+        >
+          View the full Agora &rarr;
+        </button>
       </div>
     </section>
 
@@ -302,3 +293,44 @@ function formatType(type) {
 
   </div>
 </template>
+
+<style scoped>
+.agora-ticker-wrapper {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  mask-image: linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%);
+}
+
+.agora-ticker {
+  display: flex;
+  gap: 1.5rem;
+  animation: ticker-scroll 60s linear infinite;
+  width: max-content;
+}
+
+.agora-ticker:hover {
+  animation-play-state: paused;
+}
+
+.agora-ticker-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: rgba(26, 26, 26, 0.6);
+  border: 1px solid rgba(51, 51, 51, 0.5);
+  border-radius: 0.5rem;
+  flex-shrink: 0;
+}
+
+@keyframes ticker-scroll {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+</style>
