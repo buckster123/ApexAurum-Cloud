@@ -208,61 +208,78 @@ async def generate_music(
 
     if request.stream:
         # SSE streaming response
-        # NOTE: StreamingResponse runs after the endpoint returns, so the
-        # dependency-injected DB session (get_db) is already closed by then.
-        # The generator must create its own session for the polling loop.
+        # NOTE: The generation task and poll loop MUST use separate DB sessions.
+        # asyncio.create_task() runs concurrently with the poll loop, and
+        # SQLAlchemy async sessions can't handle concurrent operations.
         task_id = task.id
 
         async def generate_stream():
             session_factory = get_session_factory()
-            async with session_factory() as stream_db:
-                try:
-                    service = SunoService(stream_db)
 
-                    # Re-fetch task in this session's scope
-                    result = await stream_db.execute(
+            # Launch generation in its own session (runs concurrently)
+            async def run_gen():
+                async with session_factory() as gen_db:
+                    try:
+                        result = await gen_db.execute(
+                            select(MusicTask).where(MusicTask.id == task_id)
+                        )
+                        gen_task = result.scalar_one()
+                        service = SunoService(gen_db)
+                        return await service.generate(gen_task)
+                    except Exception as e:
+                        logger.error(f"Music generation failed: {e}")
+                        return {"success": False, "error": str(e)}
+
+            generation_task = asyncio.create_task(run_gen())
+
+            # Poll progress with a separate session
+            try:
+                last_progress = None
+                while not generation_task.done():
+                    async with session_factory() as poll_db:
+                        result = await poll_db.execute(
+                            select(MusicTask.status, MusicTask.progress)
+                            .where(MusicTask.id == task_id)
+                        )
+                        row = result.one_or_none()
+
+                    if row and row[1] != last_progress:
+                        last_progress = row[1]
+                        event = {
+                            "type": "status",
+                            "status": row[0],
+                            "progress": row[1] or ""
+                        }
+                        yield f"data: {json.dumps(event)}\n\n"
+
+                    await asyncio.sleep(1)
+
+                # Get final result
+                gen_result = await generation_task
+
+                # Fetch completed task for response
+                async with session_factory() as final_db:
+                    result = await final_db.execute(
                         select(MusicTask).where(MusicTask.id == task_id)
                     )
-                    stream_task = result.scalar_one()
+                    final_task = result.scalar_one()
 
-                    # Start generation
-                    generation_task = asyncio.create_task(service.generate(stream_task))
+                if gen_result.get("success"):
+                    event = {
+                        "type": "completed",
+                        "task": task_to_response(final_task).model_dump(mode="json"),
+                    }
+                else:
+                    event = {
+                        "type": "error",
+                        "error": gen_result.get("error", "Unknown error"),
+                        "task_id": str(task_id),
+                    }
 
-                    last_progress = None
-                    while not generation_task.done():
-                        await stream_db.refresh(stream_task)
-
-                        if stream_task.progress != last_progress:
-                            last_progress = stream_task.progress
-                            event = {
-                                "type": "status",
-                                "status": stream_task.status,
-                                "progress": stream_task.progress or ""
-                            }
-                            yield f"data: {json.dumps(event)}\n\n"
-
-                        await asyncio.sleep(1)
-
-                    # Get final result
-                    gen_result = await generation_task
-                    await stream_db.refresh(stream_task)
-
-                    if gen_result.get("success"):
-                        event = {
-                            "type": "completed",
-                            "task": task_to_response(stream_task).model_dump(mode="json"),
-                        }
-                    else:
-                        event = {
-                            "type": "error",
-                            "error": gen_result.get("error", "Unknown error"),
-                            "task_id": str(stream_task.id),
-                        }
-
-                    yield f"data: {json.dumps(event)}\n\n"
-                except Exception as e:
-                    logger.error(f"Music stream error: {e}")
-                    yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
+                yield f"data: {json.dumps(event)}\n\n"
+            except Exception as e:
+                logger.error(f"Music stream error: {e}")
+                yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
 
         return StreamingResponse(
             generate_stream(),
