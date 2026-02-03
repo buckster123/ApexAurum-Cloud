@@ -119,7 +119,7 @@ async def _poll_suno_status(suno_task_id: str) -> dict:
     headers = {"Authorization": f"Bearer {api_key}"}
 
     try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
+        async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.get(
                 f"{SUNO_API_BASE}/generate/record-info",
                 headers=headers,
@@ -158,6 +158,9 @@ async def _poll_suno_status(suno_task_id: str) -> dict:
             else:
                 return {"status": "unknown", "progress": status}
 
+    except httpx.ReadTimeout:
+        logger.warning(f"Suno poll timeout for task {suno_task_id} (will retry)")
+        return {"status": "unknown", "error": "Suno API timeout"}
     except Exception as e:
         logger.exception("Suno poll error")
         return {"status": "unknown", "error": str(e)}
