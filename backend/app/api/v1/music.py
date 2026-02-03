@@ -25,7 +25,7 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
-from app.database import get_db
+from app.database import get_db, get_session_factory
 from app.models.user import User
 from app.models.music import MusicTask
 from app.auth.deps import get_current_user, get_current_user_optional
@@ -208,45 +208,61 @@ async def generate_music(
 
     if request.stream:
         # SSE streaming response
+        # NOTE: StreamingResponse runs after the endpoint returns, so the
+        # dependency-injected DB session (get_db) is already closed by then.
+        # The generator must create its own session for the polling loop.
+        task_id = task.id
+
         async def generate_stream():
-            service = SunoService(db)
+            session_factory = get_session_factory()
+            async with session_factory() as stream_db:
+                try:
+                    service = SunoService(stream_db)
 
-            # Start generation
-            generation_task = asyncio.create_task(service.generate(task))
+                    # Re-fetch task in this session's scope
+                    result = await stream_db.execute(
+                        select(MusicTask).where(MusicTask.id == task_id)
+                    )
+                    stream_task = result.scalar_one()
 
-            last_progress = None
-            while not generation_task.done():
-                # Refresh task from DB
-                await db.refresh(task)
+                    # Start generation
+                    generation_task = asyncio.create_task(service.generate(stream_task))
 
-                if task.progress != last_progress:
-                    last_progress = task.progress
-                    event = {
-                        "type": "status",
-                        "status": task.status,
-                        "progress": task.progress or ""
-                    }
+                    last_progress = None
+                    while not generation_task.done():
+                        await stream_db.refresh(stream_task)
+
+                        if stream_task.progress != last_progress:
+                            last_progress = stream_task.progress
+                            event = {
+                                "type": "status",
+                                "status": stream_task.status,
+                                "progress": stream_task.progress or ""
+                            }
+                            yield f"data: {json.dumps(event)}\n\n"
+
+                        await asyncio.sleep(1)
+
+                    # Get final result
+                    gen_result = await generation_task
+                    await stream_db.refresh(stream_task)
+
+                    if gen_result.get("success"):
+                        event = {
+                            "type": "completed",
+                            "task": task_to_response(stream_task).model_dump(mode="json"),
+                        }
+                    else:
+                        event = {
+                            "type": "error",
+                            "error": gen_result.get("error", "Unknown error"),
+                            "task_id": str(stream_task.id),
+                        }
+
                     yield f"data: {json.dumps(event)}\n\n"
-
-                await asyncio.sleep(1)
-
-            # Get final result
-            result = await generation_task
-            await db.refresh(task)
-
-            if result.get("success"):
-                event = {
-                    "type": "completed",
-                    "task": task_to_response(task).model_dump(mode="json"),
-                }
-            else:
-                event = {
-                    "type": "error",
-                    "error": result.get("error", "Unknown error"),
-                    "task_id": str(task.id),
-                }
-
-            yield f"data: {json.dumps(event)}\n\n"
+                except Exception as e:
+                    logger.error(f"Music stream error: {e}")
+                    yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
 
         return StreamingResponse(
             generate_stream(),
