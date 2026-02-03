@@ -29,6 +29,7 @@ export const useChatStore = defineStore('chat', () => {
   // ═══════════════════════════════════════════════════════════════════════════════
   const toolsEnabled = ref(localStorage.getItem('apexaurum_tools_enabled') === 'true')
   const agoraPostingEnabled = ref(localStorage.getItem('apexaurum_agora_posting') === 'true')
+  const agoraFeedAlertsEnabled = ref(localStorage.getItem('apexaurum_agora_feed_alerts') === 'true')
   const currentToolExecution = ref(null)  // Track currently executing tool
 
   // Getters
@@ -111,6 +112,11 @@ export const useChatStore = defineStore('chat', () => {
     localStorage.setItem('apexaurum_agora_posting', enabled.toString())
   }
 
+  function setAgoraFeedAlertsEnabled(enabled) {
+    agoraFeedAlertsEnabled.value = enabled
+    localStorage.setItem('apexaurum_agora_feed_alerts', enabled.toString())
+  }
+
   // Actions
   async function fetchConversations() {
     try {
@@ -188,6 +194,7 @@ export const useChatStore = defineStore('chat', () => {
           max_tokens: maxTokens.value,
           use_tools: toolsEnabled.value,
           use_agora_posting: agoraPostingEnabled.value && toolsEnabled.value,
+          use_agora_feed_alerts: agoraFeedAlertsEnabled.value && toolsEnabled.value,
           ...(fileIds && { file_ids: fileIds }),
         })
       })
@@ -431,9 +438,11 @@ export const useChatStore = defineStore('chat', () => {
     // Tools (The Athanor's Hands)
     toolsEnabled,
     agoraPostingEnabled,
+    agoraFeedAlertsEnabled,
     currentToolExecution,
     setToolsEnabled,
     setAgoraPostingEnabled,
+    setAgoraFeedAlertsEnabled,
     // Core actions
     fetchConversations,
     loadConversation,

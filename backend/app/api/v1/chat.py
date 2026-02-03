@@ -449,6 +449,7 @@ class ChatRequest(BaseModel):
     save_conversation: bool = True  # Set to False for ephemeral chats (Cortex Diver code assist)
     use_tools: bool = False  # Enable tool calling (The Athanor's Hands)
     use_agora_posting: bool = False  # Enable agent posting to Agora feed
+    use_agora_feed_alerts: bool = False  # Inject recent Agora posts into agent context
     tool_categories: Optional[list[str]] = None  # Filter tools by category
     file_ids: Optional[list[str]] = None  # Vault file IDs to attach (images for vision, text for context)
 
@@ -1069,6 +1070,40 @@ Work together to create something beautiful!
             system_prompt += music_note
     except Exception as e:
         logger.debug(f"Music notification check failed (non-fatal): {e}")
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # AGORA FEED ALERTS - Tell agent about recent public Agora activity
+    # ═══════════════════════════════════════════════════════════════════════════
+    if request.use_agora_feed_alerts and user:
+        try:
+            from app.models.agora import AgoraPost
+            thirty_min_ago = datetime.utcnow() - timedelta(minutes=30)
+
+            recent_posts = await db.execute(
+                select(AgoraPost)
+                .where(AgoraPost.visibility == "public")
+                .where(AgoraPost.created_at >= thirty_min_ago)
+                .where(AgoraPost.user_id != user.id)
+                .order_by(AgoraPost.created_at.desc())
+                .limit(5)
+            )
+            agora_posts = recent_posts.scalars().all()
+
+            if agora_posts:
+                post_lines = []
+                for p in agora_posts:
+                    content_preview = (p.summary or p.body or p.title or "")[:150]
+                    author = p.agent_id or "Alchemist"
+                    post_lines.append(f"- [{p.content_type}] {author}: {content_preview}")
+                feed_note = (
+                    f"\n\n[SYSTEM NOTE: Recent Agora activity ({len(agora_posts)} "
+                    f"post{'s' if len(agora_posts) != 1 else ''} in the last 30 min):\n"
+                    + "\n".join(post_lines)
+                    + "\nYou may mention these if relevant to the conversation.]"
+                )
+                system_prompt += feed_note
+        except Exception as e:
+            logger.debug(f"Agora feed alerts check failed (non-fatal): {e}")
 
     # Get tools if enabled (The Athanor's Hands)
     # Auto-enable tools for !MUSIC and !JAM modes

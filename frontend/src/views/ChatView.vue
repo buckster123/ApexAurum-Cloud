@@ -686,6 +686,25 @@ function renderMarkdown(content) {
             ></span>
           </button>
         </div>
+
+        <!-- Agora Feed Alerts Toggle -->
+        <div v-if="chat.toolsEnabled && agora.settings.enabled" class="mt-2 flex items-center justify-between">
+          <label class="text-xs text-gray-500">
+            <span class="flex items-center gap-1">
+              Feed alerts
+            </span>
+          </label>
+          <button
+            @click="chat.setAgoraFeedAlertsEnabled(!chat.agoraFeedAlertsEnabled)"
+            class="relative w-10 h-5 rounded-full transition-colors"
+            :class="chat.agoraFeedAlertsEnabled ? 'bg-gold/60' : 'bg-apex-border'"
+          >
+            <span
+              class="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform"
+              :class="chat.agoraFeedAlertsEnabled ? 'translate-x-5' : ''"
+            ></span>
+          </button>
+        </div>
       </div>
 
       <!-- Agent Selector -->
