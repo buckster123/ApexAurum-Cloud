@@ -5,6 +5,7 @@ Steel Browser integration for web automation.
 "The hands that reach into any page"
 """
 
+import asyncio
 import base64
 import logging
 from typing import Optional
@@ -21,6 +22,7 @@ settings = get_settings()
 
 # Steel Browser API client
 STEEL_TIMEOUT = 60.0  # Seconds - browser operations can be slow
+SESSION_MAX_LIFETIME = 600  # 10 minutes - hard cap to prevent zombie sessions
 
 
 async def _steel_request(
@@ -68,6 +70,21 @@ async def _steel_request(
     except Exception as e:
         logger.exception(f"Steel Browser request failed: {e}")
         return False, None, str(e)
+
+
+async def _auto_close_session(session_id: str):
+    """Auto-close a Steel Browser session after max lifetime to prevent zombies."""
+    await asyncio.sleep(SESSION_MAX_LIFETIME)
+    try:
+        success, _, error = await _steel_request("DELETE", f"/v1/sessions/{session_id}")
+        if success:
+            logger.info(f"Auto-closed Steel session {session_id} after {SESSION_MAX_LIFETIME}s")
+        elif "not found" in str(error or "").lower():
+            logger.debug(f"Steel session {session_id} already closed")
+        else:
+            logger.warning(f"Failed to auto-close Steel session {session_id}: {error}")
+    except Exception:
+        pass
 
 
 # ============================================================================
@@ -325,16 +342,22 @@ Example: browser_session(action="create")""",
             if not success:
                 return ToolResult(success=False, error=error)
 
+            # Schedule auto-close to prevent zombie sessions
+            new_session_id = result.get("id")
+            if new_session_id:
+                asyncio.create_task(_auto_close_session(new_session_id))
+
             return ToolResult(
                 success=True,
                 result={
-                    "session_id": result.get("id"),
+                    "session_id": new_session_id,
                     "status": result.get("status"),
                     "websocket_url": result.get("websocketUrl"),
                     "dimensions": result.get("dimensions"),
                     "user_agent": result.get("userAgent"),
                     "created_at": result.get("createdAt"),
-                    "message": "Session created. Use browser_action to interact with pages."
+                    "max_lifetime_seconds": SESSION_MAX_LIFETIME,
+                    "message": f"Session created. Auto-closes after {SESSION_MAX_LIFETIME // 60} minutes. Use browser_action to interact with pages."
                 }
             )
 
