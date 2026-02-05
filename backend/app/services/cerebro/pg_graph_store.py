@@ -109,14 +109,14 @@ class PgGraphStore:
                     created_at, last_accessed_at, promoted_at, embedding
                 ) VALUES (
                     :id, :user_id, :content, :content_hash, :memory_type, :layer, :agent_id, :visibility,
-                    :stability, :difficulty, :access_count, :access_timestamps_json::jsonb,
+                    :stability, :difficulty, :access_count, CAST(:access_timestamps_json AS jsonb),
                     :compressed_count, :compressed_avg_interval,
                     :last_retrievability, :last_activation, :last_computed_at,
                     :valence, :arousal, :salience,
                     :episode_id, :session_id, :conversation_thread,
-                    :tags::jsonb, :concepts::jsonb, :responding_to::jsonb, :related_agents::jsonb,
-                    :source, :derived_from::jsonb,
-                    :created_at, :last_accessed_at, :promoted_at, :embedding::vector
+                    CAST(:tags AS jsonb), CAST(:concepts AS jsonb), CAST(:responding_to AS jsonb), CAST(:related_agents AS jsonb),
+                    :source, CAST(:derived_from AS jsonb),
+                    :created_at, :last_accessed_at, :promoted_at, CAST(:embedding AS vector)
                 )
             """)
         else:
@@ -133,13 +133,13 @@ class PgGraphStore:
                     created_at, last_accessed_at, promoted_at
                 ) VALUES (
                     :id, :user_id, :content, :content_hash, :memory_type, :layer, :agent_id, :visibility,
-                    :stability, :difficulty, :access_count, :access_timestamps_json::jsonb,
+                    :stability, :difficulty, :access_count, CAST(:access_timestamps_json AS jsonb),
                     :compressed_count, :compressed_avg_interval,
                     :last_retrievability, :last_activation, :last_computed_at,
                     :valence, :arousal, :salience,
                     :episode_id, :session_id, :conversation_thread,
-                    :tags::jsonb, :concepts::jsonb, :responding_to::jsonb, :related_agents::jsonb,
-                    :source, :derived_from::jsonb,
+                    CAST(:tags AS jsonb), CAST(:concepts AS jsonb), CAST(:responding_to AS jsonb), CAST(:related_agents AS jsonb),
+                    :source, CAST(:derived_from AS jsonb),
                     :created_at, :last_accessed_at, :promoted_at
                 )
             """)
@@ -176,7 +176,7 @@ class PgGraphStore:
                 UPDATE cerebro_memory_nodes SET
                     stability = :stability, difficulty = :difficulty,
                     access_count = :access_count,
-                    access_timestamps_json = :timestamps::jsonb,
+                    access_timestamps_json = CAST(:timestamps AS jsonb),
                     compressed_count = :compressed_count,
                     compressed_avg_interval = :compressed_avg_interval,
                     last_retrievability = :last_retrievability,
@@ -213,7 +213,7 @@ class PgGraphStore:
         for key, val in kwargs.items():
             if key in allowed:
                 if key in ("concepts", "tags"):
-                    updates.append(f"{key} = :{key}::jsonb")
+                    updates.append(f"{key} = CAST(:{key} AS jsonb)")
                     params[key] = json.dumps(val) if isinstance(val, list) else val
                 else:
                     updates.append(f"{key} = :{key}")
@@ -268,10 +268,10 @@ class PgGraphStore:
 
         result = await self.db.execute(
             text(f"""
-                SELECT *, 1 - (embedding <=> :embedding::vector) as similarity
+                SELECT *, 1 - (embedding <=> CAST(:embedding AS vector)) as similarity
                 FROM cerebro_memory_nodes
                 WHERE {where}
-                ORDER BY embedding <=> :embedding::vector
+                ORDER BY embedding <=> CAST(:embedding AS vector)
                 LIMIT :top_k
             """),
             params,
@@ -437,7 +437,7 @@ class PgGraphStore:
                 ) VALUES (
                     :id, :user_id, :title, :agent_id, :session_id,
                     :started_at, :ended_at,
-                    :overall_valence, :peak_arousal, :tags::jsonb,
+                    :overall_valence, :peak_arousal, CAST(:tags AS jsonb),
                     :consolidated, :schema_extracted, :created_at
                 )
             """),
