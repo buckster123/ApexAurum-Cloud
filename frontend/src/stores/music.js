@@ -354,6 +354,25 @@ export const useMusicStore = defineStore('music', () => {
     }
   }
 
+  async function downloadTrack(taskId) {
+    const track = library.value.find(t => t.id === taskId)
+    if (!track) return
+    try {
+      const url = getAudioUrl(taskId)
+      const response = await fetch(url)
+      const blob = await response.blob()
+      const link = document.createElement('a')
+      link.href = URL.createObjectURL(blob)
+      link.download = `${(track.title || 'track').replace(/[^a-zA-Z0-9_\- ]/g, '')}.mp3`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(link.href)
+    } catch (e) {
+      console.error('Download failed:', e)
+    }
+  }
+
   function cancelGeneration() {
     if (generationAbort.value) {
       generationAbort.value.abort()
@@ -423,6 +442,7 @@ export const useMusicStore = defineStore('music', () => {
     generateTrack,
     cancelGeneration,
     pollPendingTracks,
+    downloadTrack,
 
     // Helpers
     formatTime,

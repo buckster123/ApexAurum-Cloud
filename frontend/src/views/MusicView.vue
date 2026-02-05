@@ -388,6 +388,16 @@ function handleSearch(e) {
           <span>▶ {{ task.play_count }} plays</span>
         </div>
 
+        <!-- Download button -->
+        <button
+          v-if="task.status === 'completed'"
+          @click.stop="music.downloadTrack(task.id)"
+          class="absolute top-2 left-2 p-2 rounded-lg bg-gold/20 text-gold opacity-0 group-hover:opacity-100 transition-opacity hover:bg-gold/30"
+          title="Download MP3"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5m0 0l5-5m-5 5V3"/></svg>
+        </button>
+
         <!-- Delete button -->
         <button
           v-if="task.status !== 'generating'"
@@ -439,6 +449,16 @@ function handleSearch(e) {
         <span class="text-sm text-gray-500 w-16 text-right">
           ▶ {{ task.play_count }}
         </span>
+
+        <!-- Download -->
+        <button
+          v-if="task.status === 'completed'"
+          @click.stop="music.downloadTrack(task.id)"
+          class="p-2 rounded-lg text-gray-400 hover:text-gold hover:bg-gold/20 transition-all"
+          title="Download MP3"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5m0 0l5-5m-5 5V3"/></svg>
+        </button>
 
         <!-- Favorite -->
         <button
