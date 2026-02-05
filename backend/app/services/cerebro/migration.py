@@ -2,13 +2,13 @@
 
 Migrates existing data from user_vectors and agent_memories into cerebro_memory_nodes.
 Also creates associative links from responding_to and conversation_thread relationships.
+
+Uses bulk INSERT...SELECT for atomic, transaction-safe migrations.
 """
 
 import hashlib
 import json
 import logging
-import time
-from datetime import datetime
 from typing import Optional
 from uuid import UUID
 
@@ -17,473 +17,332 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 
-# message_type -> memory_type mapping
-MESSAGE_TYPE_MAP = {
-    "observation": "semantic",
-    "insight": "semantic",
-    "fact": "semantic",
-    "discovery": "semantic",
-    "decision": "procedural",
-    "question": "episodic",
-    "dialogue": "episodic",
-    "response": "episodic",
-    "task": "prospective",
-    "preference": "procedural",
-    "context": "episodic",
-    "relationship": "affective",
-}
-
-# old visibility -> new visibility
-VISIBILITY_MAP = {
-    "private": "private",
-    "village": "shared",
-    "bridge": "thread",
-    "shared": "shared",
-    "thread": "thread",
-}
-
-# agent_memories.memory_type -> cerebro memory_type
-AGENT_MEM_TYPE_MAP = {
-    "fact": "semantic",
-    "preference": "procedural",
-    "context": "episodic",
-    "relationship": "affective",
-}
-
 
 def _content_hash(content: str) -> str:
     return hashlib.sha256(content.encode()).hexdigest()[:16]
 
 
 async def migrate_user_vectors(db: AsyncSession, user_id: Optional[UUID] = None) -> dict:
-    """Migrate user_vectors rows into cerebro_memory_nodes.
+    """Migrate user_vectors rows into cerebro_memory_nodes using bulk INSERT...SELECT.
 
-    Args:
-        db: Database session
-        user_id: If provided, only migrate for this user. Otherwise migrate all.
-
-    Returns:
-        Dict with counts: migrated, skipped, errors
+    All mapping logic runs server-side in SQL for atomicity and speed.
     """
-    where = ""
+    user_filter = "AND uv.user_id = :user_id" if user_id else ""
     params: dict = {}
     if user_id:
-        where = "WHERE uv.user_id = :user_id"
         params["user_id"] = str(user_id)
 
-    # Get rows not yet migrated (by checking id not already in cerebro)
-    result = await db.execute(
+    # Count what's available to migrate
+    count_result = await db.execute(
         text(f"""
-            SELECT uv.*
-            FROM user_vectors uv
+            SELECT COUNT(*) FROM user_vectors uv
             LEFT JOIN cerebro_memory_nodes cmn
                 ON cmn.id = uv.id::text AND cmn.user_id = uv.user_id
-            WHERE cmn.id IS NULL
-            {"AND uv.user_id = :user_id" if user_id else ""}
-            ORDER BY uv.created_at ASC
+            WHERE cmn.id IS NULL AND LENGTH(TRIM(uv.content)) >= 5
+            {user_filter}
         """),
         params,
     )
-    rows = result.mappings().all()
+    available = count_result.scalar() or 0
 
-    migrated = 0
-    skipped = 0
-    errors = 0
+    if available == 0:
+        return {"migrated": 0, "skipped": 0, "errors": 0}
 
-    for row in rows:
-        try:
-            content = row["content"]
-            if not content or len(content.strip()) < 5:
-                skipped += 1
-                continue
-
-            content_hash = _content_hash(content)
-            msg_type = row.get("message_type", "observation") or "observation"
-            memory_type = MESSAGE_TYPE_MAP.get(msg_type, "semantic")
-            layer = row.get("layer", "working") or "working"
-            agent_id = row.get("agent_id") or "AZOTH"
-            visibility = VISIBILITY_MAP.get(row.get("visibility", "private"), "private")
-            attention_weight = float(row.get("attention_weight", 1.0) or 1.0)
-            access_count = int(row.get("access_count", 0) or 0)
-
-            # Build access_timestamps from last_accessed_at
-            last_accessed = row.get("last_accessed_at")
-            access_timestamps = []
-            if last_accessed:
-                if hasattr(last_accessed, 'timestamp'):
-                    access_timestamps = [last_accessed.timestamp()]
-                else:
-                    access_timestamps = [time.time()]
-
-            # Parse JSONB fields
-            tags = row.get("tags", [])
-            if isinstance(tags, str):
-                tags = json.loads(tags)
-            responding_to = row.get("responding_to", [])
-            if isinstance(responding_to, str):
-                responding_to = json.loads(responding_to)
-            related_agents = row.get("related_agents", [])
-            if isinstance(related_agents, str):
-                related_agents = json.loads(related_agents)
-
-            # Try to extract concepts from metadata
-            metadata = row.get("metadata", {})
-            if isinstance(metadata, str):
-                metadata = json.loads(metadata)
-            concepts = metadata.get("concepts", []) if isinstance(metadata, dict) else []
-
-            # Clamp values
-            salience = min(max(attention_weight, 0.0), 1.0)
-            arousal = min(max(attention_weight / 2.0, 0.0), 1.0)
-
-            node_id = str(row["id"])
-            uid = str(row["user_id"])
-
-            insert_params = {
-                "id": node_id,
-                "user_id": uid,
-                "content": content,
-                "content_hash": content_hash,
-                "memory_type": memory_type,
-                "layer": layer,
-                "agent_id": agent_id,
-                "visibility": visibility,
-                "stability": 1.0,
-                "difficulty": 5.0,
-                "access_count": access_count,
-                "access_timestamps_json": json.dumps(access_timestamps),
-                "compressed_count": 0,
-                "compressed_avg_interval": 0.0,
-                "last_retrievability": 1.0,
-                "last_activation": 0.0,
-                "valence": "neutral",
-                "arousal": arousal,
-                "salience": salience,
-                "conversation_thread": row.get("conversation_thread"),
-                "tags": json.dumps(tags),
-                "concepts": json.dumps(concepts),
-                "responding_to": json.dumps(responding_to),
-                "related_agents": json.dumps(related_agents),
-                "source": "neo_cortex_migration",
-                "derived_from": json.dumps([]),
-                "created_at": row["created_at"].isoformat() if row.get("created_at") else datetime.now().isoformat(),
-                "last_accessed_at": last_accessed.isoformat() if last_accessed else None,
-            }
-
-            # Check if embedding exists
-            has_embedding = row.get("embedding") is not None
-
-            if has_embedding:
-                await db.execute(
-                    text("""
-                        INSERT INTO cerebro_memory_nodes (
-                            id, user_id, content, content_hash, memory_type, layer, agent_id, visibility,
-                            stability, difficulty, access_count, access_timestamps_json,
-                            compressed_count, compressed_avg_interval,
-                            last_retrievability, last_activation,
-                            valence, arousal, salience,
-                            conversation_thread,
-                            tags, concepts, responding_to, related_agents,
-                            source, derived_from,
-                            created_at, last_accessed_at, embedding
-                        )
-                        SELECT
-                            :id, :user_id::uuid, :content, :content_hash, :memory_type, :layer, :agent_id, :visibility,
-                            :stability, :difficulty, :access_count, :access_timestamps_json::jsonb,
-                            :compressed_count, :compressed_avg_interval,
-                            :last_retrievability, :last_activation,
-                            :valence, :arousal, :salience,
-                            :conversation_thread,
-                            :tags::jsonb, :concepts::jsonb, :responding_to::jsonb, :related_agents::jsonb,
-                            :source, :derived_from::jsonb,
-                            :created_at, :last_accessed_at, uv.embedding
-                        FROM user_vectors uv
-                        WHERE uv.id = :src_id::uuid AND uv.user_id = :user_id::uuid
-                    """),
-                    {**insert_params, "src_id": node_id},
+    # Bulk migrate with all mapping logic in SQL
+    try:
+        result = await db.execute(
+            text(f"""
+                INSERT INTO cerebro_memory_nodes (
+                    id, user_id, content, content_hash, memory_type, layer, agent_id, visibility,
+                    stability, difficulty, access_count, access_timestamps_json,
+                    compressed_count, compressed_avg_interval,
+                    last_retrievability, last_activation,
+                    valence, arousal, salience,
+                    conversation_thread,
+                    tags, concepts, responding_to, related_agents,
+                    source, derived_from,
+                    embedding, created_at, last_accessed_at
                 )
-            else:
-                await db.execute(
-                    text("""
-                        INSERT INTO cerebro_memory_nodes (
-                            id, user_id, content, content_hash, memory_type, layer, agent_id, visibility,
-                            stability, difficulty, access_count, access_timestamps_json,
-                            compressed_count, compressed_avg_interval,
-                            last_retrievability, last_activation,
-                            valence, arousal, salience,
-                            conversation_thread,
-                            tags, concepts, responding_to, related_agents,
-                            source, derived_from,
-                            created_at, last_accessed_at
-                        ) VALUES (
-                            :id, :user_id::uuid, :content, :content_hash, :memory_type, :layer, :agent_id, :visibility,
-                            :stability, :difficulty, :access_count, :access_timestamps_json::jsonb,
-                            :compressed_count, :compressed_avg_interval,
-                            :last_retrievability, :last_activation,
-                            :valence, :arousal, :salience,
-                            :conversation_thread,
-                            :tags::jsonb, :concepts::jsonb, :responding_to::jsonb, :related_agents::jsonb,
-                            :source, :derived_from::jsonb,
-                            :created_at, :last_accessed_at
-                        )
-                    """),
-                    insert_params,
-                )
-
-            migrated += 1
-
-        except Exception as e:
-            logger.error(f"Failed to migrate user_vector {row.get('id')}: {e}")
-            errors += 1
-
-    if migrated > 0:
+                SELECT
+                    uv.id::text,
+                    uv.user_id,
+                    uv.content,
+                    LEFT(encode(sha256(uv.content::bytea), 'hex'), 16),
+                    -- message_type -> memory_type mapping
+                    CASE COALESCE(uv.message_type, 'observation')
+                        WHEN 'observation' THEN 'semantic'
+                        WHEN 'insight' THEN 'semantic'
+                        WHEN 'fact' THEN 'semantic'
+                        WHEN 'discovery' THEN 'semantic'
+                        WHEN 'decision' THEN 'procedural'
+                        WHEN 'question' THEN 'episodic'
+                        WHEN 'dialogue' THEN 'episodic'
+                        WHEN 'response' THEN 'episodic'
+                        WHEN 'task' THEN 'prospective'
+                        ELSE 'semantic'
+                    END,
+                    COALESCE(uv.layer, 'working'),
+                    COALESCE(uv.agent_id, 'AZOTH'),
+                    -- visibility mapping
+                    CASE COALESCE(uv.visibility, 'private')
+                        WHEN 'village' THEN 'shared'
+                        WHEN 'bridge' THEN 'thread'
+                        ELSE COALESCE(uv.visibility, 'private')
+                    END,
+                    1.0,  -- stability
+                    5.0,  -- difficulty
+                    COALESCE(uv.access_count, 0),
+                    CASE WHEN uv.last_accessed_at IS NOT NULL
+                        THEN jsonb_build_array(extract(epoch FROM uv.last_accessed_at))
+                        ELSE '[]'::jsonb
+                    END,
+                    0,    -- compressed_count
+                    0.0,  -- compressed_avg_interval
+                    1.0,  -- last_retrievability
+                    0.0,  -- last_activation
+                    'neutral',  -- valence
+                    LEAST(GREATEST(COALESCE(uv.attention_weight, 1.0) / 2.0, 0.0), 1.0),  -- arousal
+                    LEAST(GREATEST(COALESCE(uv.attention_weight, 1.0), 0.0), 1.0),  -- salience
+                    uv.conversation_thread,
+                    COALESCE(uv.tags, '[]'::jsonb),
+                    COALESCE((uv.metadata->'concepts'), '[]'::jsonb),
+                    COALESCE(uv.responding_to, '[]'::jsonb),
+                    COALESCE(uv.related_agents, '[]'::jsonb),
+                    'neo_cortex_migration',
+                    '[]'::jsonb,  -- derived_from
+                    uv.embedding,
+                    COALESCE(uv.created_at, NOW()),
+                    uv.last_accessed_at
+                FROM user_vectors uv
+                LEFT JOIN cerebro_memory_nodes cmn
+                    ON cmn.id = uv.id::text AND cmn.user_id = uv.user_id
+                WHERE cmn.id IS NULL AND LENGTH(TRIM(uv.content)) >= 5
+                {user_filter}
+            """),
+            params,
+        )
         await db.commit()
+        migrated = result.rowcount or 0
+        skipped = available - migrated
+        return {"migrated": migrated, "skipped": skipped, "errors": 0}
 
-    return {"migrated": migrated, "skipped": skipped, "errors": errors}
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"Bulk user_vectors migration failed: {e}")
+        return {"migrated": 0, "skipped": 0, "errors": available, "error_detail": str(e)}
 
 
 async def migrate_agent_memories(db: AsyncSession, user_id: Optional[UUID] = None) -> dict:
-    """Migrate agent_memories rows into cerebro_memory_nodes.
-
-    Agent memories are key-value pairs stored by agents (facts, preferences, etc).
-    They get a 'am_' prefix on their ID to avoid collisions with user_vectors.
-    """
+    """Migrate agent_memories rows into cerebro_memory_nodes using bulk INSERT...SELECT."""
+    user_filter = "AND am.user_id = :user_id" if user_id else ""
     params: dict = {}
-    user_filter = ""
     if user_id:
-        user_filter = "AND am.user_id = :user_id"
         params["user_id"] = str(user_id)
 
-    result = await db.execute(
+    # Check if table exists
+    try:
+        table_check = await db.execute(
+            text("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'agent_memories')")
+        )
+        if not table_check.scalar():
+            return {"migrated": 0, "skipped": 0, "errors": 0, "note": "agent_memories table not found"}
+    except Exception:
+        return {"migrated": 0, "skipped": 0, "errors": 0, "note": "could not check table"}
+
+    # Count available
+    count_result = await db.execute(
         text(f"""
-            SELECT am.*
-            FROM agent_memories am
+            SELECT COUNT(*) FROM agent_memories am
             LEFT JOIN cerebro_memory_nodes cmn
                 ON cmn.id = 'am_' || am.id::text AND cmn.user_id = am.user_id
-            WHERE cmn.id IS NULL {user_filter}
-            ORDER BY am.created_at ASC
+            WHERE cmn.id IS NULL
+                AND LENGTH(TRIM(COALESCE(am.key, '') || COALESCE(am.value, ''))) >= 5
+            {user_filter}
         """),
         params,
     )
-    rows = result.mappings().all()
+    available = count_result.scalar() or 0
 
-    migrated = 0
-    skipped = 0
-    errors = 0
+    if available == 0:
+        return {"migrated": 0, "skipped": 0, "errors": 0}
 
-    for row in rows:
-        try:
-            key = row.get("key", "") or ""
-            value = row.get("value", "") or ""
-            content = f"{key}: {value}" if key else value
-
-            if len(content.strip()) < 5:
-                skipped += 1
-                continue
-
-            content_hash = _content_hash(content)
-            am_type = row.get("memory_type", "fact") or "fact"
-            memory_type = AGENT_MEM_TYPE_MAP.get(am_type, "semantic")
-            confidence = float(row.get("confidence", 0.8) or 0.8)
-            layer = "long_term" if confidence >= 0.9 else "working"
-            agent_id = row.get("agent_id") or "AZOTH"
-            access_count = int(row.get("access_count", 0) or 0)
-
-            last_accessed = row.get("last_accessed")
-            access_timestamps = []
-            if last_accessed:
-                if hasattr(last_accessed, 'timestamp'):
-                    access_timestamps = [last_accessed.timestamp()]
-
-            valence = "positive" if am_type == "relationship" else "neutral"
-
-            # Source conversation as derived_from
-            src_conv = row.get("source_conversation_id")
-            derived_from = [str(src_conv)] if src_conv else []
-
-            node_id = f"am_{row['id']}"
-            uid = str(row["user_id"])
-
-            await db.execute(
-                text("""
-                    INSERT INTO cerebro_memory_nodes (
-                        id, user_id, content, content_hash, memory_type, layer, agent_id, visibility,
-                        stability, difficulty, access_count, access_timestamps_json,
-                        compressed_count, compressed_avg_interval,
-                        last_retrievability, last_activation,
-                        valence, arousal, salience,
-                        tags, concepts, responding_to, related_agents,
-                        source, derived_from,
-                        created_at, last_accessed_at
-                    ) VALUES (
-                        :id, :user_id::uuid, :content, :content_hash, :memory_type, :layer, :agent_id, :visibility,
-                        :stability, :difficulty, :access_count, :access_timestamps_json::jsonb,
-                        :compressed_count, :compressed_avg_interval,
-                        :last_retrievability, :last_activation,
-                        :valence, :arousal, :salience,
-                        :tags::jsonb, :concepts::jsonb, :responding_to::jsonb, :related_agents::jsonb,
-                        :source, :derived_from::jsonb,
-                        :created_at, :last_accessed_at
-                    )
-                """),
-                {
-                    "id": node_id,
-                    "user_id": uid,
-                    "content": content[:2000],
-                    "content_hash": content_hash,
-                    "memory_type": memory_type,
-                    "layer": layer,
-                    "agent_id": agent_id,
-                    "visibility": "private",
-                    "stability": confidence,
-                    "difficulty": 5.0,
-                    "access_count": access_count,
-                    "access_timestamps_json": json.dumps(access_timestamps),
-                    "compressed_count": 0,
-                    "compressed_avg_interval": 0.0,
-                    "last_retrievability": 1.0,
-                    "last_activation": 0.0,
-                    "valence": valence,
-                    "arousal": 0.5,
-                    "salience": confidence,
-                    "tags": json.dumps([am_type]),
-                    "concepts": json.dumps([key] if key else []),
-                    "responding_to": json.dumps([]),
-                    "related_agents": json.dumps([]),
-                    "source": "agent_memory_migration",
-                    "derived_from": json.dumps(derived_from),
-                    "created_at": row["created_at"].isoformat() if row.get("created_at") else datetime.now().isoformat(),
-                    "last_accessed_at": last_accessed.isoformat() if last_accessed else None,
-                },
-            )
-            migrated += 1
-
-        except Exception as e:
-            logger.error(f"Failed to migrate agent_memory {row.get('id')}: {e}")
-            errors += 1
-
-    if migrated > 0:
+    try:
+        result = await db.execute(
+            text(f"""
+                INSERT INTO cerebro_memory_nodes (
+                    id, user_id, content, content_hash, memory_type, layer, agent_id, visibility,
+                    stability, difficulty, access_count, access_timestamps_json,
+                    compressed_count, compressed_avg_interval,
+                    last_retrievability, last_activation,
+                    valence, arousal, salience,
+                    tags, concepts, responding_to, related_agents,
+                    source, derived_from,
+                    created_at, last_accessed_at
+                )
+                SELECT
+                    'am_' || am.id::text,
+                    am.user_id,
+                    CASE WHEN am.key IS NOT NULL AND am.key != ''
+                        THEN am.key || ': ' || COALESCE(am.value, '')
+                        ELSE COALESCE(am.value, '')
+                    END,
+                    LEFT(encode(sha256(
+                        (CASE WHEN am.key IS NOT NULL AND am.key != ''
+                            THEN am.key || ': ' || COALESCE(am.value, '')
+                            ELSE COALESCE(am.value, '')
+                        END)::bytea
+                    ), 'hex'), 16),
+                    -- memory_type mapping
+                    CASE COALESCE(am.memory_type, 'fact')
+                        WHEN 'fact' THEN 'semantic'
+                        WHEN 'preference' THEN 'procedural'
+                        WHEN 'context' THEN 'episodic'
+                        WHEN 'relationship' THEN 'affective'
+                        ELSE 'semantic'
+                    END,
+                    CASE WHEN COALESCE(am.confidence, 0.8) >= 0.9 THEN 'long_term' ELSE 'working' END,
+                    COALESCE(am.agent_id, 'AZOTH'),
+                    'private',
+                    COALESCE(am.confidence, 0.8),  -- stability = confidence
+                    5.0,
+                    COALESCE(am.access_count, 0),
+                    CASE WHEN am.last_accessed IS NOT NULL
+                        THEN jsonb_build_array(extract(epoch FROM am.last_accessed))
+                        ELSE '[]'::jsonb
+                    END,
+                    0, 0.0, 1.0, 0.0,
+                    CASE WHEN am.memory_type = 'relationship' THEN 'positive' ELSE 'neutral' END,
+                    0.5,  -- arousal
+                    COALESCE(am.confidence, 0.8),  -- salience = confidence
+                    jsonb_build_array(COALESCE(am.memory_type, 'fact')),  -- tags
+                    CASE WHEN am.key IS NOT NULL AND am.key != ''
+                        THEN jsonb_build_array(am.key)
+                        ELSE '[]'::jsonb
+                    END,  -- concepts
+                    '[]'::jsonb,  -- responding_to
+                    '[]'::jsonb,  -- related_agents
+                    'agent_memory_migration',
+                    CASE WHEN am.source_conversation_id IS NOT NULL
+                        THEN jsonb_build_array(am.source_conversation_id::text)
+                        ELSE '[]'::jsonb
+                    END,
+                    COALESCE(am.created_at, NOW()),
+                    am.last_accessed
+                FROM agent_memories am
+                LEFT JOIN cerebro_memory_nodes cmn
+                    ON cmn.id = 'am_' || am.id::text AND cmn.user_id = am.user_id
+                WHERE cmn.id IS NULL
+                    AND LENGTH(TRIM(COALESCE(am.key, '') || COALESCE(am.value, ''))) >= 5
+                {user_filter}
+            """),
+            params,
+        )
         await db.commit()
+        migrated = result.rowcount or 0
+        return {"migrated": migrated, "skipped": available - migrated, "errors": 0}
 
-    return {"migrated": migrated, "skipped": skipped, "errors": errors}
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"Bulk agent_memories migration failed: {e}")
+        return {"migrated": 0, "skipped": 0, "errors": available, "error_detail": str(e)}
 
 
 async def create_responding_to_links(db: AsyncSession, user_id: Optional[UUID] = None) -> int:
     """Create CONTEXTUAL links from responding_to arrays in migrated memories."""
+    user_filter = "AND cmn.user_id = :user_id" if user_id else ""
     params: dict = {}
-    user_filter = ""
     if user_id:
-        user_filter = "AND cmn.user_id = :user_id"
         params["user_id"] = str(user_id)
 
-    # Find memories with non-empty responding_to arrays
-    result = await db.execute(
-        text(f"""
-            SELECT cmn.id, cmn.user_id, cmn.responding_to
-            FROM cerebro_memory_nodes cmn
-            WHERE jsonb_array_length(cmn.responding_to) > 0
-              AND cmn.source IN ('neo_cortex_migration', 'agent_memory_migration')
-              {user_filter}
-        """),
-        params,
-    )
-    rows = result.mappings().all()
-
-    link_count = 0
-    for row in rows:
-        responding_to = row["responding_to"]
-        if isinstance(responding_to, str):
-            responding_to = json.loads(responding_to)
-
-        for ref_id in responding_to:
-            if not ref_id:
-                continue
-            try:
-                link_id = _content_hash(f"{ref_id}->{row['id']}:contextual")
-                await db.execute(
-                    text("""
-                        INSERT INTO cerebro_associative_links (
-                            id, user_id, source_id, target_id, link_type, weight,
-                            activation_count, source_reason, evidence, created_at
-                        ) VALUES (
-                            :id, :user_id, :source_id, :target_id, 'contextual', 0.5,
-                            1, 'migration', 'responding_to relationship', NOW()
-                        )
-                        ON CONFLICT ON CONSTRAINT uq_cerebro_link DO NOTHING
-                    """),
-                    {
-                        "id": link_id,
-                        "user_id": str(row["user_id"]),
-                        "source_id": str(ref_id),
-                        "target_id": row["id"],
-                    },
+    try:
+        result = await db.execute(
+            text(f"""
+                INSERT INTO cerebro_associative_links (
+                    id, user_id, source_id, target_id, link_type, weight,
+                    activation_count, source_reason, evidence, created_at
                 )
-                link_count += 1
-            except Exception as e:
-                logger.debug(f"Link creation skipped for {ref_id}->{row['id']}: {e}")
-
-    if link_count > 0:
+                SELECT
+                    LEFT(encode(sha256((ref_id || '->' || cmn.id || ':contextual')::bytea), 'hex'), 16),
+                    cmn.user_id,
+                    ref_id,
+                    cmn.id,
+                    'contextual',
+                    0.5,
+                    1,
+                    'migration',
+                    'responding_to relationship',
+                    NOW()
+                FROM cerebro_memory_nodes cmn,
+                     jsonb_array_elements_text(cmn.responding_to) AS ref_id
+                WHERE jsonb_array_length(cmn.responding_to) > 0
+                  AND cmn.source IN ('neo_cortex_migration', 'agent_memory_migration')
+                  AND ref_id IS NOT NULL AND ref_id != ''
+                  {user_filter}
+                ON CONFLICT ON CONSTRAINT uq_cerebro_link DO NOTHING
+            """),
+            params,
+        )
         await db.commit()
-    return link_count
+        return result.rowcount or 0
+
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"Contextual link creation failed: {e}")
+        return 0
 
 
 async def create_thread_links(db: AsyncSession, user_id: Optional[UUID] = None) -> int:
-    """Create TEMPORAL links between memories in the same conversation_thread."""
+    """Create TEMPORAL links between sequential memories in the same conversation_thread."""
+    user_filter = "AND a.user_id = :user_id" if user_id else ""
     params: dict = {}
-    user_filter = ""
     if user_id:
-        user_filter = "AND cmn.user_id = :user_id"
         params["user_id"] = str(user_id)
 
-    # Get distinct threads with multiple memories
-    result = await db.execute(
-        text(f"""
-            SELECT cmn.user_id, cmn.conversation_thread, array_agg(cmn.id ORDER BY cmn.created_at) as node_ids
-            FROM cerebro_memory_nodes cmn
-            WHERE cmn.conversation_thread IS NOT NULL
-              AND cmn.source IN ('neo_cortex_migration', 'agent_memory_migration')
-              {user_filter}
-            GROUP BY cmn.user_id, cmn.conversation_thread
-            HAVING COUNT(*) > 1
-        """),
-        params,
-    )
-    rows = result.mappings().all()
-
-    link_count = 0
-    for row in rows:
-        node_ids = row["node_ids"]
-        uid = str(row["user_id"])
-
-        # Create temporal links between sequential pairs
-        for i in range(len(node_ids) - 1):
-            try:
-                link_id = _content_hash(f"{node_ids[i]}->{node_ids[i+1]}:temporal")
-                await db.execute(
-                    text("""
-                        INSERT INTO cerebro_associative_links (
-                            id, user_id, source_id, target_id, link_type, weight,
-                            activation_count, source_reason, evidence, created_at
-                        ) VALUES (
-                            :id, :user_id, :source_id, :target_id, 'temporal', 0.4,
-                            1, 'migration', 'Same conversation thread', NOW()
-                        )
-                        ON CONFLICT ON CONSTRAINT uq_cerebro_link DO NOTHING
-                    """),
-                    {
-                        "id": link_id,
-                        "user_id": uid,
-                        "source_id": node_ids[i],
-                        "target_id": node_ids[i + 1],
-                    },
+    try:
+        result = await db.execute(
+            text(f"""
+                INSERT INTO cerebro_associative_links (
+                    id, user_id, source_id, target_id, link_type, weight,
+                    activation_count, source_reason, evidence, created_at
                 )
-                link_count += 1
-            except Exception as e:
-                logger.debug(f"Thread link skipped: {e}")
-
-    if link_count > 0:
+                SELECT
+                    LEFT(encode(sha256((a.id || '->' || b.id || ':temporal')::bytea), 'hex'), 16),
+                    a.user_id,
+                    a.id,
+                    b.id,
+                    'temporal',
+                    0.4,
+                    1,
+                    'migration',
+                    'Same conversation thread',
+                    NOW()
+                FROM cerebro_memory_nodes a
+                JOIN cerebro_memory_nodes b
+                    ON a.user_id = b.user_id
+                    AND a.conversation_thread = b.conversation_thread
+                    AND a.conversation_thread IS NOT NULL
+                    AND b.created_at = (
+                        SELECT MIN(c.created_at)
+                        FROM cerebro_memory_nodes c
+                        WHERE c.user_id = a.user_id
+                          AND c.conversation_thread = a.conversation_thread
+                          AND c.created_at > a.created_at
+                          AND c.source IN ('neo_cortex_migration', 'agent_memory_migration')
+                    )
+                WHERE a.source IN ('neo_cortex_migration', 'agent_memory_migration')
+                  AND b.source IN ('neo_cortex_migration', 'agent_memory_migration')
+                  {user_filter}
+                ON CONFLICT ON CONSTRAINT uq_cerebro_link DO NOTHING
+            """),
+            params,
+        )
         await db.commit()
-    return link_count
+        return result.rowcount or 0
+
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"Thread link creation failed: {e}")
+        return 0
 
 
 async def register_default_agents(db: AsyncSession, user_id: UUID) -> int:
@@ -529,14 +388,11 @@ async def run_full_migration(db: AsyncSession, user_id: Optional[UUID] = None) -
     """Run the complete migration pipeline.
 
     Steps:
-    1. Migrate user_vectors -> cerebro_memory_nodes
-    2. Migrate agent_memories -> cerebro_memory_nodes
-    3. Create CONTEXTUAL links from responding_to
-    4. Create TEMPORAL links from conversation threads
+    1. Migrate user_vectors -> cerebro_memory_nodes (bulk SQL)
+    2. Migrate agent_memories -> cerebro_memory_nodes (bulk SQL)
+    3. Create CONTEXTUAL links from responding_to (bulk SQL)
+    4. Create TEMPORAL links from conversation threads (bulk SQL)
     5. Register default agents (per user)
-
-    Returns:
-        Dict with complete migration report.
     """
     logger.info(f"Starting CerebroCortex migration (user_id={user_id or 'ALL'})")
 
