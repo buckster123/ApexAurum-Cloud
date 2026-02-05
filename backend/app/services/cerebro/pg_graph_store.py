@@ -89,9 +89,9 @@ class PgGraphStore:
             "related_agents": json.dumps(meta.related_agents),
             "source": meta.source,
             "derived_from": json.dumps(meta.derived_from),
-            "created_at": node.created_at.isoformat(),
-            "last_accessed_at": node.last_accessed_at.isoformat() if node.last_accessed_at else None,
-            "promoted_at": node.promoted_at.isoformat() if node.promoted_at else None,
+            "created_at": node.created_at,
+            "last_accessed_at": node.last_accessed_at,
+            "promoted_at": node.promoted_at,
         }
 
         if embedding_val:
@@ -316,8 +316,8 @@ class PgGraphStore:
                     "link_type": link.link_type.value,
                     "weight": link.weight,
                     "activation_count": link.activation_count,
-                    "created_at": link.created_at.isoformat(),
-                    "last_activated": link.last_activated.isoformat() if link.last_activated else None,
+                    "created_at": link.created_at,
+                    "last_activated": link.last_activated,
                     "source_reason": link.source,
                     "evidence": link.evidence,
                 },
@@ -447,14 +447,14 @@ class PgGraphStore:
                 "title": episode.title,
                 "agent_id": episode.agent_id,
                 "session_id": episode.session_id,
-                "started_at": episode.started_at.isoformat() if episode.started_at else None,
-                "ended_at": episode.ended_at.isoformat() if episode.ended_at else None,
+                "started_at": episode.started_at,
+                "ended_at": episode.ended_at,
                 "overall_valence": episode.overall_valence.value if isinstance(episode.overall_valence, EmotionalValence) else episode.overall_valence,
                 "peak_arousal": episode.peak_arousal,
                 "tags": json.dumps(episode.tags),
                 "consolidated": episode.consolidated,
                 "schema_extracted": episode.schema_extracted,
-                "created_at": episode.created_at.isoformat(),
+                "created_at": episode.created_at,
             },
         )
         await self.db.commit()
@@ -473,7 +473,7 @@ class PgGraphStore:
                 "memory_id": step.memory_id,
                 "position": step.position,
                 "role": step.role,
-                "timestamp": step.timestamp.isoformat(),
+                "timestamp": step.timestamp,
             },
         )
         await self.db.commit()
@@ -509,7 +509,7 @@ class PgGraphStore:
                 "origin_story": profile.origin_story,
                 "color": profile.color,
                 "symbol": profile.symbol,
-                "registered_at": profile.registered_at.isoformat(),
+                "registered_at": profile.registered_at,
             },
         )
         await self.db.commit()
