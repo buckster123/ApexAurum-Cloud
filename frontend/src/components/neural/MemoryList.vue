@@ -3,10 +3,11 @@
  * MemoryList - List view fallback for Neural Space
  *
  * A table-based list view of memories (2D/List mode).
+ * Shows memory type, salience, valence alongside layer and agent.
  */
 
 import { computed } from 'vue'
-import { useNeoCortexStore, AGENT_COLORS } from '@/stores/neocortex'
+import { useNeoCortexStore, AGENT_COLORS, MEMORY_TYPES } from '@/stores/neocortex'
 
 const store = useNeoCortexStore()
 
@@ -25,6 +26,28 @@ function formatDate(dateStr) {
 function truncate(text, length = 100) {
   if (!text) return ''
   return text.length > length ? text.slice(0, length) + '...' : text
+}
+
+function typeColor(type) {
+  return MEMORY_TYPES[type]?.color || '#888'
+}
+
+function typeLabel(type) {
+  return MEMORY_TYPES[type]?.label || type || 'unknown'
+}
+
+function valenceIcon(v) {
+  if (v === 'positive') return '+'
+  if (v === 'negative') return '-'
+  if (v === 'mixed') return '~'
+  return 'o'
+}
+
+function valenceColor(v) {
+  if (v === 'positive') return '#66BB6A'
+  if (v === 'negative') return '#EF5350'
+  if (v === 'mixed') return '#FFA726'
+  return '#9E9E9E'
 }
 </script>
 
@@ -46,9 +69,11 @@ function truncate(text, length = 100) {
       <thead class="sticky top-0 bg-apex-dark border-b border-apex-border">
         <tr class="text-left text-xs text-gray-500 uppercase tracking-wider">
           <th class="p-3 w-24">Agent</th>
+          <th class="p-3 w-24">Type</th>
           <th class="p-3 w-24">Layer</th>
           <th class="p-3">Content</th>
-          <th class="p-3 w-20 text-right">Attention</th>
+          <th class="p-3 w-16 text-right">Sal.</th>
+          <th class="p-3 w-10 text-center">Val.</th>
           <th class="p-3 w-36">Created</th>
         </tr>
       </thead>
@@ -70,8 +95,16 @@ function truncate(text, length = 100) {
                 class="w-2 h-2 rounded-full"
                 :style="{ backgroundColor: AGENT_COLORS[memory.agent_id]?.hex || '#888' }"
               ></span>
-              <span class="text-xs text-gray-400">{{ memory.agent_id || 'CLAUDE' }}</span>
+              <span class="text-xs text-gray-400">{{ memory.agent_id || 'AZOTH' }}</span>
             </div>
+          </td>
+          <td class="p-3">
+            <span
+              class="px-1.5 py-0.5 text-xs rounded text-black font-medium"
+              :style="{ backgroundColor: typeColor(memory.memory_type) }"
+            >
+              {{ typeLabel(memory.memory_type) }}
+            </span>
           </td>
           <td class="p-3">
             <span
@@ -91,7 +124,12 @@ function truncate(text, length = 100) {
           </td>
           <td class="p-3 text-right">
             <span class="text-gold font-mono text-xs">
-              {{ memory.attention_weight?.toFixed(2) || '1.00' }}
+              {{ (memory.salience || 0).toFixed(2) }}
+            </span>
+          </td>
+          <td class="p-3 text-center">
+            <span class="font-mono text-xs" :style="{ color: valenceColor(memory.valence) }">
+              {{ valenceIcon(memory.valence) }}
             </span>
           </td>
           <td class="p-3 text-xs text-gray-500">

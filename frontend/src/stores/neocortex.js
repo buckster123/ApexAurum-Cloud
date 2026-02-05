@@ -2,6 +2,7 @@
  * Neo-Cortex Store
  *
  * State management for the 3D Neural Space memory visualization.
+ * Powered by CerebroCortex: associative links, memory types, ACT-R scoring.
  * "Where memories glow like stars in the vast neural cosmos"
  */
 
@@ -27,6 +28,32 @@ export const LAYER_CONFIG = {
   sensory: { radius: [60, 80], brightness: 0.4, color: '#9E9E9E' },
 }
 
+// CerebroCortex memory types (6 modalities)
+export const MEMORY_TYPES = {
+  episodic: { label: 'Episodic', color: '#4FC3F7', icon: 'E' },
+  semantic: { label: 'Semantic', color: '#FFD700', icon: 'S' },
+  procedural: { label: 'Procedural', color: '#66BB6A', icon: 'P' },
+  affective: { label: 'Affective', color: '#EF5350', icon: 'A' },
+  prospective: { label: 'Prospective', color: '#AB47BC', icon: 'R' },
+  schematic: { label: 'Schematic', color: '#FF7043', icon: 'X' },
+}
+
+// CerebroCortex link types (9 types) with visualization colors
+export const LINK_TYPES = {
+  temporal: { color: '#4FC3F7', label: 'Temporal' },
+  causal: { color: '#EF5350', label: 'Causal' },
+  semantic: { color: '#FFD700', label: 'Semantic' },
+  affective: { color: '#E8B4FF', label: 'Affective' },
+  contextual: { color: '#66BB6A', label: 'Contextual' },
+  contradicts: { color: '#FF7043', label: 'Contradicts' },
+  supports: { color: '#29B6F6', label: 'Supports' },
+  derived_from: { color: '#9E9E9E', label: 'Derived' },
+  part_of: { color: '#AB47BC', label: 'Part Of' },
+}
+
+// Visibility options (CerebroCortex mapping)
+export const VISIBILITIES = ['private', 'shared', 'thread']
+
 export const useNeoCortexStore = defineStore('neocortex', () => {
   // =============================================================================
   // State
@@ -40,6 +67,10 @@ export const useNeoCortexStore = defineStore('neocortex', () => {
     by_visibility: {},
     by_agent: {},
     by_message_type: {},
+    by_memory_type: {},
+    links: 0,
+    link_types: {},
+    episodes: 0,
   })
 
   const selectedMemory = ref(null)
@@ -53,15 +84,15 @@ export const useNeoCortexStore = defineStore('neocortex', () => {
     visibility: null,
     agent_id: null,
     message_type: null,
+    memory_type: null,
     search_query: '',
     date_from: null,
     date_to: null,
   })
 
   // View settings
-  // Check WebGL availability and default to 2D if not supported
   const webglSupported = ref(false)
-  const viewMode = ref('list') // '3d' | 'list' - default to list, set to 3d in initialize() if WebGL available
+  const viewMode = ref('list') // '3d' | 'list'
   const showConnections = ref(true)
   const autoRotate = ref(true)
   const nodeScale = ref(1.0)
@@ -85,6 +116,9 @@ export const useNeoCortexStore = defineStore('neocortex', () => {
     if (filters.value.message_type) {
       nodes = nodes.filter(n => n.message_type === filters.value.message_type)
     }
+    if (filters.value.memory_type) {
+      nodes = nodes.filter(n => n.memory_type === filters.value.memory_type)
+    }
 
     return nodes
   })
@@ -97,6 +131,8 @@ export const useNeoCortexStore = defineStore('neocortex', () => {
   })
 
   const memoryCount = computed(() => stats.value.total || 0)
+  const linkCount = computed(() => stats.value.links || 0)
+  const episodeCount = computed(() => stats.value.episodes || 0)
 
   const layerBreakdown = computed(() =>
     Object.entries(stats.value.by_layer || {}).map(([layer, count]) => ({
@@ -112,6 +148,25 @@ export const useNeoCortexStore = defineStore('neocortex', () => {
       agent,
       count,
       color: AGENT_COLORS[agent]?.hex || '#888',
+    }))
+  )
+
+  const memoryTypeBreakdown = computed(() =>
+    Object.entries(stats.value.by_memory_type || {}).map(([type, count]) => ({
+      type,
+      count,
+      percentage: stats.value.total ? ((count / stats.value.total) * 100).toFixed(1) : 0,
+      color: MEMORY_TYPES[type]?.color || '#888',
+      label: MEMORY_TYPES[type]?.label || type,
+    }))
+  )
+
+  const linkTypeBreakdown = computed(() =>
+    Object.entries(stats.value.link_types || {}).map(([type, count]) => ({
+      type,
+      count,
+      color: LINK_TYPES[type]?.color || '#888',
+      label: LINK_TYPES[type]?.label || type,
     }))
   )
 
@@ -160,6 +215,16 @@ export const useNeoCortexStore = defineStore('neocortex', () => {
     }
   }
 
+  async function fetchNeighbors(id) {
+    try {
+      const response = await api.get(`/api/v1/cortex/neighbors/${id}`)
+      return response.data.neighbors || []
+    } catch (e) {
+      console.error('Failed to fetch neighbors:', e)
+      return []
+    }
+  }
+
   async function searchMemories(query) {
     isLoading.value = true
     error.value = null
@@ -170,6 +235,7 @@ export const useNeoCortexStore = defineStore('neocortex', () => {
         layers: filters.value.layer ? [filters.value.layer] : null,
         visibility: filters.value.visibility,
         agent_id: filters.value.agent_id,
+        memory_types: filters.value.memory_type ? [filters.value.memory_type] : null,
         limit: 100,
       })
 
@@ -253,6 +319,7 @@ export const useNeoCortexStore = defineStore('neocortex', () => {
       visibility: null,
       agent_id: null,
       message_type: null,
+      memory_type: null,
       search_query: '',
       date_from: null,
       date_to: null,
@@ -265,7 +332,6 @@ export const useNeoCortexStore = defineStore('neocortex', () => {
 
   // Initialize
   async function initialize() {
-    // Check WebGL availability
     webglSupported.value = isWebGLAvailable()
     if (webglSupported.value) {
       viewMode.value = '3d'
@@ -298,13 +364,18 @@ export const useNeoCortexStore = defineStore('neocortex', () => {
     filteredNodes,
     filteredEdges,
     memoryCount,
+    linkCount,
+    episodeCount,
     layerBreakdown,
     agentBreakdown,
+    memoryTypeBreakdown,
+    linkTypeBreakdown,
 
     // Actions
     fetchGraphData,
     fetchStats,
     fetchMemory,
+    fetchNeighbors,
     searchMemories,
     promoteMemory,
     deleteMemory,

@@ -2,11 +2,12 @@
 /**
  * MemoryDetailPanel - Right sidebar for selected memory details
  *
- * Shows full content, metadata, and actions for the selected memory.
+ * Shows full content, CerebroCortex metadata (type, salience, valence,
+ * arousal, concepts), and actions for the selected memory.
  */
 
 import { ref, computed } from 'vue'
-import { useNeoCortexStore, AGENT_COLORS, LAYER_CONFIG } from '@/stores/neocortex'
+import { useNeoCortexStore, AGENT_COLORS, LAYER_CONFIG, MEMORY_TYPES } from '@/stores/neocortex'
 import { useSound } from '@/composables/useSound'
 
 const store = useNeoCortexStore()
@@ -15,6 +16,8 @@ const { playTone } = useSound()
 const isPromoting = ref(false)
 const isDeleting = ref(false)
 const showDeleteConfirm = ref(false)
+const neighbors = ref([])
+const showNeighbors = ref(false)
 
 const memory = computed(() => store.selectedMemory)
 
@@ -25,6 +28,18 @@ const agentColor = computed(() =>
 const layerIndex = computed(() =>
   Object.keys(LAYER_CONFIG).indexOf(memory.value?.layer || 'working')
 )
+
+const memoryTypeInfo = computed(() =>
+  MEMORY_TYPES[memory.value?.memory_type] || { label: memory.value?.memory_type || 'unknown', color: '#888' }
+)
+
+const valenceColor = computed(() => {
+  const v = memory.value?.valence
+  if (v === 'positive') return '#66BB6A'
+  if (v === 'negative') return '#EF5350'
+  if (v === 'mixed') return '#FFA726'
+  return '#9E9E9E'
+})
 
 async function promoteLayer() {
   if (!memory.value) return
@@ -79,6 +94,14 @@ async function confirmDelete() {
   }
 }
 
+async function loadNeighbors() {
+  if (!memory.value) return
+  showNeighbors.value = !showNeighbors.value
+  if (showNeighbors.value) {
+    neighbors.value = await store.fetchNeighbors(memory.value.id)
+  }
+}
+
 function formatDate(dateStr) {
   if (!dateStr) return 'N/A'
   return new Date(dateStr).toLocaleString()
@@ -86,6 +109,8 @@ function formatDate(dateStr) {
 
 function close() {
   store.clearSelection()
+  showNeighbors.value = false
+  neighbors.value = []
 }
 </script>
 
@@ -108,7 +133,7 @@ function close() {
             class="w-4 h-4 rounded-full"
             :style="{ backgroundColor: agentColor.hex }"
           ></span>
-          <span class="text-sm font-medium text-white">{{ memory.agent_id || 'CLAUDE' }}</span>
+          <span class="text-sm font-medium text-white">{{ memory.agent_id || 'AZOTH' }}</span>
         </div>
         <button
           @click="close"
@@ -120,8 +145,8 @@ function close() {
 
       <!-- Content -->
       <div class="flex-1 overflow-auto p-4 space-y-4">
-        <!-- Layer badge -->
-        <div class="flex items-center gap-2">
+        <!-- Layer + Type badges -->
+        <div class="flex items-center gap-2 flex-wrap">
           <span
             class="px-2 py-1 text-xs rounded uppercase tracking-wider"
             :class="{
@@ -133,10 +158,13 @@ function close() {
           >
             {{ memory.layer }}
           </span>
-          <span class="text-xs text-gray-500">|</span>
+          <span
+            class="px-2 py-1 text-xs rounded text-black font-medium"
+            :style="{ backgroundColor: memoryTypeInfo.color }"
+          >
+            {{ memoryTypeInfo.label }}
+          </span>
           <span class="text-xs text-gray-500">{{ memory.visibility }}</span>
-          <span class="text-xs text-gray-500">|</span>
-          <span class="text-xs text-gray-500">{{ memory.message_type }}</span>
         </div>
 
         <!-- Main content -->
@@ -146,21 +174,39 @@ function close() {
           </p>
         </div>
 
-        <!-- Metadata -->
+        <!-- CerebroCortex Metrics -->
         <div class="space-y-2">
-          <h4 class="text-xs text-gray-500 uppercase tracking-wider">Metadata</h4>
+          <h4 class="text-xs text-gray-500 uppercase tracking-wider">Metrics</h4>
+
+          <div class="grid grid-cols-3 gap-2 text-xs">
+            <div class="bg-white/5 rounded p-2">
+              <div class="text-gray-500 mb-1">Salience</div>
+              <div class="text-gold font-mono">{{ (memory.salience || 0).toFixed(2) }}</div>
+            </div>
+            <div class="bg-white/5 rounded p-2">
+              <div class="text-gray-500 mb-1">Arousal</div>
+              <div class="text-blue-400 font-mono">{{ (memory.arousal || 0).toFixed(2) }}</div>
+            </div>
+            <div class="bg-white/5 rounded p-2">
+              <div class="text-gray-500 mb-1">Valence</div>
+              <div class="font-mono" :style="{ color: valenceColor }">{{ memory.valence || 'neutral' }}</div>
+            </div>
+          </div>
 
           <div class="grid grid-cols-2 gap-2 text-xs">
-            <div class="bg-white/5 rounded p-2">
-              <div class="text-gray-500 mb-1">Attention</div>
-              <div class="text-gold font-mono">{{ memory.attention_weight?.toFixed(2) || '1.00' }}</div>
-            </div>
             <div class="bg-white/5 rounded p-2">
               <div class="text-gray-500 mb-1">Access Count</div>
               <div class="text-white font-mono">{{ memory.access_count || 0 }}</div>
             </div>
+            <div class="bg-white/5 rounded p-2">
+              <div class="text-gray-500 mb-1">Links</div>
+              <div class="text-blue-400 font-mono">{{ memory.link_count || 0 }}</div>
+            </div>
           </div>
+        </div>
 
+        <!-- Timestamps -->
+        <div class="space-y-2">
           <div class="bg-white/5 rounded p-2 text-xs">
             <div class="text-gray-500 mb-1">Created</div>
             <div class="text-gray-300">{{ formatDate(memory.created_at) }}</div>
@@ -170,38 +216,78 @@ function close() {
             <div class="text-gray-500 mb-1">Last Accessed</div>
             <div class="text-gray-300">{{ formatDate(memory.last_accessed_at) }}</div>
           </div>
+        </div>
 
-          <!-- Tags -->
-          <div v-if="memory.tags?.length" class="bg-white/5 rounded p-2 text-xs">
-            <div class="text-gray-500 mb-2">Tags</div>
-            <div class="flex flex-wrap gap-1">
+        <!-- Concepts -->
+        <div v-if="memory.concepts?.length" class="space-y-2">
+          <h4 class="text-xs text-gray-500 uppercase tracking-wider">Concepts</h4>
+          <div class="flex flex-wrap gap-1">
+            <span
+              v-for="concept in memory.concepts"
+              :key="concept"
+              class="px-2 py-0.5 bg-blue-400/20 text-blue-300 rounded text-xs"
+            >
+              {{ concept }}
+            </span>
+          </div>
+        </div>
+
+        <!-- Tags -->
+        <div v-if="memory.tags?.length" class="space-y-2">
+          <h4 class="text-xs text-gray-500 uppercase tracking-wider">Tags</h4>
+          <div class="flex flex-wrap gap-1">
+            <span
+              v-for="tag in memory.tags"
+              :key="tag"
+              class="px-2 py-0.5 bg-gold/20 text-gold rounded text-xs"
+            >
+              {{ tag }}
+            </span>
+          </div>
+        </div>
+
+        <!-- Related agents -->
+        <div v-if="memory.related_agents?.length" class="space-y-2">
+          <h4 class="text-xs text-gray-500 uppercase tracking-wider">Related Agents</h4>
+          <div class="flex flex-wrap gap-1">
+            <span
+              v-for="agent in memory.related_agents"
+              :key="agent"
+              class="px-2 py-0.5 rounded text-xs flex items-center gap-1"
+              :style="{ backgroundColor: AGENT_COLORS[agent]?.hex + '33' }"
+            >
               <span
-                v-for="tag in memory.tags"
-                :key="tag"
-                class="px-2 py-0.5 bg-gold/20 text-gold rounded text-xs"
-              >
-                {{ tag }}
-              </span>
+                class="w-2 h-2 rounded-full"
+                :style="{ backgroundColor: AGENT_COLORS[agent]?.hex }"
+              ></span>
+              {{ agent }}
+            </span>
+          </div>
+        </div>
+
+        <!-- Neighbors -->
+        <div class="space-y-2">
+          <button
+            @click="loadNeighbors"
+            class="text-xs text-blue-400 hover:text-blue-300 transition-colors"
+          >
+            {{ showNeighbors ? 'Hide' : 'Show' }} Neighbors ({{ memory.link_count || 0 }})
+          </button>
+          <div v-if="showNeighbors && neighbors.length" class="space-y-1">
+            <div
+              v-for="n in neighbors"
+              :key="n.id"
+              class="bg-white/5 rounded p-2 text-xs"
+            >
+              <div class="flex items-center justify-between mb-1">
+                <span class="text-gray-400">{{ n.link_type }}</span>
+                <span class="text-gray-500 font-mono">w={{ n.weight?.toFixed(2) }}</span>
+              </div>
+              <p class="text-gray-300 line-clamp-2">{{ n.content }}</p>
             </div>
           </div>
-
-          <!-- Related agents -->
-          <div v-if="memory.related_agents?.length" class="bg-white/5 rounded p-2 text-xs">
-            <div class="text-gray-500 mb-2">Related Agents</div>
-            <div class="flex flex-wrap gap-1">
-              <span
-                v-for="agent in memory.related_agents"
-                :key="agent"
-                class="px-2 py-0.5 rounded text-xs flex items-center gap-1"
-                :style="{ backgroundColor: AGENT_COLORS[agent]?.hex + '33' }"
-              >
-                <span
-                  class="w-2 h-2 rounded-full"
-                  :style="{ backgroundColor: AGENT_COLORS[agent]?.hex }"
-                ></span>
-                {{ agent }}
-              </span>
-            </div>
+          <div v-if="showNeighbors && neighbors.length === 0" class="text-xs text-gray-500">
+            No neighbors found
           </div>
         </div>
 

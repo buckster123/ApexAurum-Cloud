@@ -300,14 +300,15 @@ export function useThreeScene(containerRef, options = {}) {
  * Create a glowing memory node
  */
 export function createMemoryNode(memory, agentColors, layerConfig) {
-  const agent = memory.agent_id || 'CLAUDE'
+  const agent = memory.agent_id || 'AZOTH'
   const layer = memory.layer || 'working'
 
-  const colorInfo = agentColors[agent] || agentColors.CLAUDE
+  const colorInfo = agentColors[agent] || agentColors.CLAUDE || { hex: '#888888', glow: '#666666' }
   const layerInfo = layerConfig[layer] || layerConfig.working
 
-  // Base size from attention weight
-  const baseSize = 0.5 + (memory.attention_weight || 1.0) * 1.5
+  // Base size from salience (CerebroCortex) with attention_weight fallback
+  const salience = memory.salience ?? memory.attention_weight ?? 0.5
+  const baseSize = 0.5 + salience * 1.5
 
   // Create geometry
   const geometry = new THREE.SphereGeometry(baseSize, 16, 16)
@@ -346,17 +347,31 @@ export function createMemoryNode(memory, agentColors, layerConfig) {
 /**
  * Create connection line between nodes
  */
-export function createConnectionLine(startPos, endPos, type = 'responding_to') {
+export function createConnectionLine(startPos, endPos, type = 'contextual', weight = 0.5) {
+  // CerebroCortex link type colors (9 types)
   const colors = {
-    responding_to: 0x4fc3f7, // Blue
-    thread: 0xffd700, // Gold
-    related_agent: 0xe8b4ff, // Lilac
+    temporal: 0x4fc3f7,    // Blue
+    causal: 0xef5350,      // Red
+    semantic: 0xffd700,    // Gold
+    affective: 0xe8b4ff,   // Lilac
+    contextual: 0x66bb6a,  // Green
+    contradicts: 0xff7043, // Deep Orange
+    supports: 0x29b6f6,    // Light Blue
+    derived_from: 0x9e9e9e,// Grey
+    part_of: 0xab47bc,     // Purple
+    // Legacy types (backwards compat)
+    responding_to: 0x4fc3f7,
+    thread: 0xffd700,
+    related_agent: 0xe8b4ff,
   }
+
+  // Opacity scales with link weight
+  const opacity = 0.15 + (weight || 0.5) * 0.35
 
   const material = new THREE.LineBasicMaterial({
     color: colors[type] || 0x888888,
     transparent: true,
-    opacity: 0.3,
+    opacity,
   })
 
   const points = [

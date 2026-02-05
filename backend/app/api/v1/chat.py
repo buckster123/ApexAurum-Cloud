@@ -322,7 +322,7 @@ async def get_agent_prompt_with_memory(
         return base_prompt
 
     try:
-        # Fetch relevant memories
+        # Fetch relevant memories from AgentMemory table
         memory_service = MemoryService(db)
         memories = await memory_service.get_memories_for_agent(
             user_id=user.id,
@@ -331,18 +331,41 @@ async def get_agent_prompt_with_memory(
             min_confidence=0.5,
         )
 
-        if not memories:
-            return base_prompt
-
-        # Format and append memories
-        memory_block = memory_service.format_memories_for_prompt(memories)
-        logger.debug(f"Injecting {len(memories)} memories for agent {agent_id}")
-
-        return f"{base_prompt}\n{memory_block}"
+        if memories:
+            memory_block = memory_service.format_memories_for_prompt(memories)
+            logger.debug(f"Injecting {len(memories)} agent memories for {agent_id}")
+            base_prompt = f"{base_prompt}\n{memory_block}"
 
     except Exception as e:
-        logger.warning(f"Failed to load memories for agent {agent_id}: {e}")
-        return base_prompt
+        logger.warning(f"Failed to load agent memories for {agent_id}: {e}")
+
+    # Also fetch contextual memories from CerebroCortex
+    try:
+        from app.services.cerebro import get_cerebro_service
+        cerebro = get_cerebro_service()
+
+        # Recall recent shared memories for village context
+        cortex_results = await cerebro.recall(
+            db=db,
+            user_id=user.id,
+            query=f"important context for {agent_id}",
+            top_k=5,
+            visibility="shared",
+        )
+
+        if cortex_results:
+            cortex_lines = ["\n\n## Cortex Memories (Shared Village Knowledge)"]
+            for r in cortex_results:
+                type_indicator = f"[{r.memory_type}]" if r.memory_type != "semantic" else ""
+                salience_star = "*" if r.salience >= 0.7 else ""
+                cortex_lines.append(f"- {salience_star}{type_indicator} {r.content[:300]}")
+            base_prompt = f"{base_prompt}\n" + "\n".join(cortex_lines)
+            logger.debug(f"Injecting {len(cortex_results)} CerebroCortex memories for {agent_id}")
+
+    except Exception as e:
+        logger.debug(f"CerebroCortex injection skipped for {agent_id}: {e}")
+
+    return base_prompt
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

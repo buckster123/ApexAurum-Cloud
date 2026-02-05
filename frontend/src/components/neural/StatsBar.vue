@@ -2,7 +2,7 @@
 /**
  * StatsBar - Top stats bar for Neural Space dashboard
  *
- * Shows memory counts and view toggle.
+ * Shows memory counts, link counts, and view toggle.
  */
 
 import { computed } from 'vue'
@@ -13,11 +13,14 @@ const emit = defineEmits(['toggleView'])
 const store = useNeoCortexStore()
 
 const totalMemories = computed(() => store.memoryCount)
+const totalLinks = computed(() => store.linkCount)
+const totalEpisodes = computed(() => store.episodeCount)
 const activeFilters = computed(() => {
   let count = 0
   if (store.filters.layer) count++
   if (store.filters.visibility) count++
   if (store.filters.agent_id) count++
+  if (store.filters.memory_type) count++
   return count
 })
 
@@ -40,6 +43,16 @@ function setView(mode) {
         <div class="flex items-center gap-1">
           <span class="text-gray-500">Memories:</span>
           <span class="text-gold font-mono">{{ totalMemories }}</span>
+        </div>
+
+        <div class="flex items-center gap-1">
+          <span class="text-gray-500">Links:</span>
+          <span class="text-blue-400 font-mono">{{ totalLinks }}</span>
+        </div>
+
+        <div v-if="totalEpisodes > 0" class="flex items-center gap-1">
+          <span class="text-gray-500">Episodes:</span>
+          <span class="text-purple-400 font-mono">{{ totalEpisodes }}</span>
         </div>
 
         <div class="flex items-center gap-1">

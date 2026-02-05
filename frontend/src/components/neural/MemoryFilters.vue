@@ -2,19 +2,18 @@
 /**
  * MemoryFilters - Filter Panel for Neural Space
  *
- * Left sidebar with filters for layer, visibility, agent, etc.
+ * Left sidebar with filters for layer, visibility, agent, memory type.
  */
 
 import { ref, computed } from 'vue'
-import { useNeoCortexStore, AGENT_COLORS, LAYER_CONFIG } from '@/stores/neocortex'
+import { useNeoCortexStore, AGENT_COLORS, LAYER_CONFIG, MEMORY_TYPES, VISIBILITIES } from '@/stores/neocortex'
 
 const store = useNeoCortexStore()
 const searchInput = ref('')
 
 const layers = computed(() => Object.keys(LAYER_CONFIG))
 const agents = computed(() => Object.keys(AGENT_COLORS))
-const visibilities = ['private', 'village', 'bridge']
-const messageTypes = ['observation', 'insight', 'decision', 'question', 'response']
+const memoryTypes = computed(() => Object.keys(MEMORY_TYPES))
 
 async function handleSearch() {
   if (searchInput.value.trim()) {
@@ -39,6 +38,10 @@ function toggleVisibility(vis) {
 
 function toggleAgent(agent) {
   store.setFilter('agent_id', store.filters.agent_id === agent ? null : agent)
+}
+
+function toggleMemoryType(type) {
+  store.setFilter('memory_type', store.filters.memory_type === type ? null : type)
 }
 
 function clearAllFilters() {
@@ -82,6 +85,29 @@ function clearAllFilters() {
       </button>
     </div>
 
+    <!-- Memory Type Filter -->
+    <div class="p-4 border-b border-apex-border">
+      <label class="text-xs text-gray-500 uppercase tracking-wider mb-2 block">Memory Type</label>
+      <div class="flex flex-wrap gap-1.5">
+        <button
+          v-for="type in memoryTypes"
+          :key="type"
+          @click="toggleMemoryType(type)"
+          :class="[
+            'px-2 py-1 text-xs rounded transition-colors',
+            store.filters.memory_type === type
+              ? 'text-black font-medium'
+              : 'bg-white/5 text-gray-400 hover:bg-white/10'
+          ]"
+          :style="{
+            backgroundColor: store.filters.memory_type === type ? MEMORY_TYPES[type].color : '',
+          }"
+        >
+          {{ MEMORY_TYPES[type].label }}
+        </button>
+      </div>
+    </div>
+
     <!-- Layer Filter -->
     <div class="p-4 border-b border-apex-border">
       <label class="text-xs text-gray-500 uppercase tracking-wider mb-2 block">Layer</label>
@@ -107,7 +133,7 @@ function clearAllFilters() {
       <label class="text-xs text-gray-500 uppercase tracking-wider mb-2 block">Visibility</label>
       <div class="flex flex-wrap gap-2">
         <button
-          v-for="vis in visibilities"
+          v-for="vis in VISIBILITIES"
           :key="vis"
           @click="toggleVisibility(vis)"
           :class="[
@@ -170,6 +196,21 @@ function clearAllFilters() {
               ></div>
             </div>
             <span class="text-xs text-gray-500 w-8 text-right">{{ item.count }}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Memory Type Stats -->
+      <div v-if="store.memoryTypeBreakdown.length" class="mt-4">
+        <label class="text-xs text-gray-500 uppercase tracking-wider mb-2 block">By Type</label>
+        <div class="space-y-2">
+          <div
+            v-for="item in store.memoryTypeBreakdown"
+            :key="item.type"
+            class="flex items-center justify-between"
+          >
+            <span class="text-xs" :style="{ color: item.color }">{{ item.label }}</span>
+            <span class="text-xs text-gray-500 font-mono">{{ item.count }}</span>
           </div>
         </div>
       </div>

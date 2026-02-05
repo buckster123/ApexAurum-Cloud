@@ -882,6 +882,149 @@ END $$;
         migrations.append("CREATE INDEX IF NOT EXISTS ix_error_logs_severity_created ON error_logs(severity, created_at);")
         migrations.append("CREATE INDEX IF NOT EXISTS ix_error_logs_endpoint_created ON error_logs(endpoint, created_at);")
 
+        # ═══════════════════════════════════════════════════════════════════════
+        # CEREBROCORTEX - Unified memory engine with associative graph
+        # Tables: memory_nodes, associative_links, episodes, episode_steps,
+        #         agents, dream_log
+        # ═══════════════════════════════════════════════════════════════════════
+        migrations.append(f"""
+            CREATE TABLE IF NOT EXISTS cerebro_memory_nodes (
+                id VARCHAR(50) NOT NULL,
+                user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                content TEXT NOT NULL,
+                content_hash VARCHAR(16) NOT NULL,
+                memory_type VARCHAR(20) NOT NULL DEFAULT 'semantic',
+                layer VARCHAR(20) NOT NULL DEFAULT 'working',
+                agent_id VARCHAR(50) DEFAULT 'AZOTH',
+                visibility VARCHAR(20) NOT NULL DEFAULT 'shared',
+                stability FLOAT NOT NULL DEFAULT 1.0,
+                difficulty FLOAT NOT NULL DEFAULT 5.0,
+                access_count INTEGER NOT NULL DEFAULT 0,
+                access_timestamps_json JSONB NOT NULL DEFAULT '[]'::jsonb,
+                compressed_count INTEGER NOT NULL DEFAULT 0,
+                compressed_avg_interval FLOAT NOT NULL DEFAULT 0.0,
+                last_retrievability FLOAT NOT NULL DEFAULT 1.0,
+                last_activation FLOAT NOT NULL DEFAULT 0.0,
+                last_computed_at FLOAT,
+                valence VARCHAR(20) NOT NULL DEFAULT 'neutral',
+                arousal FLOAT NOT NULL DEFAULT 0.5,
+                salience FLOAT NOT NULL DEFAULT 0.5,
+                episode_id VARCHAR(50),
+                session_id VARCHAR(100),
+                conversation_thread VARCHAR(100),
+                tags JSONB NOT NULL DEFAULT '[]'::jsonb,
+                concepts JSONB NOT NULL DEFAULT '[]'::jsonb,
+                responding_to JSONB NOT NULL DEFAULT '[]'::jsonb,
+                related_agents JSONB NOT NULL DEFAULT '[]'::jsonb,
+                source VARCHAR(50) DEFAULT 'user_input',
+                derived_from JSONB NOT NULL DEFAULT '[]'::jsonb,
+                embedding vector({embed_dim}),
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                last_accessed_at TIMESTAMP WITH TIME ZONE,
+                promoted_at TIMESTAMP WITH TIME ZONE,
+                PRIMARY KEY (id, user_id)
+            );
+        """)
+        migrations.append("CREATE INDEX IF NOT EXISTS idx_cerebro_nodes_user ON cerebro_memory_nodes(user_id);")
+        migrations.append("CREATE INDEX IF NOT EXISTS idx_cerebro_nodes_user_type ON cerebro_memory_nodes(user_id, memory_type);")
+        migrations.append("CREATE INDEX IF NOT EXISTS idx_cerebro_nodes_user_layer ON cerebro_memory_nodes(user_id, layer);")
+        migrations.append("CREATE INDEX IF NOT EXISTS idx_cerebro_nodes_user_vis ON cerebro_memory_nodes(user_id, visibility);")
+        migrations.append("CREATE INDEX IF NOT EXISTS idx_cerebro_nodes_user_agent ON cerebro_memory_nodes(user_id, agent_id);")
+        migrations.append("CREATE INDEX IF NOT EXISTS idx_cerebro_nodes_hash ON cerebro_memory_nodes(user_id, content_hash);")
+        migrations.append("CREATE INDEX IF NOT EXISTS idx_cerebro_nodes_created ON cerebro_memory_nodes(user_id, created_at DESC);")
+        migrations.append("CREATE INDEX IF NOT EXISTS idx_cerebro_nodes_salience ON cerebro_memory_nodes(user_id, salience DESC);")
+
+        migrations.append("""
+            CREATE TABLE IF NOT EXISTS cerebro_associative_links (
+                id VARCHAR(50) NOT NULL,
+                user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                source_id VARCHAR(50) NOT NULL,
+                target_id VARCHAR(50) NOT NULL,
+                link_type VARCHAR(20) NOT NULL,
+                weight FLOAT NOT NULL DEFAULT 0.5,
+                activation_count INTEGER NOT NULL DEFAULT 0,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                last_activated TIMESTAMP WITH TIME ZONE,
+                source_reason VARCHAR(50) DEFAULT 'system',
+                evidence TEXT,
+                PRIMARY KEY (id, user_id),
+                CONSTRAINT uq_cerebro_link UNIQUE (user_id, source_id, target_id, link_type)
+            );
+        """)
+        migrations.append("CREATE INDEX IF NOT EXISTS idx_cerebro_links_user ON cerebro_associative_links(user_id);")
+        migrations.append("CREATE INDEX IF NOT EXISTS idx_cerebro_links_source ON cerebro_associative_links(user_id, source_id);")
+        migrations.append("CREATE INDEX IF NOT EXISTS idx_cerebro_links_target ON cerebro_associative_links(user_id, target_id);")
+        migrations.append("CREATE INDEX IF NOT EXISTS idx_cerebro_links_type ON cerebro_associative_links(user_id, link_type);")
+
+        migrations.append("""
+            CREATE TABLE IF NOT EXISTS cerebro_episodes (
+                id VARCHAR(50) NOT NULL,
+                user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                title VARCHAR(500),
+                agent_id VARCHAR(50) DEFAULT 'AZOTH',
+                session_id VARCHAR(100),
+                started_at TIMESTAMP WITH TIME ZONE,
+                ended_at TIMESTAMP WITH TIME ZONE,
+                overall_valence VARCHAR(20) DEFAULT 'neutral',
+                peak_arousal FLOAT DEFAULT 0.5,
+                tags JSONB DEFAULT '[]'::jsonb,
+                consolidated BOOLEAN DEFAULT FALSE,
+                schema_extracted BOOLEAN DEFAULT FALSE,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                PRIMARY KEY (id, user_id)
+            );
+        """)
+        migrations.append("CREATE INDEX IF NOT EXISTS idx_cerebro_episodes_user ON cerebro_episodes(user_id);")
+        migrations.append("CREATE INDEX IF NOT EXISTS idx_cerebro_episodes_unconsolidated ON cerebro_episodes(user_id, consolidated) WHERE NOT consolidated;")
+
+        migrations.append("""
+            CREATE TABLE IF NOT EXISTS cerebro_episode_steps (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                episode_id VARCHAR(50) NOT NULL,
+                user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                memory_id VARCHAR(50) NOT NULL,
+                position INTEGER NOT NULL,
+                role VARCHAR(20) DEFAULT 'event',
+                timestamp TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+            );
+        """)
+        migrations.append("CREATE INDEX IF NOT EXISTS idx_cerebro_steps_episode ON cerebro_episode_steps(user_id, episode_id);")
+
+        migrations.append("""
+            CREATE TABLE IF NOT EXISTS cerebro_agents (
+                id VARCHAR(50) NOT NULL,
+                user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                display_name VARCHAR(100) NOT NULL,
+                generation INTEGER DEFAULT 0,
+                lineage VARCHAR(100) DEFAULT 'Unknown',
+                specialization VARCHAR(255) DEFAULT 'General',
+                origin_story TEXT,
+                color VARCHAR(20) DEFAULT '#888888',
+                symbol VARCHAR(10) DEFAULT 'A',
+                registered_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                PRIMARY KEY (id, user_id)
+            );
+        """)
+        migrations.append("CREATE INDEX IF NOT EXISTS idx_cerebro_agents_user ON cerebro_agents(user_id);")
+
+        migrations.append("""
+            CREATE TABLE IF NOT EXISTS cerebro_dream_log (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                phase VARCHAR(30) NOT NULL,
+                started_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                completed_at TIMESTAMP WITH TIME ZONE,
+                memories_processed INTEGER DEFAULT 0,
+                links_created INTEGER DEFAULT 0,
+                links_strengthened INTEGER DEFAULT 0,
+                memories_pruned INTEGER DEFAULT 0,
+                schemas_extracted INTEGER DEFAULT 0,
+                notes TEXT,
+                success BOOLEAN DEFAULT TRUE
+            );
+        """)
+        migrations.append("CREATE INDEX IF NOT EXISTS idx_cerebro_dream_user ON cerebro_dream_log(user_id);")
+
         for migration in migrations:
             await conn.execute(text(migration))
         print(f"Database migrations complete (embedding_dim={embed_dim})")

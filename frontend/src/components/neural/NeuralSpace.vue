@@ -95,7 +95,8 @@ function buildVisualization() {
         const line = createConnectionLine(
           startMesh.position.toArray(),
           endMesh.position.toArray(),
-          edge.type
+          edge.type,
+          edge.weight
         )
         connectionGroup.value.add(line)
       }
