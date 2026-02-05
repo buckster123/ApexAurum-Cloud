@@ -1085,17 +1085,19 @@ class AgoraModAction(BaseModel):
 @router.post("/migrate-cerebrocortex")
 async def migrate_cerebrocortex(
     admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
     user_id: Optional[UUID] = Query(None, description="Migrate specific user, or all if omitted"),
 ):
     """Run CerebroCortex data migration from user_vectors and agent_memories.
 
     Idempotent - safe to re-run. Only migrates records not already in cerebro tables.
+    Uses isolated DB session since migration does multiple commits/rollbacks.
     """
+    from app.database import get_db_context
     from app.services.cerebro.migration import run_full_migration
 
     try:
-        report = await run_full_migration(db, user_id)
+        async with get_db_context() as db:
+            report = await run_full_migration(db, user_id)
         logger.info(f"CerebroCortex migration triggered by {admin.email}: {report}")
         return {"status": "ok", "report": report}
     except Exception as e:
