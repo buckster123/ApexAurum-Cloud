@@ -538,6 +538,18 @@ class MultiProviderLLM:
     # ANTHROPIC IMPLEMENTATION
     # -------------------------------------------------------------------------
 
+    def _get_thinking_config(self, model: str) -> dict:
+        """Get thinking configuration for a model. Returns kwargs to merge."""
+        if model == "claude-opus-4-6":
+            return {"thinking": {"type": "adaptive"}}
+        elif "opus" in model or model in ("claude-sonnet-4-5-20250929",):
+            # Extended thinking for 4.5 Opus/Sonnet models
+            return {
+                "thinking": {"type": "enabled", "budget_tokens": 10000},
+                "betas": ["interleaved-thinking-2025-05-14"],
+            }
+        return {}
+
     async def _chat_anthropic(
         self,
         messages: list[dict],
@@ -553,6 +565,9 @@ class MultiProviderLLM:
             "messages": messages,
         }
 
+        # Add thinking config for capable models
+        kwargs.update(self._get_thinking_config(model))
+
         if system:
             kwargs["system"] = system
         if tools:
@@ -563,7 +578,9 @@ class MultiProviderLLM:
 
             content_blocks = []
             for block in response.content:
-                if block.type == "text":
+                if block.type == "thinking":
+                    content_blocks.append({"type": "thinking", "thinking": block.thinking})
+                elif block.type == "text":
                     content_blocks.append({"type": "text", "text": block.text})
                 elif block.type == "tool_use":
                     content_blocks.append({
@@ -605,6 +622,9 @@ class MultiProviderLLM:
             "messages": messages,
         }
 
+        # Add thinking config for capable models
+        kwargs.update(self._get_thinking_config(model))
+
         if system:
             kwargs["system"] = system
         if tools:
@@ -612,13 +632,16 @@ class MultiProviderLLM:
 
         current_tool = None
         tool_input_json = ""
+        in_thinking_block = False
         usage_info = {"input_tokens": 0, "output_tokens": 0}
 
         try:
             async with self.anthropic_client.messages.stream(**kwargs) as stream:
                 async for event in stream:
                     if event.type == "content_block_delta":
-                        if hasattr(event.delta, "text"):
+                        if hasattr(event.delta, "thinking"):
+                            yield {"type": "thinking", "content": event.delta.thinking}
+                        elif hasattr(event.delta, "text"):
                             yield {"type": "token", "content": event.delta.text}
                         elif hasattr(event.delta, "partial_json"):
                             tool_input_json += event.delta.partial_json
@@ -636,7 +659,10 @@ class MultiProviderLLM:
                         yield {"type": "usage", "usage": usage_info}
                         yield {"type": "end"}
                     elif event.type == "content_block_start":
-                        if event.content_block.type == "tool_use":
+                        if event.content_block.type == "thinking":
+                            in_thinking_block = True
+                            yield {"type": "thinking_start"}
+                        elif event.content_block.type == "tool_use":
                             current_tool = {
                                 "id": event.content_block.id,
                                 "name": event.content_block.name,
@@ -648,7 +674,10 @@ class MultiProviderLLM:
                                 "tool_id": event.content_block.id,
                             }
                     elif event.type == "content_block_stop":
-                        if current_tool:
+                        if in_thinking_block:
+                            in_thinking_block = False
+                            yield {"type": "thinking_stop"}
+                        elif current_tool:
                             try:
                                 tool_input = json.loads(tool_input_json) if tool_input_json else {}
                             except json.JSONDecodeError:

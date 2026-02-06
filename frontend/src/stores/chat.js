@@ -255,7 +255,24 @@ export const useChatStore = defineStore('chat', () => {
           try {
             const data = JSON.parse(line.slice(6))
 
-            if (data.type === 'token' && data.content) {
+            if (data.type === 'thinking_start') {
+              // Thinking block started
+              const msg = messages.value.find(m => m.id === assistantMsgId)
+              if (msg) {
+                if (!msg.thinking) msg.thinking = ''
+                msg.isThinking = true
+              }
+            } else if (data.type === 'thinking' && data.content) {
+              // Thinking token
+              const msg = messages.value.find(m => m.id === assistantMsgId)
+              if (msg) {
+                if (!msg.thinking) msg.thinking = ''
+                msg.thinking += data.content
+              }
+            } else if (data.type === 'thinking_stop') {
+              const msg = messages.value.find(m => m.id === assistantMsgId)
+              if (msg) msg.isThinking = false
+            } else if (data.type === 'token' && data.content) {
               // Append token to streaming content and message
               streamingContent.value += data.content
               const msg = messages.value.find(m => m.id === assistantMsgId)

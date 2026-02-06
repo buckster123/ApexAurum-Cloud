@@ -1167,6 +1167,8 @@ Work together to create something beautiful!
                     turn += 1
                     pending_tool_uses = []
 
+                    thinking_content = ""
+
                     async for event in llm.chat_stream(
                         messages=current_messages,
                         model=model,
@@ -1176,7 +1178,9 @@ Work together to create something beautiful!
                     ):
                         yield f"data: {json.dumps(event)}\n\n"
 
-                        if event.get("type") == "token":
+                        if event.get("type") == "thinking":
+                            thinking_content += event.get("content", "")
+                        elif event.get("type") == "token":
                             full_response += event.get("content", "")
                         elif event.get("type") == "tool_use":
                             # Claude wants to use a tool
@@ -1199,7 +1203,10 @@ Work together to create something beautiful!
                     # Execute tools and continue conversation
                     if tool_executor and pending_tool_uses:
                         # Build assistant message with tool_use blocks
+                        # Include thinking blocks if present (required by API for continuation)
                         assistant_content = []
+                        if thinking_content:
+                            assistant_content.append({"type": "thinking", "thinking": thinking_content})
                         if full_response:
                             assistant_content.append({"type": "text", "text": full_response})
                         for tool_use in pending_tool_uses:

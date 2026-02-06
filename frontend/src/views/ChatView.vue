@@ -910,6 +910,21 @@ function renderMarkdown(content) {
                 'bg-red-500/10 border border-red-500/30': message.role === 'system'
               }"
             >
+              <!-- Thinking block (collapsible) -->
+              <details
+                v-if="message.role === 'assistant' && message.thinking"
+                class="mb-2 rounded-lg bg-white/5 border border-white/10 overflow-hidden"
+              >
+                <summary class="px-3 py-1.5 text-xs text-gray-400 cursor-pointer hover:text-gray-300 select-none flex items-center gap-1.5">
+                  <span v-if="message.isThinking" class="inline-block w-2 h-2 rounded-full bg-gold animate-pulse" />
+                  <span v-else class="text-gold/60">&#x1F9E0;</span>
+                  {{ message.isThinking ? 'Thinking...' : 'Show reasoning' }}
+                </summary>
+                <div
+                  class="px-3 py-2 text-xs text-gray-400 prose prose-sm prose-invert max-w-none opacity-75 border-t border-white/5"
+                  v-html="renderMarkdown(message.thinking)"
+                />
+              </details>
               <div
                 v-if="message.role === 'assistant'"
                 class="prose prose-sm max-w-none"
