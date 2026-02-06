@@ -657,6 +657,27 @@ class MultiProviderLLM:
                     elif event.type == "message_stop":
                         # Yield usage info before end event
                         yield {"type": "usage", "usage": usage_info}
+                        # Yield full content blocks (with thinking signatures) for tool loop continuation
+                        final_msg = stream.current_message_snapshot
+                        if final_msg and final_msg.content:
+                            content_blocks = []
+                            for block in final_msg.content:
+                                if block.type == "thinking":
+                                    content_blocks.append({
+                                        "type": "thinking",
+                                        "thinking": block.thinking,
+                                        "signature": getattr(block, "signature", None),
+                                    })
+                                elif block.type == "text":
+                                    content_blocks.append({"type": "text", "text": block.text})
+                                elif block.type == "tool_use":
+                                    content_blocks.append({
+                                        "type": "tool_use",
+                                        "id": block.id,
+                                        "name": block.name,
+                                        "input": block.input,
+                                    })
+                            yield {"type": "content_blocks", "blocks": content_blocks}
                         yield {"type": "end"}
                     elif event.type == "content_block_start":
                         if event.content_block.type == "thinking":
