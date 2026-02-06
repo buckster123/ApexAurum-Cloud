@@ -17,6 +17,10 @@ logger = logging.getLogger(__name__)
 PRICING: Dict[str, Dict[str, Dict[str, float]]] = {
     # Anthropic Claude models
     "anthropic": {
+        "claude-opus-4-6": {
+            "input": 15.00,   # $15 per 1M input tokens
+            "output": 75.00,  # $75 per 1M output tokens
+        },
         "claude-opus-4-5-20251101": {
             "input": 15.00,   # $15 per 1M input tokens
             "output": 75.00,  # $75 per 1M output tokens

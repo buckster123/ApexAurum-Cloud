@@ -94,7 +94,19 @@ DEPRECATED_MODELS = {
 
 AVAILABLE_MODELS = {
     # ═══════════════════════════════════════════════════════════════════════════
-    # Claude 4.5 Family - Current Generation (Latest)
+    # Claude 4.6 Family - Current Generation (Latest)
+    # ═══════════════════════════════════════════════════════════════════════════
+    "claude-opus-4-6": {
+        "name": "Opus 4.6",
+        "description": "Most intelligent model - adaptive reasoning, 128K output, agentic coding",
+        "tier": "opus",
+        "max_output_tokens": 128000,
+        "context_window": 200000,
+        "legacy": False,
+        "deprecated": False,
+    },
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Claude 4.5 Family - Previous Generation
     # ═══════════════════════════════════════════════════════════════════════════
     "claude-opus-4-5-20251101": {
         "name": "Opus 4.5",
@@ -187,6 +199,8 @@ DEFAULT_MAX_TOKENS = 8192
 
 # Model-specific max tokens
 MODEL_MAX_TOKENS = {
+    # Claude 4.6
+    "claude-opus-4-6": 32768,
     # Claude 4.5 family
     "claude-opus-4-5-20251101": 16384,
     "claude-sonnet-4-5-20250929": 16384,
@@ -283,6 +297,10 @@ class ClaudeService:
             "messages": messages,
         }
 
+        # Enable adaptive thinking for Opus 4.6
+        if model == "claude-opus-4-6":
+            kwargs["thinking"] = {"type": "adaptive"}
+
         if system:
             kwargs["system"] = system
 
@@ -342,6 +360,10 @@ class ClaudeService:
             "max_tokens": effective_max_tokens,
             "messages": messages,
         }
+
+        # Enable adaptive thinking for Opus 4.6
+        if model == "claude-opus-4-6":
+            kwargs["thinking"] = {"type": "adaptive"}
 
         if system:
             kwargs["system"] = system

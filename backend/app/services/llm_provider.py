@@ -85,6 +85,13 @@ PROVIDERS = {
 
 PROVIDER_MODELS = {
     "anthropic": {
+        "claude-opus-4-6": {
+            "name": "Opus 4.6",
+            "tier": "opus",
+            "max_tokens": 128000,
+            "context_window": 200000,
+            "description": "Most intelligent model - adaptive reasoning, 128K output",
+        },
         "claude-opus-4-5-20251101": {
             "name": "Opus 4.5",
             "tier": "opus",

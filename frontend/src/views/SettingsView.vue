@@ -67,7 +67,8 @@ const { devMode, pacMode, handleTap, tapCount, alchemyLayer, layerName, tierRest
 const sliderMax = computed(() => {
   const currentModel = chatStore.availableModels.find(m => m.id === chatStore.selectedModel)
   const modelMax = currentModel?.max_output_tokens || currentModel?.max_tokens || 8192
-  const uiCap = devMode.value ? 65536 : 32768
+  const isOpus46 = chatStore.selectedModel === 'claude-opus-4-6'
+  const uiCap = devMode.value ? (isOpus46 ? 128000 : 65536) : 32768
   return Math.min(modelMax, uiCap)
 })
 
@@ -160,6 +161,7 @@ const pacAgents = computed(() => nativeAgents.value.filter(a => a.has_pac))
 const models = [
   { id: 'claude-haiku-4-5-20251001', name: '◇ Haiku 4.5 (Fast)', tier: 'haiku' },
   { id: 'claude-sonnet-4-5-20250929', name: '✦ Sonnet 4.5 (Balanced)', tier: 'sonnet' },
+  { id: 'claude-opus-4-6', name: '🜂 Opus 4.6 (Adaptive)', tier: 'opus' },
   { id: 'claude-opus-4-5-20251101', name: '⚜️ Opus 4.5 (Powerful)', tier: 'opus' },
 ]
 
