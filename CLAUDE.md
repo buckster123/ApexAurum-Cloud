@@ -1,93 +1,129 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code when working with this repository.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Session Start Protocol
+
+On every session start:
+1. Call `mcp__cerebro-cortex__session_recall` to retrieve previous session notes.
+2. Read any `unfinished_business` or `if_disoriented` instructions for context.
+3. Continue where the previous session left off.
+
+## Session End Protocol
+
+Before ending a session, call `mcp__cerebro-cortex__session_save` with:
+- `session_summary`: What was accomplished this session
+- `key_discoveries`: Important findings or bugs fixed
+- `unfinished_business`: What's left to do next session
+- `if_disoriented`: How to get back on track (key files, recent changes)
+- `priority`: HIGH / MEDIUM / LOW
 
 ## Project Overview
 
-ApexAurum Cloud is a production AI chat interface deployed on Railway. FastAPI backend + Vue 3 frontend + PostgreSQL.
+ApexAurum Cloud is a production multi-agent AI chat platform deployed on Railway. Four AI personas (AZOTH, KETHER, VAJRA, ELYSIAN) collaborate in a shared Village environment with 50+ tools, streaming chat, music generation, model training, and file vault storage.
 
-**Always read `HANDOVER.md` first for current deployment state and known issues.**
+**Stack:** FastAPI (async Python 3.11+) + Vue 3 (Composition API + Pinia + Tailwind) + PostgreSQL/pgvector + Stripe billing
 
-## Workflow
+## Development Commands
 
-**Commit, push, done.** Railway auto-deploys both backend and frontend on push to `main`. Every push triggers a build, so bundle related changes (including HANDOVER.md updates) into the same commit to avoid redundant deploys.
-
+### Frontend (`frontend/`)
 ```bash
-# Standard workflow — include HANDOVER.md in the same commit as code changes
-git add <code files> HANDOVER.md && git commit -m "message" && git push origin main
-# Then verify:
+npm run dev          # Vite dev server (port 3000)
+npm run build        # Production build
+npm run lint         # ESLint with auto-fix (.vue, .js, .jsx, .cjs, .mjs)
+npm run format       # Prettier formatting (src/)
+```
+
+### Backend (`backend/`)
+```bash
+# Local development
+pip install -r requirements.txt
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+# Production (Railway uses $PORT)
+python -u -m uvicorn app.main:app --host 0.0.0.0 --port $PORT
+```
+
+### Docker (Full Stack)
+```bash
+docker-compose -f docker-compose.dev.yml up                    # All services
+docker-compose -f docker-compose.dev.yml --profile tools up    # + Adminer DB GUI
+```
+Services: postgres (pgvector:pg16), redis, minio (S3), api (FastAPI), frontend (Vite), worker (ARQ)
+
+### Health Check
+```bash
 curl -s https://backend-production-507c.up.railway.app/health | python3 -m json.tool
 ```
 
-**Session wrap-up rule:** Always update HANDOVER.md as part of the final code commit, never as a separate commit. This avoids triggering an extra Railway build for a docs-only change.
+## Deployment
+
+**Railway auto-deploys from GitHub on push to `main`.** Every push triggers builds for both services.
 
 ```bash
-# Manual deploy (only if auto-deploy fails or for special ops)
-COMMIT=$(git log --oneline -1 | cut -d' ' -f1)
-curl -s -X POST "https://backboard.railway.app/graphql/v2" \
-  -H "Authorization: Bearer 90fb849e-af7b-4ea5-8474-d57d8802a368" \
-  -H "Content-Type: application/json" \
-  -d "{\"query\": \"mutation { backend: serviceInstanceDeploy(serviceId: \\\"9d60ca55-a937-4b17-8ec4-3fb34ac3d47e\\\", environmentId: \\\"2e9882b4-9b33-4233-9376-5b5342739e74\\\", commitSha: \\\"$COMMIT\\\") frontend: serviceInstanceDeploy(serviceId: \\\"6cf1f965-94df-4ea0-96ca-d82959e2d3c5\\\", environmentId: \\\"2e9882b4-9b33-4233-9376-5b5342739e74\\\", commitSha: \\\"$COMMIT\\\") }\"}"
+# Standard workflow
+git add <changed files> && git commit -m "message" && git push origin main
 ```
 
-## Railway Deployment
+**Cache Busting:** Frontend Dockerfile has `ARG CACHE_BUST=N` (currently 30). Increment to force fresh builds when source changes aren't picked up.
 
-**Railway auto-deploys from GitHub on push to main.** Manual GraphQL deploy only needed for special operations.
+**VITE_API_URL is baked at build time** - frontend Dockerfile hardcodes the backend URL as a build arg. Changes to the backend URL require a frontend rebuild.
 
-**Railway IDs:**
-- Token: `90fb849e-af7b-4ea5-8474-d57d8802a368`
-- Backend: `9d60ca55-a937-4b17-8ec4-3fb34ac3d47e`
-- Frontend: `6cf1f965-94df-4ea0-96ca-d82959e2d3c5`
+**Railway IDs** (for manual GraphQL deploys when auto-deploy fails):
+- Backend service: `9d60ca55-a937-4b17-8ec4-3fb34ac3d47e`
+- Frontend service: `6cf1f965-94df-4ea0-96ca-d82959e2d3c5`
 - Environment: `2e9882b4-9b33-4233-9376-5b5342739e74`
-
-**Cache Busting:** Frontend Dockerfile has `ARG CACHE_BUST=N`. Increment this to force fresh builds when source changes aren't being picked up.
+- Token: `90fb849e-af7b-4ea5-8474-d57d8802a368`
 
 ## Architecture
 
-```
-backend/app/
-├── main.py              # FastAPI entry, /health endpoint
-├── config.py            # Settings, TIER_LIMITS, CREDIT_PACKS
-├── api/v1/
-│   ├── chat.py          # Chat endpoint - uses platform API key
-│   ├── auth.py          # JWT login/register/refresh
-│   ├── billing.py       # Stripe + pricing display
-│   └── webhooks.py      # Stripe webhooks
-├── services/
-│   ├── llm_provider.py  # Multi-provider LLM
-│   └── billing.py       # Usage tracking
-└── tools/               # 50+ tools across 15 modules
+### Backend (`backend/app/`)
 
-frontend/src/
-├── stores/
-│   ├── chat.js          # Chat state - has https:// fix
-│   ├── auth.js          # Auth state - has token validation
-│   └── billing.js       # Billing state
-├── views/
-│   ├── ChatView.vue     # Main chat interface
-│   └── BillingView.vue  # Pricing tiers ($3/$10/$30)
-├── services/api.js      # Axios with https:// fix
-└── composables/
-    └── useDevMode.js    # Konami code, AZOTH incantation
-```
+**Entry:** `main.py` - FastAPI app with lifespan startup (DB init, tool registration, migrations), CORS middleware, error tracking middleware, rate limiting (100 req/60s per IP).
 
-## Common Issues & Solutions
+**Key modules:**
+- `api/v1/` - 26 route files. Chat streaming in `chat.py`, JWT auth in `auth.py`, Stripe in `billing.py`/`webhooks.py`
+- `services/` - 24 service modules. `llm_provider.py` (multi-provider LLM), `billing.py` (usage tracking), `village_events.py` (WebSocket broadcaster), `error_tracking.py` (GDPR-compliant, 90-day auto-purge)
+- `tools/` - 50+ tools across 16 modules registered via singleton `ToolRegistry`. Tools auto-register on import at startup via `register_all_tools()`
+- `models/` - 23 SQLAlchemy model files. Users, conversations, messages (branching via parent_id), agents, billing, music, vault, error logs
+- `native_prompts/` - Agent personality prompt files (`*-PAC.txt`)
 
-| Issue | Solution |
-|-------|----------|
-| "Not authenticated" | Use `get_current_user_optional` for testing |
-| Deploy succeeds but old code | Increment `CACHE_BUST` in Dockerfile |
-| TDZ error in frontend | Move refs/functions BEFORE watchers with `immediate: true` |
-| API returning HTML | Check `https://` prefix in VITE_API_URL |
-| "undefined" in localStorage | Auth store auto-cleans bad values now |
-| 402 Payment Required | Check user's subscription tier and message limits |
-| 403 Forbidden | User's tier doesn't allow the model/tools requested |
+**Tool execution flow:** User enables tools in chat → backend sends tool schemas to Claude API (filtered by tier) → Claude returns `tool_use` blocks → for each: validate params → broadcast `tool_start` to Village WebSocket → execute with 120s timeout → broadcast result → auto-post notable results to Agora feed.
+
+**Database:** Async SQLAlchemy 2.0 + Alembic migrations + init-time raw SQL in `database.py`. Uses `get_db_context()` for standalone DB access outside request lifecycle.
+
+### Frontend (`frontend/src/`)
+
+**Build:** Vite 5 + Vue 3.4 + Vue Router 4 + Pinia stores + Tailwind CSS + Monaco Editor + Three.js (Village 3D)
+
+**Key modules:**
+- `stores/` - 12 Pinia stores managing chat, auth, billing, agents, music, council, village state
+- `views/` - 19 page components (Chat, Village, Council, Music, Jam, Agora, Billing, Files, Nursery, Settings, etc.)
+- `services/api.js` - Axios client with HTTPS auto-prefix, JWT interceptor, graceful 401 handling
+- `composables/useDevMode.js` - Konami code and AZOTH incantation activation
+- `router/index.js` - Auth guards, tier-gated routes
+
+### WebSockets
+
+- **Village** (`/ws/village`) - Real-time agent activity visualization. Auth via JWT query param. Events: `tool_start`, `tool_complete`, `tool_error`, `approval_needed`
+- **Council** (`/ws/council/{id}`) - Streaming multi-agent deliberation. SSE-style. Events: state updates, agent speech tokens, round completion
+
+### Admin Dashboard
+
+**Edit `backend/admin_static/index.html`** (NOT `admin/index.html`). Single-file 89KB app served from Docker. Requires `is_admin=true`. Tabs: Users, Stats, Usage, Reports, Grants, Errors, Agora moderation.
 
 ## Key Patterns
 
-**Token Validation (auth.js):**
+**HTTPS Fix** (must exist in both `api.js` and `chat.js`):
 ```javascript
-// Treats "undefined", "null", "" as invalid
+let apiUrl = import.meta.env.VITE_API_URL || ''
+if (apiUrl && !apiUrl.startsWith('http://') && !apiUrl.startsWith('https://')) {
+  apiUrl = 'https://' + apiUrl
+}
+```
+
+**Token Validation** (`auth.js`):
+```javascript
 function getValidToken(key) {
   const value = localStorage.getItem(key)
   if (!value || value === 'undefined' || value === 'null') {
@@ -98,16 +134,9 @@ function getValidToken(key) {
 }
 ```
 
-**HTTPS Fix (api.js, chat.js):**
-```javascript
-let apiUrl = import.meta.env.VITE_API_URL || ''
-if (apiUrl && !apiUrl.startsWith('http://') && !apiUrl.startsWith('https://')) {
-  apiUrl = 'https://' + apiUrl
-}
-```
+**Platform API Key:** Backend uses its own Anthropic key when user has no BYOK configured. BYOK is optional, supports: Together, Groq, DeepSeek, Qwen, Moonshot.
 
-**Platform API Key (chat.py):**
-Backend uses platform Anthropic key if user doesn't have BYOK set. BYOK is optional.
+**Tier enforcement:** Checked in `services/billing.py` and `services/usage.py`. Models, tools, and features gated by subscription tier.
 
 ## Pricing Tiers
 
@@ -117,26 +146,36 @@ Backend uses platform Anthropic key if user doesn't have BYOK set. BYOK is optio
 | Alchemist | pro | $10/mo | 1000 | Haiku, Sonnet |
 | Adept | opus | $30/mo | Unlimited | All + Opus |
 
+## Common Issues & Solutions
+
+| Issue | Solution |
+|-------|----------|
+| "Not authenticated" | Use `get_current_user_optional` for testing |
+| Deploy succeeds but old code | Increment `CACHE_BUST` in frontend Dockerfile |
+| TDZ error in frontend | Move refs/functions BEFORE watchers with `immediate: true` |
+| API returning HTML | Check `https://` prefix in VITE_API_URL |
+| "undefined" in localStorage | Auth store auto-cleans bad values |
+| 402 Payment Required | Check user's subscription tier and message limits |
+| 403 Forbidden | User's tier doesn't allow the model/tools requested |
+| Tool timeout | Default 120s in config. Check `tool_execution_timeout` setting |
+| WebSocket auth failure | JWT passed as query param, verify token isn't expired |
+| DB session conflicts | Use `get_db_context()` for concurrent/isolated operations |
+
 ## Easter Eggs
 
 - **Dev Mode:** Konami code (↑↑↓↓←→←→BA) or 7-tap on Au logo
 - **PAC Mode:** Type "AZOTH" while in Dev Mode
 - **PAC prompts:** `backend/native_prompts/*-PAC.txt`
 
-## Repository Structure
-
-- `README.md` - Public-facing project overview
-- `ENCYCLOPEDIA.md` - Complete technical and lore reference
-- `HANDOVER.md` - Session-to-session deployment state (read this first!). Always commit alongside code changes, never as a standalone push (avoids redundant Railway builds).
-- `CLAUDE.md` - This file (Claude Code guidance)
-- `archive/` - Internal planning docs, session notes, and logs (gitignored, local only)
-
-**Important:** `admin/index.html` and `backend/admin_static/index.html` are separate files. Docker serves from `admin_static/`. Always edit `backend/admin_static/index.html` for deployed changes.
-
 ## URLs
 
 - Frontend: https://frontend-production-5402.up.railway.app
 - Backend: https://backend-production-507c.up.railway.app
+- API Docs: https://backend-production-507c.up.railway.app/docs (debug mode only)
+
+## Session Continuity
+
+**Handled by CerebroCortex MCP** (`cerebro-cortex`). Session notes stored in the cortex memory system and recalled automatically at session start.
 
 ---
 
