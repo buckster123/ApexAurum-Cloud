@@ -76,6 +76,13 @@ PROVIDERS = {
         "default_model": "kimi-k2.5",
         "supports_tools": True,
     },
+    "openai": {
+        "name": "OpenAI",
+        "base_url": "https://api.openai.com/v1",
+        "key_env": "OPENAI_API_KEY",
+        "default_model": "gpt-4o-mini",
+        "supports_tools": True,
+    },
 }
 
 
@@ -237,6 +244,40 @@ PROVIDER_MODELS = {
             "description": "1T MoE flagship - fast responses, no reasoning overhead (256K ctx)",
             "api_model_id": "kimi-k2.5",
             "extra_body": {"thinking": {"type": "disabled"}},
+        },
+    },
+    "openai": {
+        "gpt-4o": {
+            "name": "GPT-4o",
+            "tier": "large",
+            "max_tokens": 16384,
+            "context_window": 128000,
+            "description": "OpenAI flagship - fast, vision, tools (128K ctx)",
+            "supports_tools": True,
+        },
+        "gpt-4o-mini": {
+            "name": "GPT-4o Mini",
+            "tier": "fast",
+            "max_tokens": 16384,
+            "context_window": 128000,
+            "description": "Efficient all-rounder - low cost, tools + vision (128K ctx)",
+            "supports_tools": True,
+        },
+        "gpt-5": {
+            "name": "GPT-5",
+            "tier": "large",
+            "max_tokens": 16384,
+            "context_window": 400000,
+            "description": "Next-gen reasoning - coding, agents, tools (400K ctx)",
+            "supports_tools": True,
+        },
+        "gpt-5-mini": {
+            "name": "GPT-5 Mini",
+            "tier": "fast",
+            "max_tokens": 16384,
+            "context_window": 400000,
+            "description": "Fast GPT-5 variant - efficient reasoning + tools (400K ctx)",
+            "supports_tools": True,
         },
     },
 }

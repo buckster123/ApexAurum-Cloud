@@ -190,7 +190,7 @@ TIER_LIMITS = {
         "tools_enabled": True,
         "multi_provider": True,
         "byok_allowed": True,
-        "byok_providers": ["together", "groq", "deepseek", "qwen", "moonshot"],
+        "byok_providers": ["together", "groq", "deepseek", "qwen", "moonshot", "openai"],
         "api_access": False,
         "context_token_limit": None,
         "council_sessions_per_month": 10,
@@ -281,7 +281,7 @@ TIER_LIMITS = {
 }
 
 # Providers that support admin-controlled platform grants
-GRANTABLE_PROVIDERS = ["together", "groq", "deepseek", "qwen", "moonshot", "suno"]
+GRANTABLE_PROVIDERS = ["together", "groq", "deepseek", "qwen", "moonshot", "openai", "suno"]
 
 # Tier hierarchy for >= comparisons
 TIER_HIERARCHY = {"free_trial": 0, "seeker": 1, "adept": 2, "opus": 3, "azothic": 4}

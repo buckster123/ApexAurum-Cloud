@@ -48,6 +48,26 @@ PRICING: Dict[str, Dict[str, Dict[str, float]]] = {
         },
     },
 
+    # OpenAI models
+    "openai": {
+        "gpt-4o": {
+            "input": 2.50,    # $2.50 per 1M input tokens
+            "output": 10.00,  # $10 per 1M output tokens
+        },
+        "gpt-4o-mini": {
+            "input": 0.15,    # $0.15 per 1M input tokens
+            "output": 0.60,   # $0.60 per 1M output tokens
+        },
+        "gpt-5": {
+            "input": 1.25,    # $1.25 per 1M input tokens
+            "output": 10.00,  # $10 per 1M output tokens
+        },
+        "gpt-5-mini": {
+            "input": 1.25,    # $1.25 per 1M input tokens
+            "output": 10.00,  # $10 per 1M output tokens
+        },
+    },
+
     # Groq (LPU inference - very cheap)
     "groq": {
         "llama-3.3-70b-versatile": {
